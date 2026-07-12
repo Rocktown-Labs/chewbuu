@@ -10,9 +10,9 @@ import notFound from "stoker/middlewares/not-found";
 import onError from "stoker/middlewares/on-error";
 
 import { createRouter } from "./lib/create-app";
-import aiRoute from "./routes/ai.route";
-import authRoute from "./routes/auth.route";
-import indexRoute from "./routes/index.route";
+import aiRoute from "./routes/ai";
+import authRoute from "./routes/auth";
+import indexRoute from "./routes";
 
 initLogger({
   env: { service: "chewbuu-server" },
