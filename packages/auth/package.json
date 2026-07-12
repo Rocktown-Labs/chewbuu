@@ -1,0 +1,25 @@
+{
+  "name": "@chewbuu/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@better-auth/expo": "catalog:",
+    "@chewbuu/db": "workspace:*",
+    "@chewbuu/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@chewbuu/config": "workspace:*",
+    "typescript": "^6"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "scheme": "chewbuu",
+    "userInterfaceStyle": "automatic",
+    "orientation": "default",
+    "web": {
+      "bundler": "metro"
+    },
+    "name": "chewbuu",
+    "slug": "chewbuu",
+    "plugins": ["expo-font"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
