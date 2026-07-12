@@ -1,59 +1,102 @@
 import { Toaster } from "@chewbuu/ui/components/sonner";
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Link,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+  useNavigate,
+} from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createMiddleware } from "@tanstack/react-start";
 import { evlogErrorHandler } from "evlog/nitro/v3";
+import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
+
+import { AuthProvider } from "@/components/auth/auth-provider";
+import { authClient } from "@/lib/auth-client";
 
 import Header from "../components/header";
 
 import appCss from "../index.css?url";
 
-export interface RouterAppContext {}
+interface RouterAppContext {
+  auth?: never;
+}
 
-export const Route = createRootRouteWithContext<RouterAppContext>()({
-  server: {
-    middleware: [createMiddleware().server(evlogErrorHandler)],
-  },
+type AuthLinkProps = PropsWithChildren<
+  { className?: string; href: string; to?: string } & Pick<
+    ComponentPropsWithoutRef<"a">,
+    "aria-disabled" | "onClick" | "tabIndex"
+  >
+>;
 
-  head: () => ({
-    meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "My App",
-      },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
-  }),
+const AuthLink = ({ children, href, to, ...props }: AuthLinkProps) => (
+  <Link {...props} to={to ?? href}>
+    {children}
+  </Link>
+);
 
-  component: RootDocument,
-});
+const RootDocument = () => {
+  const navigate = useNavigate();
 
-function RootDocument() {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <head>
         <HeadContent />
       </head>
       <body>
-        <div className="grid h-svh grid-rows-[auto_1fr]">
-          <Header />
-          <Outlet />
-        </div>
+        <AuthProvider
+          authClient={authClient}
+          basePaths={{
+            auth: "/auth",
+            organization: "/organization",
+            settings: "/settings",
+          }}
+          Link={AuthLink}
+          navigate={({ to, replace }) => navigate({ replace, to })}
+          redirectTo="/dashboard"
+        >
+          <div className="grid min-h-svh grid-rows-[auto_1fr]">
+            <Header />
+            <Outlet />
+          </div>
+        </AuthProvider>
         <Toaster richColors />
         <TanStackRouterDevtools position="bottom-left" />
         <Scripts />
       </body>
     </html>
   );
-}
+};
+
+export const Route = createRootRouteWithContext<RouterAppContext>()({
+  component: RootDocument,
+  head: () => ({
+    links: [
+      {
+        href: appCss,
+        rel: "stylesheet",
+      },
+    ],
+    meta: [
+      {
+        charSet: "utf-8",
+      },
+      {
+        content: "width=device-width, initial-scale=1",
+        name: "viewport",
+      },
+      {
+        title: "Chewbuu | Real People, Real Dates, Real Results",
+      },
+      {
+        content:
+          "Chewbuu gets real people onto real dates with curated plans, video-first matching, and warm social circles.",
+        name: "description",
+      },
+    ],
+  }),
+  server: {
+    middleware: [createMiddleware().server(evlogErrorHandler)],
+  },
+});

@@ -12,10 +12,13 @@
   "scripts": {},
   "dependencies": {
     "@better-auth/expo": "catalog:",
+    "@better-auth/stripe": "^1.6.23",
     "@chewbuu/db": "workspace:*",
     "@chewbuu/env": "workspace:*",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
+    "drizzle-orm": "^0.45.2",
+    "stripe": "^22.3.1",
     "zod": "catalog:"
   },
   "devDependencies": {
