@@ -1,7 +1,6 @@
 {
   "extends": "@chewbuu/config/tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
     "outDir": "dist",
     "paths": {
       "@/*": ["./src/*"]
@@ -9,5 +8,15 @@
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx",
     "strictNullChecks": true
-  }
+  },
+  "files": [
+    "src/index.ts",
+    "src/app.ts",
+    "src/lib/create-app.ts",
+    "src/lib/types.ts",
+    "src/routes/ai.route.ts",
+    "src/routes/auth.route.ts",
+    "src/routes/index.route.ts"
+  ],
+  "include": ["src/**/*.ts", "tsdown.config.ts", "vitest.config.ts"]
 }
