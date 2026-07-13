@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import app from "../app";
+import { buildGooglePlacesTextQuery, normalizeGooglePlaces } from "./dating";
 
 const authHeaders = (overrides: Record<string, string> = {}) =>
   new Headers({
@@ -226,5 +227,44 @@ describe("dating routes", () => {
         }),
       ]),
     });
+  });
+
+  it("builds a Google Places text query from date intent", () => {
+    expect(
+      buildGooglePlacesTextQuery({
+        area: "Little Rock, AR",
+        filters: ["chicken", "whiskey", "pool"],
+        what: ["eat", "drink", "play"],
+      })
+    ).toBe(
+      "chicken whiskey pool food drinks things to do date spot in Little Rock, AR"
+    );
+  });
+
+  it("normalizes Google Places text search results", () => {
+    expect(
+      normalizeGooglePlaces([
+        {
+          displayName: { text: "Big Orange" },
+          formattedAddress: "17809 Chenal Pkwy, Little Rock, AR",
+          id: "ChIJ-test-place",
+          primaryType: "restaurant",
+          rating: 4.6,
+          types: ["restaurant", "bar", "food"],
+        },
+        {
+          formattedAddress: "No display name",
+          id: "missing-name",
+        },
+      ])
+    ).toEqual([
+      {
+        address: "17809 Chenal Pkwy, Little Rock, AR",
+        name: "Big Orange",
+        placeId: "ChIJ-test-place",
+        rating: "4.6",
+        types: ["restaurant", "bar", "food"],
+      },
+    ]);
   });
 });

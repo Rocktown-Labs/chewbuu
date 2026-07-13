@@ -12,6 +12,7 @@ import {
   profileMedia,
   trustedContact,
 } from "@chewbuu/db/schema/dating";
+import { env } from "@chewbuu/env/server";
 import { HTTPException } from "hono/http-exception";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { z } from "zod";
@@ -106,6 +107,22 @@ const dateRequestPayloadSchema = z.object({
 type MediaInput = z.infer<typeof mediaSchema>;
 type ProfileInput = z.infer<typeof profilePayloadSchema>;
 type RequestInput = z.infer<typeof dateRequestPayloadSchema>;
+type PlaceSuggestionInput = z.infer<typeof placeSuggestSchema>;
+type PlaceSuggestion = z.infer<typeof placeSchema>;
+type GooglePlace = {
+  displayName?: {
+    text?: string;
+  };
+  formattedAddress?: string;
+  id?: string;
+  name?: string;
+  primaryType?: string;
+  rating?: number;
+  types?: string[];
+};
+type GooglePlacesTextSearchResponse = {
+  places?: GooglePlace[];
+};
 
 const nowId = () => crypto.randomUUID();
 
@@ -453,7 +470,9 @@ const getProfile = async (sessionUser: SessionUser) => {
     : null;
 };
 
-const suggestPlaces = (input: z.infer<typeof placeSuggestSchema>) => {
+const fallbackPlaceSuggestions = (
+  input: PlaceSuggestionInput
+): PlaceSuggestion[] => {
   const joined = input.filters.join(", ");
   const baseTypes = input.what;
   const primaryName = baseTypes.includes("drink")
@@ -485,6 +504,91 @@ const suggestPlaces = (input: z.infer<typeof placeSuggestSchema>) => {
       types: [...baseTypes, "easy first date"],
     },
   ];
+};
+
+const getGooglePlacesApiKey = () => {
+  const key = env.GOOGLE_PLACES_API_KEY?.trim();
+  return key && key !== '""' ? key : undefined;
+};
+
+export const buildGooglePlacesTextQuery = (input: PlaceSuggestionInput) => {
+  const intent = input.what
+    .map((item) =>
+      item === "eat" ? "food" : item === "drink" ? "drinks" : "things to do"
+    )
+    .join(" ");
+  const filters = input.filters.join(" ");
+  const descriptors = [filters, intent, "date spot"].filter(Boolean).join(" ");
+
+  return `${descriptors} in ${input.area}`;
+};
+
+export const normalizeGooglePlaces = (
+  places: GooglePlace[] | undefined
+): PlaceSuggestion[] =>
+  (places ?? []).flatMap((place) => {
+    const placeId = place.id ?? place.name?.replace("places/", "");
+    const name = place.displayName?.text;
+
+    if (!placeId || !name) {
+      return [];
+    }
+
+    const types = [
+      ...(place.types ?? []),
+      ...(place.primaryType ? [place.primaryType] : []),
+    ];
+
+    return [
+      {
+        ...(place.formattedAddress ? { address: place.formattedAddress } : {}),
+        name,
+        placeId,
+        ...(typeof place.rating === "number"
+          ? { rating: place.rating.toFixed(1) }
+          : {}),
+        types: Array.from(new Set(types)).slice(0, 6),
+      },
+    ];
+  });
+
+const googlePlacesTextSearch = async (
+  input: PlaceSuggestionInput
+): Promise<PlaceSuggestion[]> => {
+  const googlePlacesApiKey = getGooglePlacesApiKey();
+
+  if (!googlePlacesApiKey) {
+    return fallbackPlaceSuggestions(input);
+  }
+
+  const response = await fetch(
+    "https://places.googleapis.com/v1/places:searchText",
+    {
+      body: JSON.stringify({
+        maxResultCount: 8,
+        textQuery: buildGooglePlacesTextQuery(input),
+      }),
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": googlePlacesApiKey,
+        "x-goog-fieldmask":
+          "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.primaryType",
+      },
+      method: "POST",
+    }
+  );
+  const data = (await response.json()) as GooglePlacesTextSearchResponse & {
+    error?: { message?: string };
+  };
+
+  if (!response.ok) {
+    throw new HTTPException(HttpStatusCodes.BAD_GATEWAY, {
+      message: data.error?.message ?? "Google Places search failed.",
+    });
+  }
+
+  const places = normalizeGooglePlaces(data.places);
+  return places.length > 0 ? places : fallbackPlaceSuggestions(input);
 };
 
 const createDateRequest = async (
@@ -617,7 +721,7 @@ const router = createRouter()
     await getSessionUser(c.req.raw.headers);
     const body = placeSuggestSchema.parse(await c.req.json());
 
-    return c.json({ places: suggestPlaces(body) });
+    return c.json({ places: await googlePlacesTextSearch(body) });
   })
   .get("/dating/requests", async (c) => {
     const sessionUser = await getSessionUser(c.req.raw.headers);
