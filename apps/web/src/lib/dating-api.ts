@@ -22,7 +22,7 @@ export interface DatingProfilePayload {
   bio?: string;
   datingModes: string[];
   favoriteThings: string[];
-  friendInvites: Array<{ email?: string; phone?: string }>;
+  friendInvites: { email?: string; phone?: string }[];
   height?: string;
   interestDetails: Record<string, string[]>;
   interestedIn: string[];
@@ -31,7 +31,7 @@ export interface DatingProfilePayload {
   safetyOptIn: boolean;
   sex: string;
   sexuality: string;
-  trustedContacts: Array<{ email?: string; name: string; phone?: string }>;
+  trustedContacts: { email?: string; name: string; phone?: string }[];
   weight?: string;
 }
 
@@ -45,12 +45,12 @@ export interface DatePlace {
 
 export interface DateRequestPayload {
   filters: string[];
-  partyMembers: Array<{
+  partyMembers: {
     displayName?: string;
     email?: string;
     name?: string;
     phone?: string;
-  }>;
+  }[];
   paymentMode: PaymentMode;
   places: DatePlace[];
   scheduledAt: string;
@@ -77,9 +77,11 @@ export interface DatingSummary {
     onboarded: boolean;
     pendingReviews: number;
   };
-  requests: Array<
-    DateRequestPayload & { id: string; partySize: number; status: string }
-  >;
+  requests: (DateRequestPayload & {
+    id: string;
+    partySize: number;
+    status: string;
+  })[];
 }
 
 const getServerUrl = (url: string) => {

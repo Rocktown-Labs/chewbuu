@@ -16,8 +16,8 @@ import { HTTPException } from "hono/http-exception";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { z } from "zod";
 
-import { getSessionUser } from '../lib/auth-session';
-import type { SessionUser } from '../lib/auth-session';
+import { getSessionUser } from "../lib/auth-session";
+import type { SessionUser } from "../lib/auth-session";
 import { createRouter } from "../lib/create-app";
 
 const requiredString = z.string().trim().min(1);
@@ -266,8 +266,8 @@ const countBookedToday = async (userId: string) => {
   start.setUTCHours(0, 0, 0, 0);
 
   if (isTestRuntime()) {
-    return (memory.requests.get(userId) ?? []).filter((request) => 
-      new Date(request.scheduledAt) >= start
+    return (memory.requests.get(userId) ?? []).filter(
+      (request) => new Date(request.scheduledAt) >= start
     ).length;
   }
 
@@ -280,7 +280,7 @@ const countBookedToday = async (userId: string) => {
 
 const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
   const mediaState = hasRequiredMedia(input.media);
-  const {canDate} = mediaState;
+  const { canDate } = mediaState;
   const onboarded = canDate;
 
   if (isTestRuntime()) {
@@ -458,9 +458,9 @@ const suggestPlaces = (input: z.infer<typeof placeSuggestSchema>) => {
   const baseTypes = input.what;
   const primaryName = baseTypes.includes("drink")
     ? "The Golden Booth"
-    : (baseTypes.includes("play")
+    : baseTypes.includes("play")
       ? "Cue & Co."
-      : "Supper Club");
+      : "Supper Club";
 
   return [
     {

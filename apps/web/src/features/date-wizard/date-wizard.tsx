@@ -44,8 +44,14 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { datingApi } from '@/lib/dating-api';
-import type { DateMatch, DatePlace, DateRequestPayload, DateWhat, PaymentMode } from '@/lib/dating-api';
+import { datingApi } from "@/lib/dating-api";
+import type {
+  DateMatch,
+  DatePlace,
+  DateRequestPayload,
+  DateWhat,
+  PaymentMode,
+} from "@/lib/dating-api";
 
 const steps = [
   "What",

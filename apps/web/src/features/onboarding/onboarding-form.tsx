@@ -34,8 +34,8 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { datingApi } from '@/lib/dating-api';
-import type { DatingProfilePayload } from '@/lib/dating-api';
+import { datingApi } from "@/lib/dating-api";
+import type { DatingProfilePayload } from "@/lib/dating-api";
 
 const steps = ["Basics", "Media", "Interests", "Friends", "Premium"] as const;
 const promptChips = [

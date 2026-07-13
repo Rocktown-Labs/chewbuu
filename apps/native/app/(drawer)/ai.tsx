@@ -13,7 +13,14 @@ import {
   useThemeColor,
 } from "heroui-native";
 import { useRef, useEffect, useState } from "react";
-import { View, Text, ScrollView, KeyboardAvoidingView, Platform, Pressable } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+} from "react-native";
 
 import { Container } from "@/components/container";
 
@@ -35,7 +42,9 @@ const starterPrompts = [
 const generateAPIUrl = (relativePath: string) => {
   const serverUrl = env.EXPO_PUBLIC_SERVER_URL;
   if (!serverUrl) {
-    throw new Error("EXPO_PUBLIC_SERVER_URL environment variable is not defined");
+    throw new Error(
+      "EXPO_PUBLIC_SERVER_URL environment variable is not defined"
+    );
   }
   const path = relativePath.startsWith("/") ? relativePath : `/${relativePath}`;
   return serverUrl.concat(path);
@@ -44,10 +53,10 @@ const generateAPIUrl = (relativePath: string) => {
 export default function AIScreen() {
   const [input, setInput] = useState("");
   const { messages, error, sendMessage, status, setMessages } = useChat({
+    onError: (error) => console.error(error, "AI Chat Error"),
     transport: new DefaultChatTransport({
       api: generateAPIUrl("/ai"),
     }),
-    onError: (error) => console.error(error, "AI Chat Error"),
   });
   const scrollViewRef = useRef<ScrollView>(null);
   const foregroundColor = useThemeColor("foreground");
@@ -62,14 +71,18 @@ export default function AIScreen() {
 
   const sendPrompt = (prompt: string) => {
     const value = prompt.trim();
-    if (!value || isBusy) return;
+    if (!value || isBusy) {
+      return;
+    }
 
     sendMessage({ text: value });
     setInput("");
   };
 
   const onNewChat = () => {
-    if (isBusy) return;
+    if (isBusy) {
+      return;
+    }
     setInput("");
     setMessages([]);
   };
@@ -83,7 +96,9 @@ export default function AIScreen() {
         <View className="flex-1 px-4">
           <View className="flex-row items-center justify-between py-3">
             <View className="flex-row items-center gap-2">
-              <View className={`h-2 w-2 rounded-full ${isBusy ? "bg-primary" : "bg-border"}`} />
+              <View
+                className={`h-2 w-2 rounded-full ${isBusy ? "bg-primary" : "bg-border"}`}
+              />
               <Text className="text-sm font-semibold text-foreground tabular-nums">
                 {isBusy
                   ? status === "submitted"
@@ -114,41 +129,7 @@ export default function AIScreen() {
             contentContainerStyle={{ flexGrow: 1, paddingVertical: 16 }}
             keyboardShouldPersistTaps="handled"
           >
-            {!hasMessages ? (
-              <View className="flex-1 justify-center gap-3">
-                <View className="items-center gap-3">
-                  <Surface
-                    variant="secondary"
-                    className="h-14 w-14 items-center justify-center rounded-full"
-                  >
-                    <Ionicons name="chatbubble-ellipses-outline" size={28} color={mutedColor} />
-                  </Surface>
-                  <Text className="text-center text-xl font-semibold text-foreground">
-                    Start a conversation
-                  </Text>
-                  <Text selectable className="text-center text-sm leading-5 text-muted">
-                    Use a starter prompt or ask your own question.
-                  </Text>
-                </View>
-                <View className="gap-2">
-                  {starterPrompts.map((item) => (
-                    <Pressable
-                      key={item.label}
-                      onPress={() => sendPrompt(item.prompt)}
-                      disabled={isBusy}
-                    >
-                      <Surface
-                        variant="secondary"
-                        className={`gap-1 rounded-xl p-3 ${isBusy ? "opacity-50" : ""}`}
-                      >
-                        <Text className="text-sm font-semibold text-foreground">{item.label}</Text>
-                        <Text className="text-sm leading-5 text-muted">{item.prompt}</Text>
-                      </Surface>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            ) : (
+            {hasMessages ? (
               <View className="gap-3">
                 {messages.map((message) => (
                   <View
@@ -158,10 +139,14 @@ export default function AIScreen() {
                     }`}
                   >
                     <Surface
-                      variant={message.role === "user" ? "tertiary" : "secondary"}
+                      variant={
+                        message.role === "user" ? "tertiary" : "secondary"
+                      }
                       style={{ maxWidth: "86%" }}
                       className={`rounded-2xl p-3 ${
-                        message.role === "user" ? "rounded-tr-md" : "rounded-tl-md"
+                        message.role === "user"
+                          ? "rounded-tr-md"
+                          : "rounded-tl-md"
                       }`}
                     >
                       <Text className="mb-1 text-xs font-semibold text-muted">
@@ -185,7 +170,7 @@ export default function AIScreen() {
                             >
                               {JSON.stringify(part)}
                             </Text>
-                          ),
+                          )
                         )}
                       </View>
                     </Surface>
@@ -198,7 +183,9 @@ export default function AIScreen() {
                       style={{ maxWidth: "86%" }}
                       className="rounded-2xl rounded-tl-md p-3"
                     >
-                      <Text className="mb-1 text-xs font-semibold text-muted">AI</Text>
+                      <Text className="mb-1 text-xs font-semibold text-muted">
+                        AI
+                      </Text>
                       <View className="flex-row items-center gap-2">
                         <Spinner size="sm" />
                         <Text className="text-sm text-muted">Thinking...</Text>
@@ -206,6 +193,51 @@ export default function AIScreen() {
                     </Surface>
                   </View>
                 )}
+              </View>
+            ) : (
+              <View className="flex-1 justify-center gap-3">
+                <View className="items-center gap-3">
+                  <Surface
+                    variant="secondary"
+                    className="h-14 w-14 items-center justify-center rounded-full"
+                  >
+                    <Ionicons
+                      name="chatbubble-ellipses-outline"
+                      size={28}
+                      color={mutedColor}
+                    />
+                  </Surface>
+                  <Text className="text-center text-xl font-semibold text-foreground">
+                    Start a conversation
+                  </Text>
+                  <Text
+                    selectable
+                    className="text-center text-sm leading-5 text-muted"
+                  >
+                    Use a starter prompt or ask your own question.
+                  </Text>
+                </View>
+                <View className="gap-2">
+                  {starterPrompts.map((item) => (
+                    <Pressable
+                      key={item.label}
+                      onPress={() => sendPrompt(item.prompt)}
+                      disabled={isBusy}
+                    >
+                      <Surface
+                        variant="secondary"
+                        className={`gap-1 rounded-xl p-3 ${isBusy ? "opacity-50" : ""}`}
+                      >
+                        <Text className="text-sm font-semibold text-foreground">
+                          {item.label}
+                        </Text>
+                        <Text className="text-sm leading-5 text-muted">
+                          {item.prompt}
+                        </Text>
+                      </Surface>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
             )}
           </ScrollView>
@@ -242,7 +274,11 @@ export default function AIScreen() {
               isDisabled={!canSend}
               size="sm"
             >
-              <Ionicons name="arrow-up" size={18} color={canSend ? foregroundColor : mutedColor} />
+              <Ionicons
+                name="arrow-up"
+                size={18}
+                color={canSend ? foregroundColor : mutedColor}
+              />
             </Button>
           </View>
         </View>

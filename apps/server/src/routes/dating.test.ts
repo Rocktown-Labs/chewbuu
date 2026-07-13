@@ -137,6 +137,38 @@ describe("dating routes", () => {
     });
   });
 
+  it("blocks dating until required intro video and profile photo are present", async () => {
+    const response = await app.request("/dating/requests", {
+      body: JSON.stringify(dateRequestPayload),
+      headers: authHeaders({
+        "x-chewbuu-test-intro-video": "false",
+        "x-chewbuu-test-profile-photo": "false",
+      }),
+      method: "POST",
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      message:
+        "Complete onboarding, profile photo, and intro video before dating.",
+    });
+  });
+
+  it("enforces the daily booked date limit", async () => {
+    const response = await app.request("/dating/requests", {
+      body: JSON.stringify(dateRequestPayload),
+      headers: authHeaders({
+        "x-chewbuu-test-daily-limit": "0",
+      }),
+      method: "POST",
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      message: "Daily date booking limit reached.",
+    });
+  });
+
   it("allows sugar users to request covered group dates and returns matches", async () => {
     const headers = authHeaders({
       "x-chewbuu-test-tier": "sugar",

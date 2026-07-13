@@ -17,4 +17,17 @@ describe("DateWizard", () => {
     expect(screen.getByText(/social members date solo/i)).toBeVisible();
     expect(screen.getByLabelText(/friend email/i)).toBeDisabled();
   });
+
+  it("lets sugar members choose to cover the date", async () => {
+    const user = userEvent.setup();
+
+    render(<DateWizard membershipTier="sugar" />);
+
+    await user.click(screen.getByRole("button", { name: /next/iu }));
+    await user.click(screen.getByRole("button", { name: /next/iu }));
+    await user.click(screen.getByRole("button", { name: /next/iu }));
+    await user.click(screen.getByRole("button", { name: /next/iu }));
+
+    expect(screen.getByRole("button", { name: "Me" })).toBeEnabled();
+  });
 });

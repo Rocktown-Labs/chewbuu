@@ -10,7 +10,7 @@ export const Route = createFileRoute("/_auth")({
         to: "/login",
       });
     }
-    const user = session.data.user;
+    const { user } = session.data;
     const needsOnboarding =
       !user.hasCompletedOnboarding ||
       !user.hasIntroVideo ||

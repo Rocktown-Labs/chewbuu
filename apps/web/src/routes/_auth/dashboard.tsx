@@ -5,7 +5,7 @@ import {
   AvatarImage,
 } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
-import { Button, buttonVariants } from "@chewbuu/ui/components/button";
+import { buttonVariants } from "@chewbuu/ui/components/button";
 import {
   Card,
   CardAction,
@@ -38,8 +38,8 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { datingApi } from '@/lib/dating-api';
-import type { DatingProfilePayload, DatingSummary } from '@/lib/dating-api';
+import { datingApi } from "@/lib/dating-api";
+import type { DatingProfilePayload, DatingSummary } from "@/lib/dating-api";
 
 export const Route = createFileRoute("/_auth/dashboard")({
   component: RouteComponent,
