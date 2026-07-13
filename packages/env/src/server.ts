@@ -37,6 +37,11 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
+    R2_ACCESS_KEY_ID: z.string().optional(),
+    R2_ACCOUNT_ID: z.string().optional(),
+    R2_BUCKET_NAME: z.string().optional(),
+    R2_PUBLIC_URL: z.url().optional(),
+    R2_SECRET_ACCESS_KEY: z.string().optional(),
     STRIPE_MINGLE_PRICE_ID: z.string().optional(),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_SUGAR_PRICE_ID: z.string().optional(),

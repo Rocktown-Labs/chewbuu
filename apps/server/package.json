@@ -14,6 +14,7 @@
   "dependencies": {
     "@ai-sdk/devtools": "^1.0.1",
     "@ai-sdk/google": "^4.0.7",
+    "@better-upload/server": "^3.0.19",
     "@chewbuu/auth": "workspace:*",
     "@chewbuu/db": "workspace:*",
     "@chewbuu/env": "workspace:*",

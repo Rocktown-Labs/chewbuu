@@ -110,6 +110,33 @@ export const friendInvite = pgTable(
   (table) => [index("friend_invite_userId_idx").on(table.userId)]
 );
 
+export const membershipPlan = pgTable(
+  "membership_plan",
+  {
+    active: boolean("active").default(true).notNull(),
+    annualPriceCents: integer("annual_price_cents").default(0).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    cta: text("cta").notNull(),
+    description: text("description").notNull(),
+    features: jsonb("features").$type<string[]>().default([]).notNull(),
+    id: text("id").primaryKey(),
+    monthlyPriceCents: integer("monthly_price_cents").default(0).notNull(),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").default(0).notNull(),
+    stats: jsonb("stats").$type<string[]>().default([]).notNull(),
+    stripePriceId: text("stripe_price_id"),
+    tier: text("tier").notNull().unique(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("membership_plan_tier_idx").on(table.tier),
+    index("membership_plan_active_idx").on(table.active),
+  ]
+);
+
 export const dateRequest = pgTable(
   "date_request",
   {

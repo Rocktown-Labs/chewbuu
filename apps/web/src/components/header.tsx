@@ -1,9 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { HeartHandshake } from "lucide-react";
+import { HeartHandshake, LayoutDashboard } from "lucide-react";
+
+import { authClient } from "@/lib/auth-client";
 
 import UserMenu from "./user-menu";
 
 export default function Header() {
+  const { data: session } = authClient.useSession();
+  const primaryHref = session ? "/dashboard" : "/auth/sign-up";
+  const primaryLabel = session ? "Dashboard" : "Join";
+  const PrimaryIcon = session ? LayoutDashboard : HeartHandshake;
   const links = [
     { label: "Chewbuu", to: "/" },
     { label: "Dashboard", to: "/dashboard" },
@@ -41,10 +47,10 @@ export default function Header() {
         <div className="flex items-center gap-2">
           <Link
             className="hidden items-center gap-2 rounded-full bg-primary px-4 py-2 font-medium text-primary-foreground text-sm shadow-sm transition hover:bg-primary/90 md:flex"
-            to="/auth/sign-up"
+            to={primaryHref}
           >
-            <HeartHandshake aria-hidden="true" className="size-4" />
-            Join
+            <PrimaryIcon aria-hidden="true" className="size-4" />
+            {primaryLabel}
           </Link>
           <UserMenu />
         </div>
