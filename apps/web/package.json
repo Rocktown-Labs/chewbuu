@@ -15,6 +15,7 @@
     "@better-auth-ui/core": "^1.6.27",
     "@better-auth-ui/react": "^1.6.27",
     "@better-auth/stripe": "^1.6.23",
+    "@better-upload/client": "^3.0.19",
     "@chewbuu/env": "workspace:*",
     "@chewbuu/ui": "workspace:*",
     "@tailwindcss/vite": "^4.3.2",

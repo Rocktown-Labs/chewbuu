@@ -18,6 +18,7 @@ import {
 
 const buildStripePlans = () => [
   {
+    annualDiscountPriceId: env.STRIPE_MINGLE_ANNUAL_PRICE_ID,
     limits: {
       canCoverDutchDates: MEMBERSHIP_TIERS.mingle.canCoverDutchDates,
       dailyDateLimit: MEMBERSHIP_TIERS.mingle.dailyDateLimit,
@@ -27,6 +28,7 @@ const buildStripePlans = () => [
     priceId: env.STRIPE_MINGLE_PRICE_ID,
   },
   {
+    annualDiscountPriceId: env.STRIPE_SUGAR_ANNUAL_PRICE_ID,
     limits: {
       canCoverDutchDates: MEMBERSHIP_TIERS.sugar.canCoverDutchDates,
       dailyDateLimit: MEMBERSHIP_TIERS.sugar.dailyDateLimit,

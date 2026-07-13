@@ -84,7 +84,7 @@ export interface DatingSummary {
   })[];
 }
 
-const getServerUrl = (url: string) => {
+export const getServerUrl = (url: string) => {
   const normalized = url.endsWith("/") ? url.slice(0, -1) : url;
 
   if (!normalized.startsWith("/")) {
@@ -98,7 +98,7 @@ const getServerUrl = (url: string) => {
   return `http://localhost:3000${normalized}`;
 };
 
-const apiFetch = async <T>(path: string, options: ApiOptions = {}) => {
+export const apiFetch = async <T>(path: string, options: ApiOptions = {}) => {
   const response = await fetch(
     new URL(path, getServerUrl(env.VITE_SERVER_URL)),
     {
@@ -127,6 +127,22 @@ const apiFetch = async <T>(path: string, options: ApiOptions = {}) => {
   return data as T;
 };
 
+export interface MembershipPlan {
+  active: boolean;
+  annualPriceCents: number;
+  annualStripePriceId?: string;
+  cta: string;
+  description: string;
+  features: string[];
+  id?: string;
+  monthlyPriceCents: number;
+  name: string;
+  sortOrder: number;
+  stats: string[];
+  stripePriceId?: string;
+  tier: MembershipTier;
+}
+
 export const datingApi = {
   createRequest: (body: DateRequestPayload) =>
     apiFetch<{
@@ -149,5 +165,24 @@ export const datingApi = {
     apiFetch<{ places: DatePlace[] }>("/dating/places/suggest", {
       body,
       method: "POST",
+    }),
+};
+
+export const pricingApi = {
+  getPlans: () => apiFetch<{ plans: MembershipPlan[] }>("/pricing/plans"),
+  seedPlans: () =>
+    apiFetch<{ plans: MembershipPlan[] }>("/admin/pricing/seed", {
+      method: "POST",
+    }),
+  syncPlans: () =>
+    apiFetch<{
+      message: string;
+      plans: MembershipPlan[];
+      stripeConfigured: boolean;
+    }>("/admin/pricing/sync", { method: "POST" }),
+  updatePlans: (plans: MembershipPlan[]) =>
+    apiFetch<{ plans: MembershipPlan[] }>("/admin/pricing/plans", {
+      body: { plans },
+      method: "PUT",
     }),
 };

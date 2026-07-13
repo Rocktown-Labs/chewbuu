@@ -14,6 +14,8 @@ import indexRoute from "./routes";
 import aiRoute from "./routes/ai";
 import authRoute from "./routes/auth";
 import datingRoute from "./routes/dating";
+import pricingRoute from "./routes/pricing";
+import uploadRoute from "./routes/upload";
 
 initLogger({
   env: { service: "chewbuu-server" },
@@ -36,7 +38,7 @@ app.use(
   "/*",
   cors({
     allowHeaders: ["Content-Type", "Authorization"],
-    allowMethods: ["GET", "POST", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "OPTIONS"],
     credentials: true,
     origin: env.CORS_ORIGIN,
   })
@@ -64,7 +66,9 @@ const routes = app
   .route("/", indexRoute)
   .route("/", authRoute)
   .route("/", aiRoute)
-  .route("/", datingRoute);
+  .route("/", datingRoute)
+  .route("/", pricingRoute)
+  .route("/", uploadRoute);
 
 app.notFound(notFound);
 app.onError(onError);
