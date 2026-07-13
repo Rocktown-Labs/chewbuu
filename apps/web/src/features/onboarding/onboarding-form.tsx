@@ -159,6 +159,7 @@ const defaultPlans: MembershipPlan[] = [
   {
     active: true,
     annualPriceCents: 0,
+    annualStripePriceId: "",
     cta: "Keep Social",
     description: "Solo dates, Dutch by default, and two booked dates per day.",
     features: ["Solo dating", "2 booked dates daily", "Video-first matches"],
@@ -171,6 +172,7 @@ const defaultPlans: MembershipPlan[] = [
   {
     active: true,
     annualPriceCents: 19_000,
+    annualStripePriceId: "",
     cta: "Unlock Mingle",
     description: "Bring friends, build circles, and match with other parties.",
     features: ["Group dates up to 4", "Friend invites", "Circle matching"],
@@ -183,6 +185,7 @@ const defaultPlans: MembershipPlan[] = [
   {
     active: true,
     annualPriceCents: 39_000,
+    annualStripePriceId: "",
     cta: "Go Sugar",
     description:
       "Cover dates, request premium matches, and unlock every social mode.",

@@ -115,6 +115,7 @@ export const membershipPlan = pgTable(
   {
     active: boolean("active").default(true).notNull(),
     annualPriceCents: integer("annual_price_cents").default(0).notNull(),
+    annualStripePriceId: text("annual_stripe_price_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     cta: text("cta").notNull(),
     description: text("description").notNull(),

@@ -46,6 +46,7 @@ describe("pricing routes", () => {
           {
             active: true,
             annualPriceCents: 0,
+            annualStripePriceId: "",
             cta: "Keep Social",
             description: "Solo dating with two booked dates per day.",
             features: ["Solo dating"],
@@ -70,6 +71,18 @@ describe("pricing routes", () => {
           tier: "social",
         }),
       ],
+    });
+  });
+
+  it("reports sync as local-only when Stripe is not configured", async () => {
+    const response = await app.request("/admin/pricing/sync", {
+      headers: authHeaders(),
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      stripeConfigured: false,
     });
   });
 });

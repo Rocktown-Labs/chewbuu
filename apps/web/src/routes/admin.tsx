@@ -268,6 +268,18 @@ const RouteComponent = () => {
                   value={plan.stripePriceId ?? ""}
                 />
                 <Input
+                  aria-label={`${plan.name} annual Stripe price ID`}
+                  onChange={(event) =>
+                    setPlans(
+                      updatePlan(plans, plan.tier, {
+                        annualStripePriceId: event.target.value,
+                      })
+                    )
+                  }
+                  placeholder="price_..."
+                  value={plan.annualStripePriceId ?? ""}
+                />
+                <Input
                   aria-label={`${plan.name} CTA`}
                   onChange={(event) =>
                     setPlans(

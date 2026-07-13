@@ -130,6 +130,7 @@ export const apiFetch = async <T>(path: string, options: ApiOptions = {}) => {
 export interface MembershipPlan {
   active: boolean;
   annualPriceCents: number;
+  annualStripePriceId?: string;
   cta: string;
   description: string;
   features: string[];

@@ -11,6 +11,7 @@ import { createRouter } from "../lib/create-app";
 const planSchema = z.object({
   active: z.boolean().default(true),
   annualPriceCents: z.number().int().min(0),
+  annualStripePriceId: z.string().optional().or(z.literal("")),
   cta: z.string().trim().min(1),
   description: z.string().trim().min(1),
   features: z.array(z.string().trim().min(1)).default([]),
@@ -27,11 +28,26 @@ const updatePlansSchema = z.object({
 });
 
 type MembershipPlan = z.infer<typeof planSchema> & { id: string };
+type PaidMembershipPlan = MembershipPlan & { tier: "mingle" | "sugar" };
+type StripeListResponse<T> = {
+  data: T[];
+};
+type StripeProduct = {
+  id: string;
+};
+type StripePrice = {
+  id: string;
+  recurring?: {
+    interval?: string;
+  };
+  unit_amount?: number;
+};
 
 export const defaultMembershipPlans: MembershipPlan[] = [
   {
     active: true,
     annualPriceCents: 0,
+    annualStripePriceId: "",
     cta: "Keep Social",
     description: "Solo dates, Dutch by default, and two booked dates per day.",
     features: ["Solo dating", "2 booked dates daily", "Video-first matches"],
@@ -46,6 +62,7 @@ export const defaultMembershipPlans: MembershipPlan[] = [
   {
     active: true,
     annualPriceCents: 19_000,
+    annualStripePriceId: env.STRIPE_MINGLE_ANNUAL_PRICE_ID ?? "",
     cta: "Unlock Mingle",
     description: "Bring friends, build circles, and match with other parties.",
     features: [
@@ -64,6 +81,7 @@ export const defaultMembershipPlans: MembershipPlan[] = [
   {
     active: true,
     annualPriceCents: 39_000,
+    annualStripePriceId: env.STRIPE_SUGAR_ANNUAL_PRICE_ID ?? "",
     cta: "Go Sugar",
     description:
       "Cover dates, request premium matches, and unlock every social mode.",
@@ -87,6 +105,192 @@ const memory = {
 };
 
 const isTestRuntime = () => env.NODE_ENV === "test";
+const isPaidPlan = (plan: MembershipPlan): plan is PaidMembershipPlan =>
+  plan.tier === "mingle" || plan.tier === "sugar";
+
+const stripeApiFetch = async <T>(
+  path: string,
+  init: { body?: URLSearchParams; method?: "GET" | "POST" } = {}
+) => {
+  if (!env.STRIPE_SECRET_KEY) {
+    throw new Error("Stripe secret is not configured.");
+  }
+
+  const response = await fetch(`https://api.stripe.com/v1${path}`, {
+    body: init.body,
+    headers: {
+      authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+      ...(init.body
+        ? { "content-type": "application/x-www-form-urlencoded" }
+        : {}),
+    },
+    method: init.method ?? "GET",
+  });
+  const data = (await response.json()) as T & {
+    error?: { message?: string };
+  };
+
+  if (!response.ok) {
+    throw new Error(data.error?.message ?? "Stripe request failed.");
+  }
+
+  return data as T;
+};
+
+const stripeProductId = (tier: PaidMembershipPlan["tier"]) =>
+  `prod_chewbuu_${tier}`;
+
+const stripeLookupKey = (
+  tier: PaidMembershipPlan["tier"],
+  interval: "annual" | "monthly",
+  amount: number
+) => {
+  const base = `chewbuu_${tier}_${interval}`;
+
+  return amount > 0 ? `${base}_${amount}` : base;
+};
+
+const stripeFallbackLookupKey = (
+  tier: PaidMembershipPlan["tier"],
+  interval: "annual" | "monthly"
+) => `chewbuu_${tier}_${interval}`;
+
+const ensureStripeProduct = async (plan: PaidMembershipPlan) => {
+  const productId = stripeProductId(plan.tier);
+
+  try {
+    return await stripeApiFetch<StripeProduct>(`/products/${productId}`);
+  } catch {
+    const body = new URLSearchParams({
+      description: plan.description,
+      id: productId,
+      name: `Chewbuu ${plan.name}`,
+      "metadata[tier]": plan.tier,
+    });
+
+    return stripeApiFetch<StripeProduct>("/products", {
+      body,
+      method: "POST",
+    });
+  }
+};
+
+const findStripePriceByLookupKey = async (lookupKey: string) => {
+  const params = new URLSearchParams();
+  params.append("active", "true");
+  params.append("lookup_keys[]", lookupKey);
+  params.append("limit", "1");
+  const result = await stripeApiFetch<StripeListResponse<StripePrice>>(
+    `/prices?${params.toString()}`
+  );
+
+  return result.data[0] ?? null;
+};
+
+const findStripePriceById = async (
+  priceId: string | undefined,
+  interval: "month" | "year",
+  amount: number
+) => {
+  if (!priceId) {
+    return null;
+  }
+
+  try {
+    const price = await stripeApiFetch<StripePrice>(`/prices/${priceId}`);
+    const priceMatches =
+      price.unit_amount === amount && price.recurring?.interval === interval;
+
+    return priceMatches ? price : null;
+  } catch {
+    return null;
+  }
+};
+
+const ensureStripePrice = async ({
+  amount,
+  existingPriceId,
+  interval,
+  intervalLabel,
+  plan,
+}: {
+  amount: number;
+  existingPriceId?: string;
+  interval: "month" | "year";
+  intervalLabel: "annual" | "monthly";
+  plan: PaidMembershipPlan;
+}) => {
+  const existing = await findStripePriceById(existingPriceId, interval, amount);
+
+  if (existing) {
+    return existing;
+  }
+
+  const fallbackPrice = await findStripePriceByLookupKey(
+    stripeFallbackLookupKey(plan.tier, intervalLabel)
+  );
+
+  if (
+    fallbackPrice?.unit_amount === amount &&
+    fallbackPrice.recurring?.interval === interval
+  ) {
+    return fallbackPrice;
+  }
+
+  const lookupKey = stripeLookupKey(plan.tier, intervalLabel, amount);
+  const foundPrice = await findStripePriceByLookupKey(lookupKey);
+
+  if (foundPrice) {
+    return foundPrice;
+  }
+
+  const body = new URLSearchParams({
+    currency: "usd",
+    lookup_key: lookupKey,
+    "metadata[billing]": intervalLabel,
+    "metadata[tier]": plan.tier,
+    product: stripeProductId(plan.tier),
+    "recurring[interval]": interval,
+    unit_amount: String(amount),
+  });
+
+  return stripeApiFetch<StripePrice>("/prices", { body, method: "POST" });
+};
+
+const syncStripePlans = async (plans: MembershipPlan[]) => {
+  const syncedPlans: MembershipPlan[] = [];
+
+  for (const plan of plans) {
+    if (!isPaidPlan(plan)) {
+      syncedPlans.push(plan);
+      continue;
+    }
+
+    await ensureStripeProduct(plan);
+    const monthlyPrice = await ensureStripePrice({
+      amount: plan.monthlyPriceCents,
+      existingPriceId: plan.stripePriceId,
+      interval: "month",
+      intervalLabel: "monthly",
+      plan,
+    });
+    const annualPrice = await ensureStripePrice({
+      amount: plan.annualPriceCents,
+      existingPriceId: plan.annualStripePriceId,
+      interval: "year",
+      intervalLabel: "annual",
+      plan,
+    });
+
+    syncedPlans.push({
+      ...plan,
+      annualStripePriceId: annualPrice.id,
+      stripePriceId: monthlyPrice.id,
+    });
+  }
+
+  return updatePlans(syncedPlans);
+};
 
 const seedPlans = async (): Promise<MembershipPlan[]> => {
   if (isTestRuntime()) {
@@ -102,6 +306,7 @@ const seedPlans = async (): Promise<MembershipPlan[]> => {
         set: {
           active: plan.active,
           annualPriceCents: plan.annualPriceCents,
+          annualStripePriceId: plan.annualStripePriceId || null,
           cta: plan.cta,
           description: plan.description,
           features: plan.features,
@@ -139,6 +344,7 @@ const listPlans = async (): Promise<MembershipPlan[]> => {
     .map((plan) => ({
       ...plan,
       stripePriceId: plan.stripePriceId ?? "",
+      annualStripePriceId: plan.annualStripePriceId ?? "",
       tier: plan.tier as MembershipPlan["tier"],
     }))
     .toSorted((a, b) => a.sortOrder - b.sortOrder);
@@ -149,6 +355,7 @@ const updatePlans = async (plans: z.infer<typeof planSchema>[]) => {
     memory.plans = plans.map((plan) => ({
       ...plan,
       id: `plan-${plan.tier}`,
+      annualStripePriceId: plan.annualStripePriceId ?? "",
       stripePriceId: plan.stripePriceId ?? "",
     }));
     return memory.plans.toSorted((a, b) => a.sortOrder - b.sortOrder);
@@ -159,6 +366,7 @@ const updatePlans = async (plans: z.infer<typeof planSchema>[]) => {
       .insert(membershipPlan)
       .values({
         ...plan,
+        annualStripePriceId: plan.annualStripePriceId || null,
         id: `plan-${plan.tier}`,
         stripePriceId: plan.stripePriceId || null,
       })
@@ -166,6 +374,7 @@ const updatePlans = async (plans: z.infer<typeof planSchema>[]) => {
         set: {
           active: plan.active,
           annualPriceCents: plan.annualPriceCents,
+          annualStripePriceId: plan.annualStripePriceId || null,
           cta: plan.cta,
           description: plan.description,
           features: plan.features,
@@ -212,12 +421,21 @@ const router = createRouter()
     await getAdminUser(c.req.raw.headers);
     const plans = await listPlans();
 
+    if (!env.STRIPE_SECRET_KEY) {
+      return c.json({
+        message:
+          "Stripe secret is not configured yet. Saved Chewbuu pricing locally.",
+        plans,
+        stripeConfigured: false,
+      });
+    }
+
+    const syncedPlans = await syncStripePlans(plans);
+
     return c.json({
-      message: env.STRIPE_SECRET_KEY
-        ? "Pricing plans are ready for Stripe price syncing."
-        : "Stripe secret is not configured yet. Saved Chewbuu pricing locally.",
-      plans,
-      stripeConfigured: Boolean(env.STRIPE_SECRET_KEY),
+      message: "Stripe products and prices are synced.",
+      plans: syncedPlans,
+      stripeConfigured: true,
     });
   });
 
