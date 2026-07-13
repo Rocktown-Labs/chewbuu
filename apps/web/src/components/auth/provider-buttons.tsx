@@ -1,14 +1,14 @@
-import { useAuth } from "@better-auth-ui/react"
-import { useMemo } from "react"
+import { useAuth } from "@better-auth-ui/react";
+import { cn } from "@chewbuu/ui/lib/utils";
+import { useMemo } from "react";
 
-import { cn } from "@chewbuu/ui/lib/utils"
-import { ProviderButton } from "./provider-button"
+import { ProviderButton } from "./provider-button";
 
-export type ProviderButtonsProps = {
-  socialLayout?: SocialLayout
+export interface ProviderButtonsProps {
+  socialLayout?: SocialLayout;
 }
 
-export type SocialLayout = "auto" | "horizontal" | "vertical" | "grid"
+export type SocialLayout = "auto" | "horizontal" | "vertical" | "grid";
 
 /**
  * Render sign-in buttons for configured social providers. Each button owns its own sign-in mutation
@@ -17,21 +17,21 @@ export type SocialLayout = "auto" | "horizontal" | "vertical" | "grid"
  * @param socialLayout - Preferred layout for the provider buttons; `"auto"` chooses based on the number of providers.
  */
 export function ProviderButtons({
-  socialLayout = "auto"
+  socialLayout = "auto",
 }: ProviderButtonsProps) {
-  const { socialProviders } = useAuth()
+  const { socialProviders } = useAuth();
 
   const resolvedSocialLayout = useMemo(() => {
     if (socialLayout === "auto") {
       if (socialProviders?.length && socialProviders.length >= 4) {
-        return "horizontal"
+        return "horizontal";
       }
 
-      return "vertical"
+      return "vertical";
     }
 
-    return socialLayout
-  }, [socialLayout, socialProviders?.length])
+    return socialLayout;
+  }, [socialLayout, socialProviders?.length]);
 
   return (
     <div
@@ -57,5 +57,5 @@ export function ProviderButtons({
         />
       ))}
     </div>
-  )
+  );
 }

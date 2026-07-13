@@ -13,10 +13,12 @@
     "src/index.ts",
     "src/app.ts",
     "src/lib/create-app.ts",
+    "src/lib/auth-session.ts",
     "src/lib/types.ts",
-    "src/routes/ai.route.ts",
-    "src/routes/auth.route.ts",
-    "src/routes/index.route.ts"
+    "src/routes/ai.ts",
+    "src/routes/auth.ts",
+    "src/routes/dating.ts",
+    "src/routes/index.ts"
   ],
   "include": ["src/**/*.ts", "tsdown.config.ts", "vitest.config.ts"]
 }

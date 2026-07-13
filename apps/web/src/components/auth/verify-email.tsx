@@ -1,20 +1,25 @@
-import { useAuth, useSendVerificationEmail } from "@better-auth-ui/react"
-import { useEffect, useState, useSyncExternalStore } from "react"
-import { toast } from "sonner"
+import { useAuth, useSendVerificationEmail } from "@better-auth-ui/react";
+import { Button } from "@chewbuu/ui/components/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@chewbuu/ui/components/card";
+import { FieldDescription } from "@chewbuu/ui/components/field";
+import { Spinner } from "@chewbuu/ui/components/spinner";
+import { cn } from "@chewbuu/ui/lib/utils";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { toast } from "sonner";
 
-import { Button } from "@chewbuu/ui/components/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@chewbuu/ui/components/card"
-import { FieldDescription } from "@chewbuu/ui/components/field"
-import { Spinner } from "@chewbuu/ui/components/spinner"
-import { cn } from "@chewbuu/ui/lib/utils"
-import { OpenEmailButton } from "./open-email-button"
+import { OpenEmailButton } from "./open-email-button";
 
-export type VerifyEmailProps = {
-  className?: string
+export interface VerifyEmailProps {
+  className?: string;
 }
 
 /** Seconds the resend button stays disabled to prevent spamming the endpoint. */
-const RESEND_COOLDOWN_SECONDS = 60
+const RESEND_COOLDOWN_SECONDS = 60;
 
 /**
  * Returns `true` once the component is mounted on the client (hydrated) and
@@ -24,12 +29,12 @@ const RESEND_COOLDOWN_SECONDS = 60
  * @returns Whether the component has hydrated on the client.
  */
 function useIsHydrated() {
-  const subscribe = () => () => {}
+  const subscribe = () => () => {};
   return useSyncExternalStore(
     subscribe,
     () => true,
     () => false
-  )
+  );
 }
 
 /**
@@ -52,40 +57,42 @@ export function VerifyEmail({ className }: VerifyEmailProps) {
     localization,
     redirectTo,
     viewPaths,
-    Link
-  } = useAuth()
+    Link,
+  } = useAuth();
 
-  const isHydrated = useIsHydrated()
+  const isHydrated = useIsHydrated();
   const [email, setEmail] = useState(
     (isHydrated && sessionStorage.getItem("better-auth-ui.verify-email")) || ""
-  )
-  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS)
+  );
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_SECONDS);
 
   useEffect(() => {
-    setEmail(sessionStorage.getItem("better-auth-ui.verify-email") ?? "")
-  }, [])
+    setEmail(sessionStorage.getItem("better-auth-ui.verify-email") ?? "");
+  }, []);
 
   useEffect(() => {
-    if (cooldown <= 0 || !email) return
+    if (cooldown <= 0 || !email) {
+      return;
+    }
 
     const interval = setInterval(() => {
-      setCooldown((current) => (current > 0 ? current - 1 : 0))
-    }, 1000)
+      setCooldown((current) => (current > 0 ? current - 1 : 0));
+    }, 1000);
 
-    return () => clearInterval(interval)
-  }, [cooldown, email])
+    return () => clearInterval(interval);
+  }, [cooldown, email]);
 
   const { mutate: sendVerificationEmail, isPending } = useSendVerificationEmail(
     authClient,
     {
       onSuccess: () => {
-        toast.success(localization.auth.verificationEmailSent)
-        setCooldown(RESEND_COOLDOWN_SECONDS)
-      }
+        toast.success(localization.auth.verificationEmailSent);
+        setCooldown(RESEND_COOLDOWN_SECONDS);
+      },
     }
-  )
+  );
 
-  const isCoolingDown = cooldown > 0
+  const isCoolingDown = cooldown > 0;
 
   return (
     <Card className={cn("w-full max-w-sm", className)}>
@@ -111,8 +118,8 @@ export function VerifyEmail({ className }: VerifyEmailProps) {
                 disabled={!email || isCoolingDown || isPending}
                 onClick={() =>
                   sendVerificationEmail({
+                    callbackURL: `${baseURL}${redirectTo}`,
                     email,
-                    callbackURL: `${baseURL}${redirectTo}`
                   })
                 }
               >
@@ -142,5 +149,5 @@ export function VerifyEmail({ className }: VerifyEmailProps) {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

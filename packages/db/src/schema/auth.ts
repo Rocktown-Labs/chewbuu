@@ -16,6 +16,11 @@ export const user = pgTable("user", {
   dailyDateLimit: integer("daily_date_limit").default(2).notNull(),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
+  hasCompletedOnboarding: boolean("has_completed_onboarding")
+    .default(false)
+    .notNull(),
+  hasIntroVideo: boolean("has_intro_video").default(false).notNull(),
+  hasProfilePhoto: boolean("has_profile_photo").default(false).notNull(),
   id: text("id").primaryKey(),
   image: text("image"),
   membershipTier: text("membership_tier").default("social").notNull(),
