@@ -10,9 +10,10 @@ import notFound from "stoker/middlewares/not-found";
 import onError from "stoker/middlewares/on-error";
 
 import { createRouter } from "./lib/create-app";
+import indexRoute from "./routes";
 import aiRoute from "./routes/ai";
 import authRoute from "./routes/auth";
-import indexRoute from "./routes";
+import datingRoute from "./routes/dating";
 
 initLogger({
   env: { service: "chewbuu-server" },
@@ -62,7 +63,8 @@ app.get(
 const routes = app
   .route("/", indexRoute)
   .route("/", authRoute)
-  .route("/", aiRoute);
+  .route("/", aiRoute)
+  .route("/", datingRoute);
 
 app.notFound(notFound);
 app.onError(onError);

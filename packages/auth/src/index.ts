@@ -116,6 +116,24 @@ export const createAuth = () => {
           required: false,
           type: "number",
         },
+        hasCompletedOnboarding: {
+          defaultValue: false,
+          input: false,
+          required: false,
+          type: "boolean",
+        },
+        hasIntroVideo: {
+          defaultValue: false,
+          input: false,
+          required: false,
+          type: "boolean",
+        },
+        hasProfilePhoto: {
+          defaultValue: false,
+          input: false,
+          required: false,
+          type: "boolean",
+        },
         membershipTier: {
           defaultValue: DEFAULT_MEMBERSHIP_TIER.id,
           input: false,

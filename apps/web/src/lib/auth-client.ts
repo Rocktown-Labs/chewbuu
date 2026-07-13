@@ -44,6 +44,21 @@ export const authClient = createAuthClient({
           required: false,
           type: "number",
         },
+        hasCompletedOnboarding: {
+          input: false,
+          required: false,
+          type: "boolean",
+        },
+        hasIntroVideo: {
+          input: false,
+          required: false,
+          type: "boolean",
+        },
+        hasProfilePhoto: {
+          input: false,
+          required: false,
+          type: "boolean",
+        },
         membershipTier: {
           input: false,
           required: false,
