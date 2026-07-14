@@ -1126,7 +1126,7 @@ function RouteComponent() {
                 />
                 <ChecklistItem
                   label="Safety Contact"
-                  checked={contacts.length > 0}
+                  checked={(profile?.trustedContacts?.length ?? 0) > 0}
                 />
               </div>
             </CardContent>
