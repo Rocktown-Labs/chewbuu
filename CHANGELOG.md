@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-14
+
+### Added
+
+- Redesigned the non-authenticated homepage `/` into a stunning, dark-themed Netflix-style landing page with couple date card highlights, grid image overlays, a detailed features overview, and interactive FAQ accordions.
+- Added video inputs camera device selector allowing users to switch hardware video inputs in `LiveCaptureDialog`.
+- Embedded a local place search input box in the onboarding Interests step to let users query and select spots near them.
+
+### Fixed
+
+- Fixed capitalization of Sex and Sexuality option values to ensure clean presentation.
+- Fixed layout alignment, padding, borders, and drop shadow styles for the shadcn select dropdown components to avoid position shifting.
+- Fixed Camera permission and shutter buttons lock by binding disabled states to React stream state instead of static refs.
+- Fixed upload error in Safari/Chrome by wrapping URL construction in a robust try/catch helper block.
+- Fixed typing delay in dynamic list fields (Friends list inputs) by tracking active focus state and avoiding stale resets.
+- Fixed Pricing step crash by resolving undefined parent scope `handleFinishLater` callback variable reference.
+
 ## [0.3.0] - 2026-07-14
 
 ### Added
