@@ -28,6 +28,7 @@ vi.mock("@tanstack/react-router", async () => {
 
 vi.mock("@/lib/dating-api", () => ({
   datingApi: {
+    getProfile: vi.fn().mockResolvedValue(null),
     saveProfile: vi.fn(),
   },
   getServerUrl: (url: string) => url,
@@ -55,7 +56,7 @@ describe("OnboardingForm", () => {
     expect(screen.getByText("Sexuality")).toBeVisible();
   });
 
-  it("can move to the media step with upload and camera actions", async () => {
+  it("can move to the media step with live capture and record actions", async () => {
     const user = userEvent.setup();
 
     render(<OnboardingForm />);
@@ -66,8 +67,12 @@ describe("OnboardingForm", () => {
 
     await user.click(screen.getByRole("button", { name: "Media" }));
 
-    expect(screen.getByRole("heading", { name: /video first/i })).toBeVisible();
-    expect(screen.getAllByRole("button", { name: /upload/i })).toHaveLength(2);
-    expect(screen.getByRole("button", { name: /record/i })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: /live capture/i })
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /camera shutter/i })
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: /record live/i })).toBeVisible();
   });
 });
