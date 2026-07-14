@@ -108,7 +108,7 @@ Only merge when CI and test gates pass:
 gh pr merge --merge --delete-branch
 ```
 
-After merge, update the root `CHANGELOG.md` under semantic version headings and categorize entries as `Added`, `Fixed`, or `Changed`.
+Before opening the Pull Request, update the root `CHANGELOG.md` under semantic version headings and categorize entries as `Added`, `Fixed`, or `Changed`. This ensures the changelog is included in the first commit and does not trigger a second build.
 
 # Hono API Architecture
 
