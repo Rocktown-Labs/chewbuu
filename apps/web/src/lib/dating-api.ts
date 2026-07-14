@@ -107,17 +107,12 @@ export const apiFetch = async <T>(path: string, options: ApiOptions = {}) => {
   const cleanPath = path.startsWith("/") ? path.slice(1) : path;
   const fullUrl = new URL(cleanPath, cleanBase);
 
-  const response = await fetch(
-    fullUrl,
-    {
-      body: options.body ? JSON.stringify(options.body) : undefined,
-      credentials: "include",
-      headers: options.body
-        ? { "content-type": "application/json" }
-        : undefined,
-      method: options.method ?? "GET",
-    }
-  );
+  const response = await fetch(fullUrl, {
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    credentials: "include",
+    headers: options.body ? { "content-type": "application/json" } : undefined,
+    method: options.method ?? "GET",
+  });
 
   const data = (await response.json().catch(() => null)) as
     | T

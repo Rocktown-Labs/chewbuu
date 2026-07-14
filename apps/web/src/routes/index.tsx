@@ -32,7 +32,8 @@ const TRENDING_DATES: TrendingItem[] = [
     placeName: "KJ's Market & Sandwich Shop",
     rating: "4.8",
     compatibility: "94%",
-    image: "https://images.unsplash.com/photo-1509722747041-616f39b57569?w=500&auto=format&fit=crop&q=60",
+    image:
+      "https://images.unsplash.com/photo-1509722747041-616f39b57569?w=500&auto=format&fit=crop&q=60",
   },
   {
     rank: 2,
@@ -40,7 +41,8 @@ const TRENDING_DATES: TrendingItem[] = [
     placeName: "Cue & Co. Pool Hall",
     rating: "4.6",
     compatibility: "91%",
-    image: "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=500&auto=format&fit=crop&q=60",
+    image:
+      "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=500&auto=format&fit=crop&q=60",
   },
   {
     rank: 3,
@@ -48,7 +50,8 @@ const TRENDING_DATES: TrendingItem[] = [
     placeName: "The Golden Booth",
     rating: "4.7",
     compatibility: "89%",
-    image: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500&auto=format&fit=crop&q=60",
+    image:
+      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500&auto=format&fit=crop&q=60",
   },
   {
     rank: 4,
@@ -56,7 +59,8 @@ const TRENDING_DATES: TrendingItem[] = [
     placeName: "Whiskey Cabin",
     rating: "4.9",
     compatibility: "92%",
-    image: "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=500&auto=format&fit=crop&q=60",
+    image:
+      "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=500&auto=format&fit=crop&q=60",
   },
   {
     rank: 5,
@@ -64,7 +68,8 @@ const TRENDING_DATES: TrendingItem[] = [
     placeName: "Boba Haven",
     rating: "4.5",
     compatibility: "87%",
-    image: "https://images.unsplash.com/photo-1507133750040-4a8f57021571?w=500&auto=format&fit=crop&q=60",
+    image:
+      "https://images.unsplash.com/photo-1507133750040-4a8f57021571?w=500&auto=format&fit=crop&q=60",
   },
 ];
 
@@ -128,13 +133,27 @@ const HomeComponent = () => {
         {/* Faded Background Grid Grid */}
         <div className="absolute inset-0 opacity-15 dark:opacity-20 pointer-events-none grid grid-cols-3 md:grid-cols-6 gap-3 p-4 select-none">
           {TRENDING_DATES.map((item, i) => (
-            <div key={i} className="aspect-[2/3] w-full rounded-xl overflow-hidden border border-border">
-              <img src={item.image} alt="" className="w-full h-full object-cover grayscale" />
+            <div
+              key={i}
+              className="aspect-[2/3] w-full rounded-xl overflow-hidden border border-border"
+            >
+              <img
+                src={item.image}
+                alt=""
+                className="w-full h-full object-cover grayscale"
+              />
             </div>
           ))}
           {TRENDING_DATES.map((item, i) => (
-            <div key={`dup-${i}`} className="aspect-[2/3] w-full rounded-xl overflow-hidden border border-border hidden md:block">
-              <img src={item.image} alt="" className="w-full h-full object-cover grayscale" />
+            <div
+              key={`dup-${i}`}
+              className="aspect-[2/3] w-full rounded-xl overflow-hidden border border-border hidden md:block"
+            >
+              <img
+                src={item.image}
+                alt=""
+                className="w-full h-full object-cover grayscale"
+              />
             </div>
           ))}
         </div>
@@ -150,7 +169,8 @@ const HomeComponent = () => {
             Real People, Real Dates, Real Results.
           </h1>
           <p className="max-w-2xl text-base md:text-xl text-muted-foreground font-medium">
-            Ditch endless swiping. Pick your favorite local spots, match by live video, and plan real dates near you.
+            Ditch endless swiping. Pick your favorite local spots, match by live
+            video, and plan real dates near you.
           </p>
           <p className="text-xs md:text-sm text-muted-foreground font-semibold uppercase tracking-wider">
             Ready to date? Enter the Chewbuu portal.
@@ -176,7 +196,9 @@ const HomeComponent = () => {
 
       {/* TRENDING DATES */}
       <section className="px-5 md:px-12 py-16 border-b-8 border-border bg-background">
-        <h2 className="text-xl md:text-2xl font-extrabold text-foreground mb-8">Trending Dates Right Now</h2>
+        <h2 className="text-xl md:text-2xl font-extrabold text-foreground mb-8">
+          Trending Dates Right Now
+        </h2>
         <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-none snap-x">
           {TRENDING_DATES.map((item) => (
             <div
@@ -196,7 +218,9 @@ const HomeComponent = () => {
               </div>
               <div className="p-4 flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-sm text-foreground">{item.couple}</span>
+                  <span className="font-bold text-sm text-foreground">
+                    {item.couple}
+                  </span>
                   <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-0 text-[10px] font-extrabold">
                     {item.compatibility} Match
                   </Badge>
@@ -218,7 +242,9 @@ const HomeComponent = () => {
       {/* REASONS TO JOIN */}
       <section className="px-5 md:px-12 py-20 border-b-8 border-border bg-muted/10">
         <div className="max-w-6xl mx-auto flex flex-col gap-10">
-          <h2 className="text-2xl md:text-4xl font-extrabold text-foreground text-center">More Reasons to Join</h2>
+          <h2 className="text-2xl md:text-4xl font-extrabold text-foreground text-center">
+            More Reasons to Join
+          </h2>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {REASONS.map(({ icon: Icon, title, text }) => (
               <article
@@ -230,7 +256,9 @@ const HomeComponent = () => {
                 </span>
                 <div className="flex flex-col gap-1.5">
                   <h3 className="font-bold text-lg text-foreground">{title}</h3>
-                  <p className="text-muted-foreground text-xs/relaxed font-medium">{text}</p>
+                  <p className="text-muted-foreground text-xs/relaxed font-medium">
+                    {text}
+                  </p>
                 </div>
               </article>
             ))}
@@ -241,19 +269,26 @@ const HomeComponent = () => {
       {/* FAQ SECTION */}
       <section className="px-5 md:px-12 py-20 bg-background">
         <div className="max-w-3xl mx-auto flex flex-col gap-10">
-          <h2 className="text-2xl md:text-4xl font-extrabold text-foreground text-center">Frequently Asked Questions</h2>
+          <h2 className="text-2xl md:text-4xl font-extrabold text-foreground text-center">
+            Frequently Asked Questions
+          </h2>
           <div className="flex flex-col gap-3">
             {FAQS.map((faq, i) => {
               const isOpen = openFaq === i;
               return (
-                <div key={i} className="flex flex-col border border-border rounded-2xl overflow-hidden bg-card">
+                <div
+                  key={i}
+                  className="flex flex-col border border-border rounded-2xl overflow-hidden bg-card"
+                >
                   <button
                     onClick={() => toggleFaq(i)}
                     type="button"
                     className="flex items-center justify-between px-6 py-5 text-left font-bold text-sm md:text-base text-foreground hover:bg-muted/50 transition cursor-pointer"
                   >
                     <span>{faq.q}</span>
-                    <ChevronDown className={`size-5 text-muted-foreground transition-transform duration-250 ${isOpen ? "rotate-180 text-primary" : ""}`} />
+                    <ChevronDown
+                      className={`size-5 text-muted-foreground transition-transform duration-250 ${isOpen ? "rotate-180 text-primary" : ""}`}
+                    />
                   </button>
                   {isOpen && (
                     <div className="px-6 pb-5 text-xs md:text-sm/relaxed font-medium text-muted-foreground border-t border-border/40 pt-4 bg-muted/10">
@@ -266,7 +301,9 @@ const HomeComponent = () => {
           </div>
 
           <div className="flex flex-col items-center gap-4 mt-6 text-center">
-            <span className="text-sm text-muted-foreground font-bold uppercase tracking-wider">Ready to begin your dating journey?</span>
+            <span className="text-sm text-muted-foreground font-bold uppercase tracking-wider">
+              Ready to begin your dating journey?
+            </span>
             <Link
               className="inline-flex items-center justify-center rounded-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold px-10 py-4 shadow-lg shadow-primary/20 transition-all duration-200 text-sm"
               to="/auth/sign-up"

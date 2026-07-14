@@ -13,11 +13,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Extended live video recording countdown limit to 60 seconds and displayed helpful prompt tips.
 - Integrated reverse geocoding to automatically resolve city and state names from browser GPS coordinates.
 - Stylized sign-in and sign-up page cards, inputs, and buttons with on-brand rounded pill designs.
+- Added unit tests for onboarding store, theme store, dating API URL resolution, and additional dating route readiness edge cases.
 
 ### Fixed
 
 - Fixed onboarding redirection loop by relaxing the gateway middleware to only check for completed basics profile fields.
 - Fixed dynamic inputs rendering delay in Friends & Safety tab by using store-level React state subscriptions.
+- Fixed missing assertion in the Google Places text query test.
+- Fixed lint and formatting issues in the onboarding form (exhaustive-deps, catch parameter naming, zero-fractions).
 
 ## [0.4.0] - 2026-07-14
 

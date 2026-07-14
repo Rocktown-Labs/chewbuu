@@ -33,7 +33,6 @@ import {
 } from "@chewbuu/ui/components/toggle-group";
 import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useOnboardingStore } from "./onboarding-store";
 import {
   Camera,
   Check,
@@ -65,6 +64,8 @@ import {
   type DatingProfilePayload,
   type MembershipPlan,
 } from "@/lib/dating-api";
+
+import { useOnboardingStore } from "./onboarding-store";
 
 const steps = ["Basics", "Media", "Interests", "Friends", "Premium"] as const;
 const areaPattern = /^[a-zA-Z .'-]+,\s?[A-Z]{2}$/;
@@ -384,8 +385,8 @@ export function OnboardingForm() {
         // Merge order: 1. default values, 2. API profile, 3. local persisted profile edits
         const merged = {
           ...defaultValues,
-          ...(res?.profile || {}),
-          ...persistedProfile,
+          ...res?.profile,
+          ...useOnboardingStore.getState().profile,
         };
 
         if (session?.user) {
@@ -730,19 +731,34 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
       form.setFieldValue("longitude", String(longitude));
 
       let resolvedArea = "Searcy, AR";
-      if (Math.abs(latitude - 36.16) < 1.0 && Math.abs(longitude + 86.78) < 1.0) {
+      if (Math.abs(latitude - 36.16) < 1 && Math.abs(longitude + 86.78) < 1) {
         resolvedArea = "Nashville, TN";
-      } else if (Math.abs(latitude - 34.74) < 1.0 && Math.abs(longitude + 92.28) < 1.0) {
+      } else if (
+        Math.abs(latitude - 34.74) < 1 &&
+        Math.abs(longitude + 92.28) < 1
+      ) {
         resolvedArea = "Little Rock, AR";
-      } else if (Math.abs(latitude - 35.24) < 1.0 && Math.abs(longitude + 91.73) < 1.0) {
+      } else if (
+        Math.abs(latitude - 35.24) < 1 &&
+        Math.abs(longitude + 91.73) < 1
+      ) {
         resolvedArea = "Searcy, AR";
       } else {
         try {
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+          );
           const data = await res.json();
           if (data?.address) {
-            const city = data.address.city || data.address.town || data.address.village || data.address.suburb || "";
-            const state = data.address.state ? data.address.state_code || data.address.state : "";
+            const city =
+              data.address.city ||
+              data.address.town ||
+              data.address.village ||
+              data.address.suburb ||
+              "";
+            const state = data.address.state
+              ? data.address.state_code || data.address.state
+              : "";
             let stateCode = String(state).trim();
             if (stateCode.length > 2) {
               stateCode = stateCode.slice(0, 2).toUpperCase();
@@ -751,8 +767,8 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
               resolvedArea = `${city}, ${stateCode}`;
             }
           }
-        } catch (e) {
-          console.error("OSM geocode error:", e);
+        } catch (error) {
+          console.error("OSM geocode error:", error);
         }
       }
 
@@ -1440,7 +1456,12 @@ function InputList({
 
 function FriendsStep({ form }: { form: OnboardingFormApi }) {
   return (
-    <form.Subscribe selector={(state) => [state.values.friendInvites, state.values.trustedContacts]}>
+    <form.Subscribe
+      selector={(state) => [
+        state.values.friendInvites,
+        state.values.trustedContacts,
+      ]}
+    >
       {([friendInvites, trustedContacts]) => {
         const friends = (friendInvites || []) as {
           email?: string;
@@ -1470,8 +1491,8 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                     Invite friends for circles and group dates
                   </h3>
                   <p className="text-muted-foreground text-sm">
-                    Mingle and Sugar members can go on dates with up to three friends.
-                    Invite them now.
+                    Mingle and Sugar members can go on dates with up to three
+                    friends. Invite them now.
                   </p>
                 </div>
               </div>
@@ -1495,8 +1516,8 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                     Safety contacts (At least 1 required)
                   </h3>
                   <p className="text-muted-foreground text-sm">
-                    Add up to two trusted contacts. We will notify them with location
-                    and date details for your peace of mind.
+                    Add up to two trusted contacts. We will notify them with
+                    location and date details for your peace of mind.
                   </p>
                 </div>
               </div>
@@ -2176,8 +2197,8 @@ function LiveCaptureDialog({
         if (videoInputs.length > 0 && !selectedDeviceId) {
           setSelectedDeviceId(videoInputs[0].deviceId);
         }
-      } catch (err) {
-        console.error("Error enumerating devices:", err);
+      } catch (error) {
+        console.error("Error enumerating devices:", error);
       }
     };
     void getDevices();
@@ -2436,7 +2457,10 @@ function LiveCaptureDialog({
             {mode === "photo" ? (
               <p>💡 Tip: Center your face in the frame and smile!</p>
             ) : (
-              <p>🗣️ Tip: Say: &quot;Hey, I&apos;m {displayName || "Name"}! I love doing [interests] and I&apos;m down to grab [food/drink]!&quot;</p>
+              <p>
+                🗣️ Tip: Say: &quot;Hey, I&apos;m {displayName || "Name"}! I love
+                doing [interests] and I&apos;m down to grab [food/drink]!&quot;
+              </p>
             )}
           </div>
         )}

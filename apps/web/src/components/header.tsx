@@ -1,5 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { HeartHandshake, LayoutDashboard, Monitor, Moon, Sun } from "lucide-react";
+import {
+  HeartHandshake,
+  LayoutDashboard,
+  Monitor,
+  Moon,
+  Sun,
+} from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 import { useThemeStore } from "@/lib/theme";
@@ -9,7 +15,7 @@ import UserMenu from "./user-menu";
 export default function Header() {
   const { data: session } = authClient.useSession();
   const { theme, setTheme } = useThemeStore();
-  
+
   const primaryHref = session ? "/dashboard" : "/auth/sign-up";
   const primaryLabel = session ? "Dashboard" : "Join";
   const PrimaryIcon = session ? LayoutDashboard : HeartHandshake;
