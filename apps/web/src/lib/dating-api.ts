@@ -102,8 +102,13 @@ export const getServerUrl = (url: string) => {
 };
 
 export const apiFetch = async <T>(path: string, options: ApiOptions = {}) => {
+  const baseUrl = getServerUrl(env.VITE_SERVER_URL);
+  const cleanBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
+  const fullUrl = new URL(cleanPath, cleanBase);
+
   const response = await fetch(
-    new URL(path, getServerUrl(env.VITE_SERVER_URL)),
+    fullUrl,
     {
       body: options.body ? JSON.stringify(options.body) : undefined,
       credentials: "include",

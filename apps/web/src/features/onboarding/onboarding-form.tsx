@@ -33,6 +33,7 @@ import {
 } from "@chewbuu/ui/components/toggle-group";
 import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useOnboardingStore } from "./onboarding-store";
 import {
   Camera,
   Check,
@@ -311,7 +312,15 @@ const formatPhoneNumber = (value: string) => {
 
 export function OnboardingForm() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(0);
+  const {
+    profile: persistedProfile,
+    step: persistedStep,
+    setStep: setPersistedStep,
+    setProfile: setPersistedProfile,
+    clear: clearPersistedOnboarding,
+  } = useOnboardingStore();
+
+  const [step, setStep] = useState(persistedStep);
   const [plans, setPlans] = useState<MembershipPlan[]>(defaultPlans);
   const { data: session } = authClient.useSession();
 
@@ -322,13 +331,13 @@ export function OnboardingForm() {
 
       if (!media.some((item) => item.kind === "profile_photo")) {
         toast.error("Add a profile photo before dating.");
-        setStep(1);
+        updateStep(1);
         return;
       }
 
       if (!media.some((item) => item.kind === "intro_video")) {
         toast.error("Chewbuu is video-first. Add your intro video.");
-        setStep(1);
+        updateStep(1);
         return;
       }
 
@@ -347,54 +356,69 @@ export function OnboardingForm() {
         ...value,
         media,
       });
+      clearPersistedOnboarding();
       toast.success("Profile ready. Go find a real date.");
       await navigate({ to: "/dashboard" });
     },
   });
 
-  // Prefill user details from auth session
+  // Sync form values to Zustand store as the user edits
   useEffect(() => {
-    if (session?.user) {
-      form.setFieldValue("name", session.user.name);
-      form.setFieldValue("email", session.user.email);
-    }
-  }, [session, form]);
+    const unsub = form.store.subscribe((state) => {
+      setPersistedProfile(state.values);
+    });
+    return () => {
+      if (typeof unsub === "function") {
+        unsub();
+      } else if (unsub && typeof (unsub as any).unsubscribe === "function") {
+        (unsub as any).unsubscribe();
+      }
+    };
+  }, [form.store, setPersistedProfile]);
 
-  // Load existing profile if it exists
+  // Load existing profile from API on mount and merge with local persisted values
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const res = await datingApi.getProfile();
-        if (res?.profile) {
-          form.setFieldValue("area", res.profile.area);
-          form.setFieldValue("birthday", res.profile.birthday);
-          form.setFieldValue("bio", res.profile.bio ?? "");
-          form.setFieldValue("sex", res.profile.sex);
-          form.setFieldValue("sexuality", res.profile.sexuality);
-          form.setFieldValue("datingModes", res.profile.datingModes);
-          form.setFieldValue("favoriteThings", res.profile.favoriteThings);
-          form.setFieldValue("interestDetails", res.profile.interestDetails);
-          form.setFieldValue("interestedIn", res.profile.interestedIn);
-          form.setFieldValue("interests", res.profile.interests);
-          form.setFieldValue("phone", res.profile.phone ?? "");
-          form.setFieldValue("occupation", res.profile.occupation ?? "");
-          form.setFieldValue("race", res.profile.race ?? "");
-          if (res.profile.media && res.profile.media.length > 0) {
-            form.setFieldValue("media", res.profile.media);
-          }
-          if (res.profile.trustedContacts) {
-            form.setFieldValue("trustedContacts", res.profile.trustedContacts);
-          }
-          if (res.profile.friendInvites) {
-            form.setFieldValue("friendInvites", res.profile.friendInvites);
-          }
+        // Merge order: 1. default values, 2. API profile, 3. local persisted profile edits
+        const merged = {
+          ...defaultValues,
+          ...(res?.profile || {}),
+          ...persistedProfile,
+        };
+
+        if (session?.user) {
+          form.setFieldValue("name", merged.name || session.user.name || "");
+          form.setFieldValue("email", merged.email || session.user.email || "");
+        } else {
+          form.setFieldValue("name", merged.name || "");
+          form.setFieldValue("email", merged.email || "");
         }
+        form.setFieldValue("phone", merged.phone || "");
+        form.setFieldValue("birthday", merged.birthday || "");
+        form.setFieldValue("area", merged.area || "");
+        form.setFieldValue("latitude", merged.latitude || "");
+        form.setFieldValue("longitude", merged.longitude || "");
+        form.setFieldValue("sex", merged.sex || "");
+        form.setFieldValue("sexuality", merged.sexuality || "");
+        form.setFieldValue("race", merged.race || "");
+        form.setFieldValue("occupation", merged.occupation || "");
+        form.setFieldValue("bio", merged.bio || "");
+        form.setFieldValue("datingModes", merged.datingModes || []);
+        form.setFieldValue("interests", merged.interests || []);
+        form.setFieldValue("interestDetails", merged.interestDetails || {});
+        form.setFieldValue("favoriteThings", merged.favoriteThings || []);
+        form.setFieldValue("friendInvites", merged.friendInvites || []);
+        form.setFieldValue("trustedContacts", merged.trustedContacts || []);
+        form.setFieldValue("safetyOptIn", !!merged.safetyOptIn);
+        form.setFieldValue("media", merged.media || defaultValues.media);
       } catch (error) {
         console.error("Failed to load profile:", error);
       }
     };
     void loadProfile();
-  }, [form]);
+  }, [form, session]);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -408,6 +432,11 @@ export function OnboardingForm() {
 
     void loadPlans();
   }, []);
+
+  const updateStep = (newStep: number) => {
+    setStep(newStep);
+    setPersistedStep(newStep);
+  };
 
   const progress = ((step + 1) / steps.length) * 100;
 
@@ -528,7 +557,7 @@ export function OnboardingForm() {
       }
     }
 
-    setStep((current) => Math.min(steps.length - 1, current + 1));
+    updateStep(Math.min(steps.length - 1, step + 1));
   };
 
   const handleFinishLater = async () => {
@@ -593,7 +622,7 @@ export function OnboardingForm() {
                   : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-border-hover"
               }`}
               key={label}
-              onClick={() => setStep(index)}
+              onClick={() => updateStep(index)}
               type="button"
             >
               <span>{label}</span>
@@ -628,7 +657,7 @@ export function OnboardingForm() {
             <Button
               className="rounded-full px-5 h-10 font-semibold"
               disabled={step === 0}
-              onClick={() => setStep((current) => Math.max(0, current - 1))}
+              onClick={() => updateStep(Math.max(0, step - 1))}
               type="button"
               variant="outline"
             >
@@ -699,7 +728,37 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
       const { latitude, longitude } = position.coords;
       form.setFieldValue("latitude", String(latitude));
       form.setFieldValue("longitude", String(longitude));
-      toast.success("Location coordinates resolved.", { id: "geo" });
+
+      let resolvedArea = "Searcy, AR";
+      if (Math.abs(latitude - 36.16) < 1.0 && Math.abs(longitude + 86.78) < 1.0) {
+        resolvedArea = "Nashville, TN";
+      } else if (Math.abs(latitude - 34.74) < 1.0 && Math.abs(longitude + 92.28) < 1.0) {
+        resolvedArea = "Little Rock, AR";
+      } else if (Math.abs(latitude - 35.24) < 1.0 && Math.abs(longitude + 91.73) < 1.0) {
+        resolvedArea = "Searcy, AR";
+      } else {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+          const data = await res.json();
+          if (data?.address) {
+            const city = data.address.city || data.address.town || data.address.village || data.address.suburb || "";
+            const state = data.address.state ? data.address.state_code || data.address.state : "";
+            let stateCode = String(state).trim();
+            if (stateCode.length > 2) {
+              stateCode = stateCode.slice(0, 2).toUpperCase();
+            }
+            if (city && stateCode) {
+              resolvedArea = `${city}, ${stateCode}`;
+            }
+          }
+        } catch (e) {
+          console.error("OSM geocode error:", e);
+        }
+      }
+
+      form.setFieldValue("area", resolvedArea);
+      setArea(resolvedArea);
+      toast.success(`Location set to ${resolvedArea}`, { id: "geo" });
     } catch (error) {
       console.error("Geolocation error:", error);
       toast.error("Location permission denied or unavailable.", { id: "geo" });
@@ -796,9 +855,9 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
             {(field) => (
               <Field data-invalid={areaIsInvalid || undefined}>
                 <FieldLabel htmlFor={field.name}>Area (City, ST)</FieldLabel>
-                <div className="flex gap-2">
+                <div className="relative flex-1">
                   <Input
-                    className="rounded-full h-10 px-4 text-sm flex-1"
+                    className="rounded-full h-10 pl-4 pr-10 text-sm w-full"
                     aria-invalid={areaIsInvalid}
                     id={field.name}
                     onChange={(event) => {
@@ -808,17 +867,16 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
                     placeholder="Little Rock, AR"
                     value={field.state.value}
                   />
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
-                    className="rounded-full h-10 px-4 text-xs font-semibold shrink-0"
                     onClick={() => {
                       void handleDetectLocation();
                     }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition bg-transparent border-0 p-1 cursor-pointer flex items-center justify-center"
+                    title="Detect location"
                   >
-                    <MapPin className="size-3.5 mr-1 inline" />
-                    Detect Location
-                  </Button>
+                    <MapPin className="size-4" />
+                  </button>
                 </div>
                 <FieldDescription>
                   Matches start nearby based on this city.
@@ -1381,74 +1439,80 @@ function InputList({
 }
 
 function FriendsStep({ form }: { form: OnboardingFormApi }) {
-  const friends = form.state.values.friendInvites as {
-    email?: string;
-    phone?: string;
-  }[];
-  const contacts = form.state.values.trustedContacts as {
-    email?: string;
-    name: string;
-    phone?: string;
-  }[];
-
   return (
-    <div className="flex flex-col gap-6">
-      <StepIntro
-        eyebrow="Friends & Safety"
-        title="Chewbuu is better with friends."
-        text="Invite friends to hang out on the platform, and add safety contacts who will receive automatic check-ins when you are on dates."
-      />
-      <div className="rounded-2xl border bg-background p-5 shadow-sm">
-        <div className="mb-4 flex items-start gap-3">
-          <HeartHandshake
-            aria-hidden="true"
-            className="mt-1 size-5 text-primary"
-          />
-          <div>
-            <h3 className="font-semibold text-base">
-              Invite friends for circles and group dates
-            </h3>
-            <p className="text-muted-foreground text-sm">
-              Mingle and Sugar members can go on dates with up to three friends.
-              Invite them now.
-            </p>
-          </div>
-        </div>
-        <DynamicPeopleList
-          addLabel="Add friend"
-          form={form}
-          items={friends}
-          path="friendInvites"
-          showName={false}
-        />
-      </div>
+    <form.Subscribe selector={(state) => [state.values.friendInvites, state.values.trustedContacts]}>
+      {([friendInvites, trustedContacts]) => {
+        const friends = (friendInvites || []) as {
+          email?: string;
+          phone?: string;
+        }[];
+        const contacts = (trustedContacts || []) as {
+          email?: string;
+          name: string;
+          phone?: string;
+        }[];
 
-      <div className="rounded-2xl border bg-background p-5 shadow-sm">
-        <div className="mb-4 flex items-start gap-3">
-          <ShieldCheck
-            aria-hidden="true"
-            className="mt-1 size-5 text-primary"
-          />
-          <div>
-            <h3 className="font-semibold text-base">
-              Safety contacts (At least 1 required)
-            </h3>
-            <p className="text-muted-foreground text-sm">
-              Add up to two trusted contacts. We will notify them with location
-              and date details for your peace of mind.
-            </p>
+        return (
+          <div className="flex flex-col gap-6">
+            <StepIntro
+              eyebrow="Friends & Safety"
+              title="Chewbuu is better with friends."
+              text="Invite friends to hang out on the platform, and add safety contacts who will receive automatic check-ins when you are on dates."
+            />
+            <div className="rounded-2xl border bg-background p-5 shadow-sm">
+              <div className="mb-4 flex items-start gap-3">
+                <HeartHandshake
+                  aria-hidden="true"
+                  className="mt-1 size-5 text-primary"
+                />
+                <div>
+                  <h3 className="font-semibold text-base">
+                    Invite friends for circles and group dates
+                  </h3>
+                  <p className="text-muted-foreground text-sm">
+                    Mingle and Sugar members can go on dates with up to three friends.
+                    Invite them now.
+                  </p>
+                </div>
+              </div>
+              <DynamicPeopleList
+                addLabel="Add friend"
+                form={form}
+                items={friends}
+                path="friendInvites"
+                showName={false}
+              />
+            </div>
+
+            <div className="rounded-2xl border bg-background p-5 shadow-sm">
+              <div className="mb-4 flex items-start gap-3">
+                <ShieldCheck
+                  aria-hidden="true"
+                  className="mt-1 size-5 text-primary"
+                />
+                <div>
+                  <h3 className="font-semibold text-base">
+                    Safety contacts (At least 1 required)
+                  </h3>
+                  <p className="text-muted-foreground text-sm">
+                    Add up to two trusted contacts. We will notify them with location
+                    and date details for your peace of mind.
+                  </p>
+                </div>
+              </div>
+              <DynamicPeopleList
+                addLabel="Add safety contact"
+                form={form}
+                items={contacts}
+                maxItems={2}
+                path="trustedContacts"
+                showName
+              />
+            </div>
           </div>
-        </div>
-        <DynamicPeopleList
-          addLabel="Add safety contact"
-          form={form}
-          items={contacts}
-          maxItems={2}
-          path="trustedContacts"
-          showName
-        />
-      </div>
-    </div>
+        );
+      }}
+    </form.Subscribe>
   );
 }
 
@@ -1897,6 +1961,7 @@ function MediaSlot({
         onClose={() => setIsCaptureOpen(false)}
         onCapture={uploadSelectedFile}
         mode={kind === "intro_video" ? "video" : "photo"}
+        displayName={form.state.values.name || ""}
       />
     </div>
   );
@@ -2076,6 +2141,7 @@ interface LiveCaptureDialogProps {
   onClose: () => void;
   onCapture: (file: File) => void;
   mode: "photo" | "video";
+  displayName?: string;
 }
 
 function LiveCaptureDialog({
@@ -2083,6 +2149,7 @@ function LiveCaptureDialog({
   onClose,
   onCapture,
   mode,
+  displayName = "",
 }: LiveCaptureDialogProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -2091,7 +2158,8 @@ function LiveCaptureDialog({
   const [isRecording, setIsRecording] = useState(false);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(mode === "video" ? 15 : 0);
+  const [capturedFile, setCapturedFile] = useState<File | null>(null);
+  const [countdown, setCountdown] = useState(mode === "video" ? 60 : 0);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -2108,8 +2176,8 @@ function LiveCaptureDialog({
         if (videoInputs.length > 0 && !selectedDeviceId) {
           setSelectedDeviceId(videoInputs[0].deviceId);
         }
-      } catch (error) {
-        console.error("Error enumerating devices:", error);
+      } catch (err) {
+        console.error("Error enumerating devices:", err);
       }
     };
     void getDevices();
@@ -2123,8 +2191,9 @@ function LiveCaptureDialog({
         setError(null);
         setRecordedUrl(null);
         setRecordedChunks([]);
+        setCapturedFile(null);
         setIsRecording(false);
-        setCountdown(mode === "video" ? 15 : 0);
+        setCountdown(mode === "video" ? 60 : 0);
 
         if (streamRef.current) {
           for (const track of streamRef.current.getTracks()) {
@@ -2191,8 +2260,9 @@ function LiveCaptureDialog({
             const file = new File([blob], "profile_photo.jpg", {
               type: "image/jpeg",
             });
-            onCapture(file);
-            onClose();
+            const url = URL.createObjectURL(blob);
+            setRecordedUrl(url);
+            setCapturedFile(file);
           }
         },
         "image/jpeg",
@@ -2205,10 +2275,27 @@ function LiveCaptureDialog({
     if (!streamRef.current) return;
     setRecordedChunks([]);
     setRecordedUrl(null);
+    setCapturedFile(null);
     setIsRecording(true);
-    setCountdown(15);
+    setCountdown(60);
 
-    const options = { mimeType: "video/webm;codecs=vp9" };
+    // Pick best format supported by browser (WebM vp9/vp8, or MP4 for iOS/Safari)
+    let mimeType = "";
+    const types = [
+      "video/mp4;codecs=avc1",
+      "video/mp4",
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ];
+    for (const t of types) {
+      if (MediaRecorder.isTypeSupported(t)) {
+        mimeType = t;
+        break;
+      }
+    }
+    const options = mimeType ? { mimeType } : undefined;
+
     let mediaRecorder: MediaRecorder;
     try {
       mediaRecorder = new MediaRecorder(streamRef.current, options);
@@ -2259,19 +2346,27 @@ function LiveCaptureDialog({
     }
   };
 
-  const handleUseVideo = () => {
-    if (recordedChunks.length === 0) return;
-    const mimeType = mediaRecorderRef.current?.mimeType || "video/webm";
-    const blob = new Blob(recordedChunks, { type: mimeType });
-    const file = new File([blob], "intro_video.webm", { type: mimeType });
-    onCapture(file);
-    onClose();
+  const handleUseCapturedMedia = () => {
+    if (mode === "photo") {
+      if (capturedFile) {
+        onCapture(capturedFile);
+        onClose();
+      }
+    } else {
+      if (recordedChunks.length === 0) return;
+      const mimeType = mediaRecorderRef.current?.mimeType || "video/webm";
+      const blob = new Blob(recordedChunks, { type: mimeType });
+      const file = new File([blob], "intro_video.webm", { type: mimeType });
+      onCapture(file);
+      onClose();
+    }
   };
 
   const handleRetake = () => {
     setRecordedUrl(null);
     setRecordedChunks([]);
-    setCountdown(15);
+    setCapturedFile(null);
+    setCountdown(mode === "video" ? 60 : 0);
     setIsRecording(false);
     if (streamRef.current && videoRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -2290,7 +2385,7 @@ function LiveCaptureDialog({
           <DialogDescription className="text-sm text-muted-foreground">
             {mode === "photo"
               ? "We verify real profiles. Snap a live photo of yourself."
-              : "Introduce yourself in a short, live 15-second video."}
+              : "Introduce yourself in a short, live 60-second video."}
           </DialogDescription>
         </DialogHeader>
 
@@ -2300,13 +2395,21 @@ function LiveCaptureDialog({
               {error}
             </div>
           ) : recordedUrl ? (
-            <video
-              src={recordedUrl}
-              controls
-              className="w-full h-full object-cover"
-            >
-              <track kind="captions" />
-            </video>
+            mode === "photo" ? (
+              <img
+                src={recordedUrl}
+                alt="Captured profile preview"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <video
+                src={recordedUrl}
+                controls
+                className="w-full h-full object-cover"
+              >
+                <track kind="captions" />
+              </video>
+            )
           ) : (
             <video
               ref={videoRef}
@@ -2326,6 +2429,17 @@ function LiveCaptureDialog({
             </div>
           )}
         </div>
+
+        {/* Tip text under the frame */}
+        {!recordedUrl && !error && (
+          <div className="mt-3 p-3 bg-primary/5 border border-primary/10 rounded-2xl text-xs text-primary/95 font-semibold">
+            {mode === "photo" ? (
+              <p>💡 Tip: Center your face in the frame and smile!</p>
+            ) : (
+              <p>🗣️ Tip: Say: &quot;Hey, I&apos;m {displayName || "Name"}! I love doing [interests] and I&apos;m down to grab [food/drink]!&quot;</p>
+            )}
+          </div>
+        )}
 
         {/* Device selection dropdown if multiple cameras exist */}
         {videoDevices.length > 1 && !recordedUrl && (
@@ -2362,10 +2476,10 @@ function LiveCaptureDialog({
                 Retake
               </Button>
               <Button
-                onClick={handleUseVideo}
+                onClick={handleUseCapturedMedia}
                 className="rounded-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold"
               >
-                Use Video
+                {mode === "photo" ? "Use Photo" : "Use Video"}
               </Button>
             </>
           ) : mode === "photo" ? (

@@ -11,10 +11,7 @@ export const Route = createFileRoute("/_auth")({
       });
     }
     const { user } = session.data;
-    const needsOnboarding =
-      !user.hasCompletedOnboarding ||
-      !user.hasIntroVideo ||
-      !user.hasProfilePhoto;
+    const needsOnboarding = !user.hasCompletedOnboarding;
 
     if (needsOnboarding && location.pathname !== "/onboarding") {
       throw redirect({

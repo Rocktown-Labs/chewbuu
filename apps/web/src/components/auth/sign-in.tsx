@@ -121,9 +121,9 @@ export function SignIn({
     emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
 
   return (
-    <Card className={cn("w-full max-w-sm", className)}>
+    <Card className={cn("w-full max-w-sm rounded-3xl border shadow-xl bg-card p-2", className)}>
       <CardHeader>
-        <CardTitle className="text-xl font-semibold">
+        <CardTitle className="text-xl font-bold">
           {localization.auth.signIn}
         </CardTitle>
       </CardHeader>
@@ -148,7 +148,7 @@ export function SignIn({
             <form onSubmit={handleSubmit}>
               <FieldGroup>
                 <Field data-invalid={!!fieldErrors.email}>
-                  <Label htmlFor="email">{localization.auth.email}</Label>
+                  <Label htmlFor="email" className="font-semibold text-xs ml-1">{localization.auth.email}</Label>
 
                   <Input
                     id="email"
@@ -158,6 +158,7 @@ export function SignIn({
                     placeholder={localization.auth.emailPlaceholder}
                     required
                     disabled={isPending}
+                    className="rounded-full h-10 px-4 text-sm bg-background border border-border"
                     onChange={() => {
                       setFieldErrors((prev) => ({
                         ...prev,
@@ -183,7 +184,7 @@ export function SignIn({
                 </Field>
 
                 <Field data-invalid={!!fieldErrors.password}>
-                  <Label htmlFor="password">{localization.auth.password}</Label>
+                  <Label htmlFor="password" className="font-semibold text-xs ml-1">{localization.auth.password}</Label>
 
                   <Input
                     id="password"
@@ -191,6 +192,7 @@ export function SignIn({
                     type="password"
                     autoComplete="current-password"
                     value={password}
+                    className="rounded-full h-10 px-4 text-sm bg-background border border-border"
                     onChange={(e) => {
                       setPassword(e.target.value);
 
@@ -256,7 +258,7 @@ export function SignIn({
                 )}
 
                 <div className="flex flex-col gap-3">
-                  <Button type="submit" disabled={isPending}>
+                  <Button type="submit" disabled={isPending} className="rounded-full h-10 font-bold bg-primary text-primary-foreground">
                     {signInEmailPending && <Spinner />}
 
                     {localization.auth.signIn}
