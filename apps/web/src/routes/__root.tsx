@@ -77,6 +77,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         href: appCss,
         rel: "stylesheet",
       },
+      {
+        href: "/brand/chewbuu-logo-500-trans.png",
+        rel: "icon",
+        type: "image/png",
+      },
     ],
     meta: [
       {
@@ -93,6 +98,45 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content:
           "Chewbuu gets real people onto real dates with curated plans, video-first matching, and warm social circles.",
         name: "description",
+      },
+      {
+        content:
+          "dating, social, group dates, real people, real results, video dating",
+        name: "keywords",
+      },
+      {
+        content: "website",
+        property: "og:type",
+      },
+      {
+        content: "Chewbuu | Real People, Real Dates, Real Results",
+        property: "og:title",
+      },
+      {
+        content:
+          "Chewbuu gets real people onto real dates with curated plans, video-first matching, and warm social circles.",
+        property: "og:description",
+      },
+      {
+        content: "/brand/chewbuu-logo-500.png",
+        property: "og:image",
+      },
+      {
+        content: "summary_large_image",
+        name: "twitter:card",
+      },
+      {
+        content: "Chewbuu | Real People, Real Dates, Real Results",
+        name: "twitter:title",
+      },
+      {
+        content:
+          "Chewbuu gets real people onto real dates with curated plans, video-first matching, and warm social circles.",
+        name: "twitter:description",
+      },
+      {
+        content: "/brand/chewbuu-logo-500.png",
+        name: "twitter:image",
       },
     ],
   }),

@@ -1,4 +1,4 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   CalendarHeart,
   MapPin,
@@ -6,6 +6,7 @@ import {
   Sparkles,
   Utensils,
 } from "lucide-react";
+import { useEffect } from "react";
 
 const DATE_FLOW = [
   {
@@ -89,6 +90,19 @@ const HomeComponent = () => (
   </main>
 );
 
+function IndexComponent() {
+  const { session } = Route.useRouteContext();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (session?.data?.user) {
+      void navigate({ to: "/dashboard" });
+    }
+  }, [session, navigate]);
+
+  return <HomeComponent />;
+}
+
 export const Route = createFileRoute("/")({
-  component: HomeComponent,
+  component: IndexComponent,
 });
