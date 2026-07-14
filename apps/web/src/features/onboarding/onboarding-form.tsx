@@ -68,22 +68,22 @@ import {
 const steps = ["Basics", "Media", "Interests", "Friends", "Premium"] as const;
 const areaPattern = /^[a-zA-Z .'-]+,\s?[A-Z]{2}$/;
 const sexOptions = [
-  "female",
-  "male",
-  "nonbinary",
-  "trans woman",
-  "trans man",
-  "prefer not to say",
+  "Female",
+  "Male",
+  "Nonbinary",
+  "Trans Woman",
+  "Trans Man",
+  "Prefer Not to Say",
 ];
 const sexualityOptions = [
-  "straight",
-  "gay",
-  "lesbian",
-  "bisexual",
-  "pansexual",
-  "queer",
-  "questioning",
-  "prefer not to say",
+  "Straight",
+  "Gay",
+  "Lesbian",
+  "Bisexual",
+  "Pansexual",
+  "Queer",
+  "Questioning",
+  "Prefer Not to Say",
 ];
 const raceOptions = [
   "American Indian or Alaska Native",
@@ -615,7 +615,13 @@ export function OnboardingForm() {
             {step === 1 && <MediaStep form={form} />}
             {step === 2 && <InterestsStep form={form} />}
             {step === 3 && <FriendsStep form={form} />}
-            {step === 4 && <PremiumStep plans={plans} form={form} />}
+            {step === 4 && (
+              <PremiumStep
+                plans={plans}
+                form={form}
+                onFinishLater={handleFinishLater}
+              />
+            )}
           </section>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1006,6 +1012,7 @@ function InterestsStepContent({
   const [customInterest, setCustomInterest] = useState("");
   const [places, setPlaces] = useState<DatePlace[]>([]);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
+  const [placeSearch, setPlaceSearch] = useState("");
 
   const active = useMemo(
     () =>
@@ -1039,17 +1046,17 @@ function InterestsStepContent({
       return;
     }
 
-    if (selectedString.length === 0) {
-      setPlaces([]);
-      return;
-    }
-
     const fetchPlaces = async () => {
       setIsLoadingPlaces(true);
       try {
+        const filters = placeSearch.trim()
+          ? [placeSearch.trim()]
+          : selected.length > 0
+            ? selected
+            : [active.label];
         const res = await datingApi.suggestPlaces({
           area,
-          filters: selectedString.split(","),
+          filters,
           what: [active.label.toLowerCase() as any],
         });
         setPlaces(res.places || []);
@@ -1065,7 +1072,8 @@ function InterestsStepContent({
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [active.label, selectedString, area]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active.label, selectedString, placeSearch, area]);
 
   const selectedPlacesKey = `${active.label}_places`;
   const activeFavoritePlaces = interestDetails[selectedPlacesKey] || [];
@@ -1094,7 +1102,10 @@ function InterestsStepContent({
           return (
             <button
               key={category.label}
-              onClick={() => setActiveCategory(category.label)}
+              onClick={() => {
+                setActiveCategory(category.label);
+                setPlaceSearch("");
+              }}
               className={`rounded-full px-4 py-2 border text-sm font-semibold transition-all duration-200 ${
                 isActive
                   ? "border-primary bg-primary text-primary-foreground shadow-sm"
@@ -1161,56 +1172,64 @@ function InterestsStepContent({
         </div>
 
         {/* Show Local Place Suggestions for Eat, Drink, Play, Move */}
-        {["Eat", "Drink", "Play", "Move"].includes(active.label) &&
-          selected.length > 0 && (
-            <div className="mt-4 border-t border-border pt-4">
-              <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
-                <MapPin className="size-4 text-primary" />
-                Select your favorite local date spots in {area}:
-              </h4>
-              {isLoadingPlaces ? (
-                <p className="text-xs text-muted-foreground animate-pulse">
-                  Searching near you...
-                </p>
-              ) : places.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic">
-                  Add more specific tags above to search date spots.
-                </p>
-              ) : (
-                <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
-                  {places.map((place) => {
-                    const isFav = activeFavoritePlaces.includes(place.name);
-                    return (
-                      <button
-                        key={place.placeId}
-                        type="button"
-                        onClick={() => togglePlaceFavorite(place.name)}
-                        className={`flex items-center justify-between p-3 rounded-xl border text-left text-xs transition duration-250 ${
-                          isFav
-                            ? "border-primary bg-primary/5 text-primary-foreground font-medium"
-                            : "border-border bg-card text-foreground hover:border-border-hover"
-                        }`}
-                      >
-                        <div>
-                          <p className="font-bold text-foreground">
-                            {place.name}
-                          </p>
-                          {place.address && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {place.address}
-                            </p>
-                          )}
-                        </div>
-                        <Heart
-                          className={`size-4 ml-2 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+        {["Eat", "Drink", "Play", "Move"].includes(active.label) && (
+          <div className="mt-4 border-t border-border pt-4">
+            <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
+              <MapPin className="size-4 text-primary" />
+              Select your favorite local {active.label.toLowerCase()} spots in{" "}
+              {area}:
+            </h4>
+            <div className="flex gap-2 mb-3">
+              <Input
+                placeholder={`Search local ${active.label.toLowerCase()} spots (e.g. Starbucks, KJ's Market)...`}
+                value={placeSearch}
+                onChange={(e) => setPlaceSearch(e.target.value)}
+                className="rounded-full h-10 px-4 bg-background border border-border text-sm"
+              />
             </div>
-          )}
+            {isLoadingPlaces ? (
+              <p className="text-xs text-muted-foreground animate-pulse">
+                Searching near you...
+              </p>
+            ) : places.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                No spots found. Try searching above!
+              </p>
+            ) : (
+              <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
+                {places.map((place) => {
+                  const isFav = activeFavoritePlaces.includes(place.name);
+                  return (
+                    <button
+                      key={place.placeId}
+                      type="button"
+                      onClick={() => togglePlaceFavorite(place.name)}
+                      className={`flex items-center justify-between p-3 rounded-xl border text-left text-xs transition duration-250 ${
+                        isFav
+                          ? "border-primary bg-primary/5 text-primary-foreground font-medium"
+                          : "border-border bg-card text-foreground hover:border-border-hover"
+                      }`}
+                    >
+                      <div>
+                        <p className="font-bold text-foreground">
+                          {place.name}
+                        </p>
+                        {place.address && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {place.address}
+                          </p>
+                        )}
+                      </div>
+                      <Heart
+                        className={`size-4 ml-2 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Extra input forms for Watch category */}
         {active.label === "Watch" && (
@@ -1436,9 +1455,11 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
 function PremiumStep({
   plans,
   form,
+  onFinishLater,
 }: {
   plans: MembershipPlan[];
   form: OnboardingFormApi;
+  onFinishLater: () => void;
 }) {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">(
     "monthly"
@@ -1634,7 +1655,7 @@ function PremiumStep({
       </div>
 
       <button
-        onClick={handleFinishLater}
+        onClick={onFinishLater}
         className="w-fit text-sm underline underline-offset-4 mt-4 self-center text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-0"
         type="button"
       >
@@ -1688,14 +1709,18 @@ function SelectField({
             value={field.state.value || undefined}
           >
             <SelectTrigger
-              className="w-full rounded-full h-10 px-4"
+              className="w-full rounded-full h-10 px-4 bg-background border border-border text-sm flex items-center justify-between"
               id={field.name}
             >
               <SelectValue placeholder={placeholder} />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="bg-popover border border-border rounded-2xl shadow-xl z-50 p-1 min-w-[200px] w-[--anchor-width] max-h-60 overflow-y-auto">
               {options.map((option) => (
-                <SelectItem key={option} value={option}>
+                <SelectItem
+                  key={option}
+                  value={option}
+                  className="rounded-xl py-2 px-3 focus:bg-primary/10 focus:text-primary text-xs cursor-pointer"
+                >
                   {formatValue(option)}
                 </SelectItem>
               ))}
@@ -1732,6 +1757,19 @@ function MediaSlot({
   const media = values.media[index] as DatingMedia | undefined;
   const value = media?.url ?? "";
 
+  const getUploadApiUrl = () => {
+    const serverUrl = env.VITE_SERVER_URL || "/";
+    const base = getServerUrl(serverUrl);
+    try {
+      return new URL("/upload", base).toString();
+    } catch {
+      if (typeof window !== "undefined") {
+        return new URL("/upload", window.location.origin).toString();
+      }
+      return "http://localhost:3000/upload";
+    }
+  };
+
   const uploadSelectedFile = async (file: File | undefined) => {
     if (!file) {
       return;
@@ -1740,7 +1778,7 @@ function MediaSlot({
     setIsUploading(true);
     try {
       const result = await uploadFile({
-        api: new URL("/upload", getServerUrl(env.VITE_SERVER_URL)).toString(),
+        api: getUploadApiUrl(),
         credentials: "include",
         file,
         metadata: { slot: kind },
@@ -1874,9 +1912,12 @@ function InputWithLocalState({
   onChange: (val: string) => void;
 } & Omit<React.ComponentProps<typeof Input>, "value" | "onChange">) {
   const [localVal, setLocalVal] = useState(value);
+  const isFocused = useRef(false);
 
   useEffect(() => {
-    setLocalVal(value);
+    if (!isFocused.current) {
+      setLocalVal(value);
+    }
   }, [value]);
 
   return (
@@ -1885,7 +1926,13 @@ function InputWithLocalState({
       className={className}
       value={localVal}
       onChange={(e) => setLocalVal(e.target.value)}
-      onBlur={() => onChange(localVal)}
+      onFocus={() => {
+        isFocused.current = true;
+      }}
+      onBlur={() => {
+        isFocused.current = false;
+        onChange(localVal);
+      }}
     />
   );
 }
@@ -2040,12 +2087,33 @@ function LiveCaptureDialog({
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(mode === "video" ? 15 : 0);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const getDevices = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputs = devices.filter((d) => d.kind === "videoinput");
+        setVideoDevices(videoInputs);
+        if (videoInputs.length > 0 && !selectedDeviceId) {
+          setSelectedDeviceId(videoInputs[0].deviceId);
+        }
+      } catch (error) {
+        console.error("Error enumerating devices:", error);
+      }
+    };
+    void getDevices();
+  }, [isOpen, selectedDeviceId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -2058,10 +2126,18 @@ function LiveCaptureDialog({
         setIsRecording(false);
         setCountdown(mode === "video" ? 15 : 0);
 
+        if (streamRef.current) {
+          for (const track of streamRef.current.getTracks()) {
+            track.stop();
+          }
+        }
+
         let mediaStream: MediaStream;
         try {
           const constraints = {
-            video: { facingMode: mode === "photo" ? "user" : "user" },
+            video: selectedDeviceId
+              ? { deviceId: { exact: selectedDeviceId } }
+              : { facingMode: "user" },
             audio: mode === "video",
           };
           mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -2074,6 +2150,7 @@ function LiveCaptureDialog({
         }
 
         streamRef.current = mediaStream;
+        setStream(mediaStream);
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
@@ -2097,7 +2174,7 @@ function LiveCaptureDialog({
         clearInterval(timerRef.current);
       }
     };
-  }, [isOpen, mode]);
+  }, [isOpen, mode, selectedDeviceId]);
 
   const handleCapturePhoto = () => {
     if (!videoRef.current) return;
@@ -2250,6 +2327,30 @@ function LiveCaptureDialog({
           )}
         </div>
 
+        {/* Device selection dropdown if multiple cameras exist */}
+        {videoDevices.length > 1 && !recordedUrl && (
+          <div className="flex flex-col gap-1.5 mt-3">
+            <label
+              htmlFor="camera-device-select"
+              className="text-xs font-bold text-muted-foreground ml-1"
+            >
+              Select Camera Device
+            </label>
+            <select
+              id="camera-device-select"
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              className="rounded-full bg-background border border-border px-3 py-2 text-xs outline-none w-full text-foreground font-medium"
+            >
+              {videoDevices.map((device) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label || `Camera ${device.deviceId.slice(0, 5)}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <DialogFooter className="mt-6 flex justify-end gap-3">
           {recordedUrl ? (
             <>
@@ -2270,7 +2371,7 @@ function LiveCaptureDialog({
           ) : mode === "photo" ? (
             <Button
               onClick={handleCapturePhoto}
-              disabled={!!error || !streamRef.current}
+              disabled={!!error || !stream}
               className="rounded-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold px-6"
             >
               Capture
@@ -2285,7 +2386,7 @@ function LiveCaptureDialog({
           ) : (
             <Button
               onClick={handleStartRecording}
-              disabled={!!error || !streamRef.current}
+              disabled={!!error || !stream}
               className="rounded-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold px-6"
             >
               Start Recording
