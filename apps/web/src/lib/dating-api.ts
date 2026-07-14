@@ -33,6 +33,7 @@ export interface DatingProfilePayload {
   sexuality: string;
   trustedContacts: { email?: string; name: string; phone?: string }[];
   weight?: string;
+  phone?: string;
 }
 
 export interface DatePlace {

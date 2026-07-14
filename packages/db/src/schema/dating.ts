@@ -56,6 +56,7 @@ export const profile = pgTable(
       .references(() => user.id, { onDelete: "cascade" })
       .unique(),
     weight: text("weight"),
+    phone: text("phone"),
   },
   (table) => [
     index("profile_userId_idx").on(table.userId),
