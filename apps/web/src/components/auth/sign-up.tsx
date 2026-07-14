@@ -182,9 +182,14 @@ export function SignUp({
     emailAndPassword?.enabled && socialProviders && socialProviders.length > 0;
 
   return (
-    <Card className={cn("w-full max-w-sm", className)}>
+    <Card
+      className={cn(
+        "w-full max-w-sm rounded-3xl border shadow-xl bg-card p-2",
+        className
+      )}
+    >
       <CardHeader>
-        <CardTitle className="text-xl font-semibold">
+        <CardTitle className="text-xl font-bold">
           {localization.auth.signUp}
         </CardTitle>
       </CardHeader>
@@ -210,7 +215,12 @@ export function SignUp({
               <FieldGroup>
                 {emailAndPassword.name !== false && (
                   <Field data-invalid={!!fieldErrors.name}>
-                    <Label htmlFor="name">{localization.auth.name}</Label>
+                    <Label
+                      htmlFor="name"
+                      className="font-semibold text-xs ml-1"
+                    >
+                      {localization.auth.name}
+                    </Label>
 
                     <Input
                       id="name"
@@ -218,6 +228,7 @@ export function SignUp({
                       type="text"
                       autoComplete="name"
                       placeholder={localization.auth.namePlaceholder}
+                      className="rounded-full h-10 px-4 text-sm bg-background border border-border"
                       required
                       disabled={isPending}
                       onChange={() => {
@@ -242,7 +253,9 @@ export function SignUp({
                 )}
 
                 <Field data-invalid={!!fieldErrors.email}>
-                  <Label htmlFor="email">{localization.auth.email}</Label>
+                  <Label htmlFor="email" className="font-semibold text-xs ml-1">
+                    {localization.auth.email}
+                  </Label>
 
                   <Input
                     id="email"
@@ -252,6 +265,7 @@ export function SignUp({
                     placeholder={localization.auth.emailPlaceholder}
                     required
                     disabled={isPending}
+                    className="rounded-full h-10 px-4 text-sm bg-background border border-border"
                     onChange={() => {
                       setFieldErrors((prev) => ({
                         ...prev,
@@ -289,15 +303,21 @@ export function SignUp({
                 )}
 
                 <Field data-invalid={!!fieldErrors.password}>
-                  <Label htmlFor="password">{localization.auth.password}</Label>
+                  <Label
+                    htmlFor="password"
+                    className="font-semibold text-xs ml-1"
+                  >
+                    {localization.auth.password}
+                  </Label>
 
-                  <InputGroup>
+                  <InputGroup className="rounded-full h-10 px-4 text-sm bg-background border border-border">
                     <InputGroupInput
                       id="password"
                       name="password"
                       type={isPasswordVisible ? "text" : "password"}
                       autoComplete="new-password"
                       value={password}
+                      className="px-0 h-full text-sm"
                       onChange={(e) => {
                         setPassword(e.target.value);
                         setFieldErrors((prev) => ({
@@ -351,7 +371,11 @@ export function SignUp({
                           setIsPasswordVisible(!isPasswordVisible);
                         }}
                       >
-                        {isPasswordVisible ? <EyeOff /> : <Eye />}
+                        {isPasswordVisible ? (
+                          <EyeOff className="size-4" />
+                        ) : (
+                          <Eye className="size-4" />
+                        )}
                       </InputGroupButton>
                     </InputGroupAddon>
                   </InputGroup>
@@ -361,17 +385,21 @@ export function SignUp({
 
                 {emailAndPassword?.confirmPassword && (
                   <Field data-invalid={!!fieldErrors.confirmPassword}>
-                    <Label htmlFor="confirmPassword">
+                    <Label
+                      htmlFor="confirmPassword"
+                      className="font-semibold text-xs ml-1"
+                    >
                       {localization.auth.confirmPassword}
                     </Label>
 
-                    <InputGroup>
+                    <InputGroup className="rounded-full h-10 px-4 text-sm bg-background border border-border">
                       <InputGroupInput
                         id="confirmPassword"
                         name="confirmPassword"
                         type={isConfirmPasswordVisible ? "text" : "password"}
                         autoComplete="new-password"
                         value={confirmPassword}
+                        className="px-0 h-full text-sm"
                         onChange={(e) => {
                           setConfirmPassword(e.target.value);
 
@@ -430,7 +458,11 @@ export function SignUp({
                             )
                           }
                         >
-                          {isConfirmPasswordVisible ? <EyeOff /> : <Eye />}
+                          {isConfirmPasswordVisible ? (
+                            <EyeOff className="size-4" />
+                          ) : (
+                            <Eye className="size-4" />
+                          )}
                         </InputGroupButton>
                       </InputGroupAddon>
                     </InputGroup>
@@ -457,7 +489,11 @@ export function SignUp({
                 )}
 
                 <div className="flex flex-col gap-3">
-                  <Button type="submit" disabled={isPending}>
+                  <Button
+                    type="submit"
+                    disabled={isPending}
+                    className="rounded-full h-10 font-bold bg-primary text-primary-foreground"
+                  >
                     {signUpEmailPending && <Spinner />}
 
                     {localization.auth.signUp}

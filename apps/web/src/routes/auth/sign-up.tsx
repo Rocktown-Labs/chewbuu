@@ -7,9 +7,9 @@ const RouteComponent = () => (
     <section className="grid w-full max-w-5xl gap-8 lg:grid-cols-[1fr_420px] lg:items-center">
       <div className="space-y-6">
         <img
-          src="/brand/chewbuu-logo-500-trans.png"
+          src="/brand/chewbuu-logo-500.png"
           alt="Chewbuu"
-          className="h-24 w-24"
+          className="h-24 w-24 rounded-3xl border border-border shadow-md"
         />
         <div className="max-w-xl space-y-4">
           <p className="font-semibold text-primary text-sm uppercase tracking-[0.18em]">

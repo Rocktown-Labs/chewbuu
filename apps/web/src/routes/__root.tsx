@@ -10,10 +10,12 @@ import {
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createMiddleware } from "@tanstack/react-start";
 import { evlogErrorHandler } from "evlog/nitro/v3";
+import { useEffect } from "react";
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { authClient } from "@/lib/auth-client";
+import { useThemeStore } from "@/lib/theme";
 
 import Header from "../components/header";
 
@@ -38,6 +40,11 @@ const AuthLink = ({ children, href, to, ...props }: AuthLinkProps) => (
 
 const RootDocument = () => {
   const navigate = useNavigate();
+  const initTheme = useThemeStore((s) => s.initTheme);
+
+  useEffect(() => {
+    initTheme();
+  }, [initTheme]);
 
   return (
     <html lang="en">
@@ -78,7 +85,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         rel: "stylesheet",
       },
       {
-        href: "/brand/chewbuu-logo-500-trans.png",
+        href: "/brand/chewbuu-logo-500.png",
         rel: "icon",
         type: "image/png",
       },

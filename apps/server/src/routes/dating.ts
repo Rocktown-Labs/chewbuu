@@ -301,7 +301,9 @@ const countBookedToday = async (userId: string) => {
 const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
   const mediaState = hasRequiredMedia(input.media);
   const { canDate } = mediaState;
-  const onboarded = canDate;
+  const onboarded =
+    sessionUser.hasCompletedOnboarding ||
+    !!(input.birthday && input.sex && input.sexuality && input.area);
 
   if (isTestRuntime()) {
     const storedProfile = {

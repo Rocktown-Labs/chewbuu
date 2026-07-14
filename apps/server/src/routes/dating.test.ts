@@ -241,6 +241,100 @@ describe("dating routes", () => {
     );
   });
 
+  it("omits empty filters from the Google Places text query", () => {
+    expect(
+      buildGooglePlacesTextQuery({
+        area: "Nashville, TN",
+        filters: [],
+        what: ["eat"],
+      })
+    ).toBe("food date spot in Nashville, TN");
+  });
+
+  it("considers user onboarded but unable to date when basics are present but media is missing", async () => {
+    const headers = authHeaders({
+      "x-chewbuu-test-intro-video": "false",
+      "x-chewbuu-test-profile-photo": "false",
+    });
+
+    const payloadWithoutMedia = {
+      ...profilePayload,
+      media: [],
+    };
+
+    const saveResponse = await app.request("/dating/profile", {
+      body: JSON.stringify(payloadWithoutMedia),
+      headers,
+      method: "PUT",
+    });
+
+    expect(saveResponse.status).toBe(200);
+    expect(await saveResponse.json()).toMatchObject({
+      readiness: {
+        canDate: false,
+        onboarded: true,
+      },
+    });
+  });
+
+  it("marks profile not ready to date when the intro video is missing but photo is present", async () => {
+    const headers = authHeaders();
+
+    const payloadWithPhotoOnly = {
+      ...profilePayload,
+      media: [
+        {
+          isPrimary: true,
+          kind: "profile_photo",
+          sortOrder: 0,
+          url: "https://example.com/profile.jpg",
+        },
+      ],
+    };
+
+    const saveResponse = await app.request("/dating/profile", {
+      body: JSON.stringify(payloadWithPhotoOnly),
+      headers,
+      method: "PUT",
+    });
+
+    expect(saveResponse.status).toBe(200);
+    expect(await saveResponse.json()).toMatchObject({
+      readiness: {
+        canDate: false,
+        onboarded: true,
+      },
+    });
+  });
+
+  it("lets mingle members book group dates with dutch payment", async () => {
+    const headers = authHeaders({
+      "x-chewbuu-test-tier": "mingle",
+      "x-chewbuu-test-user-id": crypto.randomUUID(),
+    });
+    const response = await app.request("/dating/requests", {
+      body: JSON.stringify({
+        ...dateRequestPayload,
+        partyMembers: [
+          {
+            email: "friend@example.com",
+            name: "Friend",
+          },
+        ],
+      }),
+      headers,
+      method: "POST",
+    });
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      request: {
+        partySize: 2,
+        paymentMode: "dutch",
+      },
+    });
+  });
+
   it("normalizes Google Places text search results", () => {
     expect(
       normalizeGooglePlaces([

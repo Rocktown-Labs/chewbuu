@@ -54,7 +54,19 @@ export const createAuth = () => {
         secure: true,
       },
     },
-    baseURL: env.BETTER_AUTH_URL,
+    baseURL: {
+      allowedHosts: [
+        "localhost:3000",
+        "localhost:5173",
+        "localhost:4173",
+        "localhost",
+        "chewbuu.com",
+        "*.chewbuu.com",
+        "*.vercel.app",
+      ],
+      protocol: process.env.NODE_ENV === "development" ? "http" : "https",
+      fallback: env.BETTER_AUTH_URL,
+    },
     database: drizzleAdapter(db, {
       provider: "pg",
 
