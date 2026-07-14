@@ -80,7 +80,11 @@ const placeSchema = z.object({
 const placeSuggestSchema = z.object({
   area: requiredString,
   filters: stringArray,
-  what: z.array(z.enum(["eat", "drink", "play"])).min(1),
+  latitude: z.string().optional(),
+  longitude: z.string().optional(),
+  what: z
+    .array(z.enum(["eat", "drink", "play", "move", "watch", "talk"]))
+    .min(1),
 });
 
 const partyMemberSchema = z
@@ -522,14 +526,30 @@ const getGooglePlacesApiKey = () => {
   return key && key !== '""' ? key : undefined;
 };
 
+const CATEGORY_KEYWORDS: Record<string, string> = {
+  drink: "bar drinks wine beer coffee cocktail",
+  eat: "food restaurant",
+  move: "fitness gym activity workout",
+  play: "fun entertainment things to do",
+  talk: "conversation topics",
+  watch: "movies shows entertainment",
+};
+
+const CATEGORY_INCLUDED_TYPE: Record<string, string | undefined> = {
+  drink: "bar",
+  eat: "restaurant",
+  move: undefined,
+  play: undefined,
+  talk: undefined,
+  watch: undefined,
+};
+
 export const buildGooglePlacesTextQuery = (input: PlaceSuggestionInput) => {
-  const intent = input.what
-    .map((item) =>
-      item === "eat" ? "food" : item === "drink" ? "drinks" : "things to do"
-    )
-    .join(" ");
   const filters = input.filters.join(" ");
-  const descriptors = [filters, intent, "date spot"].filter(Boolean).join(" ");
+  const categoryIntent = input.what
+    .map((item) => CATEGORY_KEYWORDS[item] ?? item)
+    .join(" ");
+  const descriptors = [filters, categoryIntent].filter(Boolean).join(" ");
 
   return `${descriptors} in ${input.area}`;
 };
@@ -572,34 +592,63 @@ const googlePlacesTextSearch = async (
     return fallbackPlaceSuggestions(input);
   }
 
-  const response = await fetch(
-    "https://places.googleapis.com/v1/places:searchText",
-    {
-      body: JSON.stringify({
-        maxResultCount: 8,
-        textQuery: buildGooglePlacesTextQuery(input),
-      }),
-      headers: {
-        "content-type": "application/json",
-        "x-goog-api-key": googlePlacesApiKey,
-        "x-goog-fieldmask":
-          "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.primaryType",
-      },
-      method: "POST",
-    }
-  );
-  const data = (await response.json()) as GooglePlacesTextSearchResponse & {
-    error?: { message?: string };
+  const includedType = input.what
+    .map((item) => CATEGORY_INCLUDED_TYPE[item])
+    .find(Boolean);
+
+  const body: Record<string, unknown> = {
+    pageSize: 8,
+    textQuery: buildGooglePlacesTextQuery(input),
   };
 
-  if (!response.ok) {
-    throw new HTTPException(HttpStatusCodes.BAD_GATEWAY, {
-      message: data.error?.message ?? "Google Places search failed.",
-    });
+  if (includedType) {
+    body.includedType = includedType;
   }
 
-  const places = normalizeGooglePlaces(data.places);
-  return places.length > 0 ? places : fallbackPlaceSuggestions(input);
+  const lat = input.latitude ? Number(input.latitude) : undefined;
+  const lng = input.longitude ? Number(input.longitude) : undefined;
+  if (lat && lng && !Number.isNaN(lat) && !Number.isNaN(lng)) {
+    body.locationBias = {
+      circle: {
+        center: { latitude: lat, longitude: lng },
+        radius: 40_000,
+      },
+    };
+  }
+
+  try {
+    const response = await fetch(
+      "https://places.googleapis.com/v1/places:searchText",
+      {
+        body: JSON.stringify(body),
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": googlePlacesApiKey,
+          "x-goog-fieldmask":
+            "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.primaryType",
+        },
+        method: "POST",
+      }
+    );
+    const data = (await response.json()) as GooglePlacesTextSearchResponse & {
+      error?: { message?: string };
+    };
+
+    if (!response.ok) {
+      console.error("Google Places API error:", {
+        message: data.error?.message,
+        query: buildGooglePlacesTextQuery(input),
+        status: response.status,
+      });
+      return fallbackPlaceSuggestions(input);
+    }
+
+    const places = normalizeGooglePlaces(data.places);
+    return places.length > 0 ? places : fallbackPlaceSuggestions(input);
+  } catch (error) {
+    console.error("Google Places request failed:", error);
+    return fallbackPlaceSuggestions(input);
+  }
 };
 
 const createDateRequest = async (

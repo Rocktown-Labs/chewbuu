@@ -6,7 +6,7 @@ interface ApiOptions {
 }
 
 export type MembershipTier = "social" | "mingle" | "sugar";
-export type DateWhat = "eat" | "drink" | "play";
+export type DateWhat = "eat" | "drink" | "play" | "move" | "watch" | "talk";
 export type PaymentMode = "dutch" | "requester_covers";
 
 export interface DatingMedia {
@@ -163,6 +163,8 @@ export const datingApi = {
   suggestPlaces: (body: {
     area: string;
     filters: string[];
+    latitude?: string;
+    longitude?: string;
     what: DateWhat[];
   }) =>
     apiFetch<{ places: DatePlace[] }>("/dating/places/suggest", {

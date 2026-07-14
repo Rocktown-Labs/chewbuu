@@ -229,6 +229,27 @@ describe("dating routes", () => {
     });
   });
 
+  it("accepts the move category and returns fallback suggestions", async () => {
+    const response = await app.request("/dating/places/suggest", {
+      body: JSON.stringify({
+        area: "Nashville, TN",
+        filters: ["yoga", "hiking"],
+        what: ["move"],
+      }),
+      headers: authHeaders(),
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      places: expect.arrayContaining([
+        expect.objectContaining({
+          placeId: expect.stringContaining("mock-"),
+        }),
+      ]),
+    });
+  });
+
   it("builds a Google Places text query from date intent", () => {
     expect(
       buildGooglePlacesTextQuery({
@@ -237,8 +258,18 @@ describe("dating routes", () => {
         what: ["eat", "drink", "play"],
       })
     ).toBe(
-      "chicken whiskey pool food drinks things to do date spot in Little Rock, AR"
+      "chicken whiskey pool food restaurant bar drinks wine beer coffee cocktail fun entertainment things to do in Little Rock, AR"
     );
+  });
+
+  it("builds a move-category query with fitness keywords", () => {
+    expect(
+      buildGooglePlacesTextQuery({
+        area: "Nashville, TN",
+        filters: ["yoga", "hiking"],
+        what: ["move"],
+      })
+    ).toBe("yoga hiking fitness gym activity workout in Nashville, TN");
   });
 
   it("omits empty filters from the Google Places text query", () => {
@@ -248,7 +279,7 @@ describe("dating routes", () => {
         filters: [],
         what: ["eat"],
       })
-    ).toBe("food date spot in Nashville, TN");
+    ).toBe("food restaurant in Nashville, TN");
   });
 
   it("considers user onboarded but unable to date when basics are present but media is missing", async () => {

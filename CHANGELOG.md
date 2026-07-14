@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added unit tests for onboarding store, theme store, dating API URL resolution, and additional dating route readiness edge cases.
 - Added Vercel Analytics and Speed Insights to the root layout.
 - Added automatic Drizzle schema push to the server build so Neon preview branches get their tables on every deploy.
+- Expanded Google Places category support to include eat, drink, play, move, watch, and talk with category-specific search keywords.
+- Added locationBias and includedType parameters to Google Places Text Search for more relevant results.
+- Added tests for move-category place suggestions and updated text query assertions.
 
 ### Fixed
 
@@ -23,6 +26,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed dynamic inputs rendering delay in Friends & Safety tab by using store-level React state subscriptions.
 - Fixed missing assertion in the Google Places text query test.
 - Fixed lint and formatting issues in the onboarding form (exhaustive-deps, catch parameter naming, zero-fractions).
+- Fixed Google Places 502 errors by falling back to mock suggestions when the API rejects a request instead of breaking the UI.
+- Fixed undefined `contacts` variable in the dashboard readiness checklist.
+- Replaced deprecated `maxResultCount` parameter with `pageSize` in Google Places Text Search requests.
 
 ## [0.4.0] - 2026-07-14
 

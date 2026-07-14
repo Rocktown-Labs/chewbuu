@@ -60,6 +60,7 @@ import {
   getServerUrl,
   pricingApi,
   type DatePlace,
+  type DateWhat,
   type DatingMedia,
   type DatingProfilePayload,
   type MembershipPlan,
@@ -1131,7 +1132,9 @@ function InterestsStepContent({
         const res = await datingApi.suggestPlaces({
           area,
           filters,
-          what: [active.label.toLowerCase() as any],
+          latitude: (form.state.values.latitude as string) || undefined,
+          longitude: (form.state.values.longitude as string) || undefined,
+          what: [active.label.toLowerCase() as DateWhat],
         });
         setPlaces(res.places || []);
       } catch (error) {
