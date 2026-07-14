@@ -12,6 +12,7 @@
       "framework": "hono",
       "entrypoint": "src/index.ts",
       "installCommand": "cd ../.. && bun install",
+      "buildCommand": "cd ../../packages/db && bunx drizzle-kit push --force && cd ../../apps/server && bun run build",
       "routes": [
         {
           "src": "/api/((?!auth(?:/|$)).*)",

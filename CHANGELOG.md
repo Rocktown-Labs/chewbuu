@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Integrated reverse geocoding to automatically resolve city and state names from browser GPS coordinates.
 - Stylized sign-in and sign-up page cards, inputs, and buttons with on-brand rounded pill designs.
 - Added unit tests for onboarding store, theme store, dating API URL resolution, and additional dating route readiness edge cases.
+- Added Vercel Analytics and Speed Insights to the root layout.
+- Added automatic Drizzle schema push to the server build so Neon preview branches get their tables on every deploy.
 
 ### Fixed
 

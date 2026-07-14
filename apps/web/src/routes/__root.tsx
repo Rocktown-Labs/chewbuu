@@ -9,6 +9,8 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createMiddleware } from "@tanstack/react-start";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { evlogErrorHandler } from "evlog/nitro/v3";
 import { useEffect } from "react";
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
@@ -70,6 +72,8 @@ const RootDocument = () => {
         </AuthProvider>
         <Toaster richColors />
         <TanStackRouterDevtools position="bottom-left" />
+        <Analytics />
+        <SpeedInsights />
         <Scripts />
       </body>
     </html>
