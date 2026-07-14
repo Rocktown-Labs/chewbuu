@@ -57,6 +57,8 @@ export const profile = pgTable(
       .unique(),
     weight: text("weight"),
     phone: text("phone"),
+    occupation: text("occupation"),
+    race: text("race"),
   },
   (table) => [
     index("profile_userId_idx").on(table.userId),
