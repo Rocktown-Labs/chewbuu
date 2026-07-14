@@ -65,6 +65,8 @@ const profilePayloadSchema = z.object({
   trustedContacts: z.array(trustedContactSchema).max(2).default([]),
   weight: z.string().optional(),
   phone: z.string().optional(),
+  occupation: z.string().optional(),
+  race: z.string().optional(),
 });
 
 const placeSchema = z.object({
@@ -345,6 +347,8 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
       userId: sessionUser.id,
       weight: input.weight,
       phone: input.phone,
+      occupation: input.occupation,
+      race: input.race,
     })
     .onConflictDoUpdate({
       set: {
@@ -376,6 +380,8 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
         updatedAt: new Date(),
         weight: input.weight,
         phone: input.phone,
+        occupation: input.occupation,
+        race: input.race,
       },
       target: profile.userId,
     });

@@ -38,9 +38,11 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Heart,
   HeartHandshake,
   ImagePlus,
   Mail,
+  MapPin,
   Phone,
   Plus,
   ShieldCheck,
@@ -57,6 +59,7 @@ import {
   datingApi,
   getServerUrl,
   pricingApi,
+  type DatePlace,
   type DatingMedia,
   type DatingProfilePayload,
   type MembershipPlan,
@@ -81,6 +84,16 @@ const sexualityOptions = [
   "queer",
   "questioning",
   "prefer not to say",
+];
+const raceOptions = [
+  "American Indian or Alaska Native",
+  "Asian",
+  "Black or African American",
+  "Hispanic or Latino",
+  "Native Hawaiian or Other Pacific Islander",
+  "White",
+  "Multiracial",
+  "Prefer not to say",
 ];
 
 const interestCategories = [
@@ -138,15 +151,16 @@ const interestCategories = [
   },
   {
     label: "Watch",
-    prompt: "What would you happily watch with someone?",
+    prompt: "What genres, shows, and movies are your favorites?",
     suggestions: [
-      "Football",
-      "Basketball",
-      "Movies",
+      "Comedy",
+      "Drama",
+      "Thriller",
+      "Action",
+      "Sci-Fi",
+      "Horror",
+      "Documentary",
       "Anime",
-      "Reality TV",
-      "Documentaries",
-      "UFC",
     ],
   },
   {
@@ -160,6 +174,8 @@ const interestCategories = [
       "Faith",
       "Family",
       "Art",
+      "Tech",
+      "Philosophy",
     ],
   },
 ] as const;
@@ -215,6 +231,8 @@ const defaultValues = {
   name: "",
   email: "",
   phone: "",
+  occupation: "",
+  race: "",
   area: "",
   bio: "",
   birthday: "",
@@ -234,6 +252,8 @@ const defaultValues = {
   sexuality: "",
   trustedContacts: [] as { email?: string; name: string; phone?: string }[],
   weight: "",
+  latitude: "",
+  longitude: "",
 };
 
 type OnboardingFormApi = any;
@@ -260,6 +280,34 @@ const createEmptyPhoto = (sortOrder: number): DatingMedia => ({
   sortOrder,
   url: "",
 });
+
+const formatPhoneNumber = (value: string) => {
+  const hasPlus = value.startsWith("+");
+  const cleaned = value.replaceAll(/\D/g, "");
+
+  if (cleaned.length === 0) return hasPlus ? "+" : "";
+
+  if (hasPlus) {
+    if (cleaned.length <= 1) {
+      return `+${cleaned}`;
+    }
+    if (cleaned.length <= 4) {
+      return `+${cleaned.slice(0, 1)} (${cleaned.slice(1)})`;
+    }
+    if (cleaned.length <= 7) {
+      return `+${cleaned.slice(0, 1)} (${cleaned.slice(1, 4)}) ${cleaned.slice(4)}`;
+    }
+    return `+${cleaned.slice(0, 1)} (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7, 11)}`;
+  }
+
+  if (cleaned.length <= 3) {
+    return cleaned;
+  }
+  if (cleaned.length <= 6) {
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3)}`;
+  }
+  return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
+};
 
 export function OnboardingForm() {
   const navigate = useNavigate();
@@ -329,6 +377,8 @@ export function OnboardingForm() {
           form.setFieldValue("interestedIn", res.profile.interestedIn);
           form.setFieldValue("interests", res.profile.interests);
           form.setFieldValue("phone", res.profile.phone ?? "");
+          form.setFieldValue("occupation", res.profile.occupation ?? "");
+          form.setFieldValue("race", res.profile.race ?? "");
           if (res.profile.media && res.profile.media.length > 0) {
             form.setFieldValue("media", res.profile.media);
           }
@@ -389,8 +439,19 @@ export function OnboardingForm() {
         return;
       }
 
-      if (!values.phone?.trim() || values.phone.trim().length < 7) {
-        toast.error("A valid phone number is required.");
+      const cleanedPhone = (values.phone || "").replaceAll(/\D/g, "");
+      if (cleanedPhone.length < 10) {
+        toast.error("A valid 10-digit phone number is required.");
+        return;
+      }
+
+      if (!values.occupation?.trim()) {
+        toast.error("Occupation / Career is required.");
+        return;
+      }
+
+      if (!values.race) {
+        toast.error("Race is required (stored privately).");
         return;
       }
 
@@ -468,6 +529,23 @@ export function OnboardingForm() {
     }
 
     setStep((current) => Math.min(steps.length - 1, current + 1));
+  };
+
+  const handleFinishLater = async () => {
+    const { values } = form.state;
+    const media = values.media.filter((item) => item.url);
+
+    try {
+      toast.loading("Saving progress...", { id: "finish-later" });
+      await datingApi.saveProfile({
+        ...values,
+        media,
+      });
+      toast.success("Progress saved.", { id: "finish-later" });
+    } catch {
+      toast.dismiss("finish-later");
+    }
+    await navigate({ to: "/dashboard" });
   };
 
   return (
@@ -554,7 +632,7 @@ export function OnboardingForm() {
             <div className="flex flex-wrap items-center gap-3">
               <Button
                 className="rounded-full px-5 h-10 font-semibold"
-                onClick={() => navigate({ to: "/dashboard" })}
+                onClick={handleFinishLater}
                 type="button"
                 variant="ghost"
               >
@@ -596,6 +674,31 @@ export function OnboardingForm() {
 function BasicsStep({ form }: { form: OnboardingFormApi }) {
   const [area, setArea] = useState(form.state.values.area);
   const areaIsInvalid = area.length > 0 && !areaPattern.test(area.trim());
+
+  const getPosition = () => {
+    // eslint-disable-next-line promise/avoid-new
+    return new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject);
+    });
+  };
+
+  const handleDetectLocation = async () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser.");
+      return;
+    }
+    toast.loading("Requesting location access...", { id: "geo" });
+    try {
+      const position = await getPosition();
+      const { latitude, longitude } = position.coords;
+      form.setFieldValue("latitude", String(latitude));
+      form.setFieldValue("longitude", String(longitude));
+      toast.success("Location coordinates resolved.", { id: "geo" });
+    } catch (error) {
+      console.error("Geolocation error:", error);
+      toast.error("Location permission denied or unavailable.", { id: "geo" });
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -643,7 +746,10 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
                 <Input
                   className="rounded-full h-10 px-4 text-sm"
                   id={field.name}
-                  onChange={(event) => field.handleChange(event.target.value)}
+                  onChange={(event) => {
+                    const formatted = formatPhoneNumber(event.target.value);
+                    field.handleChange(formatted);
+                  }}
                   placeholder="(555) 555-5555"
                   value={field.state.value ?? ""}
                   type="tel"
@@ -654,21 +760,60 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
+          <form.Field name="occupation">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  Occupation / Career
+                </FieldLabel>
+                <Input
+                  className="rounded-full h-10 px-4 text-sm"
+                  id={field.name}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  placeholder="E.g. Software Engineer, Designer, Teacher"
+                  value={field.state.value ?? ""}
+                />
+              </Field>
+            )}
+          </form.Field>
+          <SelectField
+            form={form}
+            label="Race / Ethnicity"
+            name="race"
+            options={raceOptions}
+            placeholder="Select race/ethnicity (private)"
+          />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
           <form.Field name="area">
             {(field) => (
               <Field data-invalid={areaIsInvalid || undefined}>
                 <FieldLabel htmlFor={field.name}>Area (City, ST)</FieldLabel>
-                <Input
-                  className="rounded-full h-10 px-4 text-sm"
-                  aria-invalid={areaIsInvalid}
-                  id={field.name}
-                  onChange={(event) => {
-                    setArea(event.target.value);
-                    field.handleChange(event.target.value);
-                  }}
-                  placeholder="Little Rock, AR"
-                  value={field.state.value}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    className="rounded-full h-10 px-4 text-sm flex-1"
+                    aria-invalid={areaIsInvalid}
+                    id={field.name}
+                    onChange={(event) => {
+                      setArea(event.target.value);
+                      field.handleChange(event.target.value);
+                    }}
+                    placeholder="Little Rock, AR"
+                    value={field.state.value}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full h-10 px-4 text-xs font-semibold shrink-0"
+                    onClick={() => {
+                      void handleDetectLocation();
+                    }}
+                  >
+                    <MapPin className="size-3.5 mr-1 inline" />
+                    Detect Location
+                  </Button>
+                </div>
                 <FieldDescription>
                   Matches start nearby based on this city.
                 </FieldDescription>
@@ -729,97 +874,138 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
 }
 
 function MediaStep({ form }: { form: OnboardingFormApi }) {
-  const media = form.state.values.media as DatingMedia[];
-
   return (
-    <div className="flex flex-col gap-6">
-      <StepIntro
-        eyebrow="Media"
-        title="Live Capture. Real photos."
-        text="A profile photo and intro video are required to date on Chewbuu. To prevent AI & fake profiles, profile media must be captured live."
-      />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <MediaSlot
-          accept="image/*"
-          form={form}
-          icon={Camera}
-          index={0}
-          kind="profile_photo"
-          label="Profile photo"
-          route="profilePhoto"
-        />
-        <MediaSlot
-          accept="video/*"
-          form={form}
-          icon={Video}
-          index={1}
-          kind="intro_video"
-          label="Intro video"
-          route="introVideo"
-        />
-      </div>
+    <form.Subscribe selector={(state) => [state.values.media]}>
+      {([mediaValue]) => {
+        const media = (mediaValue || []) as DatingMedia[];
 
-      <div className="flex flex-col gap-4 mt-2">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h3 className="font-semibold text-lg">Real photo slots</h3>
-            <p className="text-muted-foreground text-sm">
-              Add up to six more photos from your camera roll to enrich your
-              profile.
-            </p>
-          </div>
-          <Button
-            className="rounded-full px-4 font-semibold"
-            onClick={() => {
-              const photoCount = media.filter(
-                (item) => item.kind === "photo"
-              ).length;
-
-              if (photoCount >= 6) {
-                toast.error("Six profile photos is the max for now.");
-                return;
-              }
-
-              form.setFieldValue("media", [
-                ...media,
-                createEmptyPhoto(photoCount + 1),
-              ]);
-            }}
-            type="button"
-            variant="outline"
-          >
-            <Plus className="size-4 mr-1 inline" />
-            Add photo
-          </Button>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          {media
-            .map((item, index) => ({ item, index }))
-            .filter(({ item }) => item.kind === "photo")
-            .map(({ index }) => (
+        return (
+          <div className="flex flex-col gap-6">
+            <StepIntro
+              eyebrow="Media"
+              title="Live Capture. Real photos."
+              text="A profile photo and intro video are required to date on Chewbuu. To prevent AI & fake profiles, profile media must be captured live."
+            />
+            <div className="grid gap-6 lg:grid-cols-2">
               <MediaSlot
                 accept="image/*"
                 form={form}
-                icon={ImagePlus}
-                index={index}
-                key={index}
-                kind="photo"
-                label={`Extra Photo ${index - 1}`}
-                route="photo"
+                icon={Camera}
+                index={0}
+                kind="profile_photo"
+                label="Profile photo"
+                route="profilePhoto"
               />
-            ))}
-        </div>
-      </div>
-    </div>
+              <MediaSlot
+                accept="video/*"
+                form={form}
+                icon={Video}
+                index={1}
+                kind="intro_video"
+                label="Intro video"
+                route="introVideo"
+              />
+            </div>
+
+            <div className="flex flex-col gap-4 mt-2">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold text-lg">Real photo slots</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Add up to six more photos from your camera roll to enrich
+                    your profile.
+                  </p>
+                </div>
+                <Button
+                  className="rounded-full px-4 font-semibold"
+                  onClick={() => {
+                    const photoCount = media.filter(
+                      (item) => item.kind === "photo"
+                    ).length;
+
+                    if (photoCount >= 6) {
+                      toast.error("Six profile photos is the max for now.");
+                      return;
+                    }
+
+                    form.setFieldValue("media", [
+                      ...media,
+                      createEmptyPhoto(photoCount + 1),
+                    ]);
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  <Plus className="size-4 mr-1 inline" />
+                  Add photo
+                </Button>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                {media
+                  .map((item, index) => ({ item, index }))
+                  .filter(({ item }) => item.kind === "photo")
+                  .map(({ index }) => (
+                    <MediaSlot
+                      accept="image/*"
+                      form={form}
+                      icon={ImagePlus}
+                      index={index}
+                      key={index}
+                      kind="photo"
+                      label={`Extra Photo ${index - 1}`}
+                      route="photo"
+                    />
+                  ))}
+              </div>
+            </div>
+          </div>
+        );
+      }}
+    </form.Subscribe>
   );
 }
 
 function InterestsStep({ form }: { form: OnboardingFormApi }) {
+  return (
+    <form.Subscribe
+      selector={(state) => [
+        state.values.interestDetails,
+        state.values.interestedIn,
+        state.values.area,
+      ]}
+    >
+      {([interestDetails, interestedIn, areaValue]) => (
+        <InterestsStepContent
+          form={form}
+          interestDetails={interestDetails || {}}
+          interestedIn={interestedIn || []}
+          area={areaValue || "Nashville, TN"}
+        />
+      )}
+    </form.Subscribe>
+  );
+}
+
+interface InterestsStepContentProps {
+  form: OnboardingFormApi;
+  interestDetails: Record<string, string[]>;
+  interestedIn: string[];
+  area: string;
+}
+
+function InterestsStepContent({
+  form,
+  interestDetails,
+  interestedIn,
+  area,
+}: InterestsStepContentProps) {
   const [activeCategory, setActiveCategory] = useState(
     interestCategories[0].label
   );
   const [customInterest, setCustomInterest] = useState("");
+  const [places, setPlaces] = useState<DatePlace[]>([]);
+  const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
 
   const active = useMemo(
     () =>
@@ -829,150 +1015,349 @@ function InterestsStep({ form }: { form: OnboardingFormApi }) {
     [activeCategory]
   );
 
+  const selected = interestDetails[active.label] ?? [];
+  const selectedString = selected.join(",");
+
+  const toggleValue = (value: string) => {
+    const nextValues = selected.includes(value)
+      ? selected.filter((item) => item !== value)
+      : [...selected, value];
+    const nextDetails = { ...interestDetails, [active.label]: nextValues };
+    const allValues = Object.values(nextDetails).flat();
+
+    form.setFieldValue("interestDetails", nextDetails);
+    form.setFieldValue("favoriteThings", allValues.slice(0, 20));
+    form.setFieldValue(
+      "interests",
+      Object.keys(nextDetails).filter((key) => nextDetails[key]?.length)
+    );
+  };
+
+  useEffect(() => {
+    if (!["Eat", "Drink", "Play", "Move"].includes(active.label)) {
+      setPlaces([]);
+      return;
+    }
+
+    if (selectedString.length === 0) {
+      setPlaces([]);
+      return;
+    }
+
+    const fetchPlaces = async () => {
+      setIsLoadingPlaces(true);
+      try {
+        const res = await datingApi.suggestPlaces({
+          area,
+          filters: selectedString.split(","),
+          what: [active.label.toLowerCase() as any],
+        });
+        setPlaces(res.places || []);
+      } catch (error) {
+        console.error("Failed to suggest places:", error);
+      } finally {
+        setIsLoadingPlaces(false);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      void fetchPlaces();
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [active.label, selectedString, area]);
+
+  const selectedPlacesKey = `${active.label}_places`;
+  const activeFavoritePlaces = interestDetails[selectedPlacesKey] || [];
+
+  const togglePlaceFavorite = (placeName: string) => {
+    const nextPlaces = activeFavoritePlaces.includes(placeName)
+      ? activeFavoritePlaces.filter((p) => p !== placeName)
+      : [...activeFavoritePlaces, placeName];
+
+    form.setFieldValue(`interestDetails.${selectedPlacesKey}`, nextPlaces);
+  };
+
   return (
-    <form.Subscribe
-      selector={(state) => [
-        state.values.interestDetails,
-        state.values.interestedIn,
-      ]}
-    >
-      {([interestDetails, interestedIn]) => {
-        const details = (interestDetails || {}) as Record<string, string[]>;
-        const selected = details[active.label] ?? [];
+    <div className="flex flex-col gap-6">
+      <StepIntro
+        eyebrow="Interests"
+        title="Give matching more signal."
+        text="Chewbuu matches you based on your activities and topics. Please select or enter at least one interest for each category below."
+      />
 
-        const toggleValue = (value: string) => {
-          const nextValues = selected.includes(value)
-            ? selected.filter((item) => item !== value)
-            : [...selected, value];
-          const nextDetails = { ...details, [active.label]: nextValues };
-          const allValues = Object.values(nextDetails).flat();
-
-          form.setFieldValue("interestDetails", nextDetails);
-          form.setFieldValue("favoriteThings", allValues.slice(0, 20));
-          form.setFieldValue(
-            "interests",
-            Object.keys(nextDetails).filter((key) => nextDetails[key]?.length)
+      {/* Category Navigation Tabs */}
+      <div className="flex flex-wrap justify-start gap-2 border-b border-border pb-4">
+        {interestCategories.map((category) => {
+          const count = interestDetails[category.label]?.length ?? 0;
+          const isActive = activeCategory === category.label;
+          return (
+            <button
+              key={category.label}
+              onClick={() => setActiveCategory(category.label)}
+              className={`rounded-full px-4 py-2 border text-sm font-semibold transition-all duration-200 ${
+                isActive
+                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-border-hover"
+              }`}
+              type="button"
+            >
+              {category.label} {count > 0 && `(${count})`}
+            </button>
           );
-        };
+        })}
+      </div>
 
-        return (
-          <div className="flex flex-col gap-6">
-            <StepIntro
-              eyebrow="Interests"
-              title="Give matching more signal."
-              text="Chewbuu matches you based on your activities and topics. Please select or enter at least one interest for each category below."
-            />
+      <div className="rounded-2xl border bg-background p-5 shadow-sm flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <h3 className="font-semibold text-lg text-foreground">
+            {active.label}
+          </h3>
+          <p className="text-muted-foreground text-sm">{active.prompt}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {active.suggestions.map((suggestion) => (
+            <Button
+              className="rounded-full px-4 py-1.5 text-sm transition-all duration-200"
+              key={suggestion}
+              onClick={() => toggleValue(suggestion)}
+              type="button"
+              variant={selected.includes(suggestion) ? "default" : "outline"}
+            >
+              {suggestion}
+            </Button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            className="rounded-full h-10 px-4 text-sm"
+            aria-label={`Add ${active.label} interest`}
+            onChange={(event) => setCustomInterest(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                if (customInterest.trim()) {
+                  toggleValue(customInterest.trim());
+                  setCustomInterest("");
+                }
+              }
+            }}
+            placeholder={`Add your own custom ${active.label.toLowerCase()}...`}
+            value={customInterest}
+          />
+          <Button
+            className="rounded-full px-5 h-10 bg-primary text-primary-foreground font-semibold"
+            onClick={() => {
+              if (customInterest.trim()) {
+                toggleValue(customInterest.trim());
+                setCustomInterest("");
+              }
+            }}
+            type="button"
+          >
+            <Plus className="size-4 mr-1 inline" />
+            Add
+          </Button>
+        </div>
 
+        {/* Show Local Place Suggestions for Eat, Drink, Play, Move */}
+        {["Eat", "Drink", "Play", "Move"].includes(active.label) &&
+          selected.length > 0 && (
+            <div className="mt-4 border-t border-border pt-4">
+              <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
+                <MapPin className="size-4 text-primary" />
+                Select your favorite local date spots in {area}:
+              </h4>
+              {isLoadingPlaces ? (
+                <p className="text-xs text-muted-foreground animate-pulse">
+                  Searching near you...
+                </p>
+              ) : places.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  Add more specific tags above to search date spots.
+                </p>
+              ) : (
+                <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
+                  {places.map((place) => {
+                    const isFav = activeFavoritePlaces.includes(place.name);
+                    return (
+                      <button
+                        key={place.placeId}
+                        type="button"
+                        onClick={() => togglePlaceFavorite(place.name)}
+                        className={`flex items-center justify-between p-3 rounded-xl border text-left text-xs transition duration-250 ${
+                          isFav
+                            ? "border-primary bg-primary/5 text-primary-foreground font-medium"
+                            : "border-border bg-card text-foreground hover:border-border-hover"
+                        }`}
+                      >
+                        <div>
+                          <p className="font-bold text-foreground">
+                            {place.name}
+                          </p>
+                          {place.address && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {place.address}
+                            </p>
+                          )}
+                        </div>
+                        <Heart
+                          className={`size-4 ml-2 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+        {/* Extra input forms for Watch category */}
+        {active.label === "Watch" && (
+          <div className="mt-4 border-t border-border pt-4 flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground ml-1">
+                Favorite Shows & Movies
+              </span>
+              <InputList
+                form={form}
+                fieldKey="Watch_shows"
+                placeholder="Add show or movie (e.g. Breaking Bad)"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground ml-1">
+                Favorite Actors & Actresses
+              </span>
+              <InputList
+                form={form}
+                fieldKey="Watch_actors"
+                placeholder="Add actor/actress (e.g. Pedro Pascal)"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Extra input forms for Talk category */}
+        {active.label === "Talk" && (
+          <div className="mt-4 border-t border-border pt-4 flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground ml-1">
+                Other Topics or Hobbies
+              </span>
+              <InputList
+                form={form}
+                fieldKey="Talk_topics"
+                placeholder="Add topic (e.g. Hiking, Cooking, Web3)"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <form.Field name="interestedIn">
+        {(field) => (
+          <Field>
+            <FieldLabel>Interested in (Select Multiple)</FieldLabel>
+            <FieldDescription>
+              Select the people and social setups you want Chewbuu to consider.
+            </FieldDescription>
             <ToggleGroup
               className="flex flex-wrap justify-start gap-2"
-              onValueChange={(value) => value && setActiveCategory(value)}
-              type="single"
-              value={activeCategory}
+              onValueChange={(value) => field.handleChange(value)}
+              type="multiple"
+              value={interestedIn}
             >
-              {interestCategories.map((category) => {
-                const count = details[category.label]?.length ?? 0;
-                return (
-                  <ToggleGroupItem
-                    className="rounded-full px-4 py-2 border border-border text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground transition-all duration-200"
-                    key={category.label}
-                    value={category.label}
-                    type="button"
-                  >
-                    {category.label} {count > 0 && `(${count})`}
-                  </ToggleGroupItem>
-                );
-              })}
-            </ToggleGroup>
-
-            <div className="rounded-2xl border bg-background p-5 shadow-sm">
-              <div className="mb-4 flex flex-col gap-1">
-                <h3 className="font-semibold text-lg text-foreground">
-                  {active.label}
-                </h3>
-                <p className="text-muted-foreground text-sm">{active.prompt}</p>
-              </div>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {active.suggestions.map((suggestion) => (
-                  <Button
-                    className="rounded-full px-4 py-1.5 text-sm transition-all duration-200"
-                    key={suggestion}
-                    onClick={() => toggleValue(suggestion)}
-                    type="button"
-                    variant={
-                      selected.includes(suggestion) ? "default" : "outline"
-                    }
-                  >
-                    {suggestion}
-                  </Button>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  className="rounded-full h-10 px-4 text-sm"
-                  aria-label={`Add ${active.label} interest`}
-                  onChange={(event) => setCustomInterest(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      if (customInterest.trim()) {
-                        toggleValue(customInterest.trim());
-                        setCustomInterest("");
-                      }
-                    }
-                  }}
-                  placeholder={`Add your own custom ${active.label.toLowerCase()}...`}
-                  value={customInterest}
-                />
-                <Button
-                  className="rounded-full px-5 h-10 bg-primary text-primary-foreground font-semibold"
-                  onClick={() => {
-                    if (customInterest.trim()) {
-                      toggleValue(customInterest.trim());
-                      setCustomInterest("");
-                    }
-                  }}
+              {["women", "men", "couples", "friends", "groups"].map((value) => (
+                <ToggleGroupItem
+                  className="rounded-full px-4 py-2 border border-border text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground transition-all duration-200"
+                  key={value}
+                  value={value}
                   type="button"
                 >
-                  <Plus className="size-4 mr-1 inline" />
-                  Add
-                </Button>
-              </div>
-            </div>
+                  {formatValue(value)}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </Field>
+        )}
+      </form.Field>
+    </div>
+  );
+}
 
-            <form.Field name="interestedIn">
-              {(field) => (
-                <Field>
-                  <FieldLabel>Interested in (Select Multiple)</FieldLabel>
-                  <FieldDescription>
-                    Select the people and social setups you want Chewbuu to
-                    consider.
-                  </FieldDescription>
-                  <ToggleGroup
-                    className="flex flex-wrap justify-start gap-2"
-                    onValueChange={(value) => field.handleChange(value)}
-                    type="multiple"
-                    value={field.state.value || []}
-                  >
-                    {["women", "men", "couples", "friends", "groups"].map(
-                      (value) => (
-                        <ToggleGroupItem
-                          className="rounded-full px-4 py-2 border border-border text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground transition-all duration-200"
-                          key={value}
-                          value={value}
-                          type="button"
-                        >
-                          {formatValue(value)}
-                        </ToggleGroupItem>
-                      )
-                    )}
-                  </ToggleGroup>
-                </Field>
-              )}
-            </form.Field>
-          </div>
-        );
-      }}
-    </form.Subscribe>
+function InputList({
+  form,
+  fieldKey,
+  placeholder,
+}: {
+  form: OnboardingFormApi;
+  fieldKey: string;
+  placeholder: string;
+}) {
+  const [val, setVal] = useState("");
+  const currentList = form.state.values.interestDetails[fieldKey] || [];
+
+  const handleAdd = () => {
+    if (!val.trim()) return;
+    if (currentList.includes(val.trim())) return;
+
+    form.setFieldValue(`interestDetails.${fieldKey}`, [
+      ...currentList,
+      val.trim(),
+    ]);
+    setVal("");
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex gap-2">
+        <Input
+          className="rounded-full h-10 px-4 text-xs"
+          placeholder={placeholder}
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleAdd();
+            }
+          }}
+        />
+        <Button
+          type="button"
+          onClick={handleAdd}
+          className="rounded-full h-10 px-4 text-xs font-semibold"
+        >
+          Add
+        </Button>
+      </div>
+      {currentList.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-1">
+          {currentList.map((item: string) => (
+            <Badge
+              key={item}
+              variant="secondary"
+              className="pl-3 pr-1.5 py-1 text-xs rounded-full flex items-center gap-1 font-semibold border"
+            >
+              <span>{item}</span>
+              <button
+                type="button"
+                className="hover:bg-muted p-0.5 rounded-full shrink-0"
+                onClick={() => {
+                  form.setFieldValue(
+                    `interestDetails.${fieldKey}`,
+                    currentList.filter((x: string) => x !== item)
+                  );
+                }}
+              >
+                <Trash2 className="size-3 text-muted-foreground" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1084,7 +1469,7 @@ function PremiumStep({
     mingle: {
       tagline: "Group hangs and circles",
       highlight: true,
-      badge: "Best Social Value",
+      badge: "Best Value",
       ctaLabel: "Get Mingle",
       features: [
         "Go on group dates (up to 4 people)",
@@ -1248,12 +1633,13 @@ function PremiumStep({
         })}
       </div>
 
-      <Link
-        className="w-fit text-sm underline underline-offset-4 mt-2 self-center text-muted-foreground hover:text-foreground"
-        to="/dashboard"
+      <button
+        onClick={handleFinishLater}
+        className="w-fit text-sm underline underline-offset-4 mt-4 self-center text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-0"
+        type="button"
       >
         I will upgrade later
-      </Link>
+      </button>
     </div>
   );
 }
@@ -1287,7 +1673,7 @@ function SelectField({
 }: {
   form: OnboardingFormApi;
   label: string;
-  name: "sex" | "sexuality";
+  name: "sex" | "sexuality" | "race";
   options: readonly string[];
   placeholder: string;
 }) {
@@ -1368,7 +1754,7 @@ function MediaSlot({
         sortOrder: kind === "photo" ? Math.max(0, index - 1) : 0,
         url,
       });
-      toast.success(`${label} captured successfully.`);
+      toast.success(`${label} uploaded successfully.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Upload failed.");
     } finally {
@@ -1478,6 +1864,32 @@ function MediaSlot({
   );
 }
 
+function InputWithLocalState({
+  value,
+  onChange,
+  className,
+  ...props
+}: {
+  value: string;
+  onChange: (val: string) => void;
+} & Omit<React.ComponentProps<typeof Input>, "value" | "onChange">) {
+  const [localVal, setLocalVal] = useState(value);
+
+  useEffect(() => {
+    setLocalVal(value);
+  }, [value]);
+
+  return (
+    <Input
+      {...props}
+      className={className}
+      value={localVal}
+      onChange={(e) => setLocalVal(e.target.value)}
+      onBlur={() => onChange(localVal)}
+    />
+  );
+}
+
 function DynamicPeopleList({
   addLabel,
   form,
@@ -1501,72 +1913,80 @@ function DynamicPeopleList({
     <div className="flex flex-col gap-4">
       {items.map((_, index) => (
         <div
-          className="relative grid gap-4 p-4 rounded-2xl border border-border/80 bg-background/50 hover:border-border transition-all duration-200 items-end sm:grid-cols-[1fr_1fr_auto]"
+          className="relative flex flex-col md:flex-row md:items-end gap-4 p-5 rounded-2xl border border-border/80 bg-background/50 hover:border-border transition-all duration-200"
           key={index}
         >
-          {showName && (
-            <form.Field name={`${path}[${index}].name`}>
+          <div className="flex-1 grid gap-4 grid-cols-1 md:grid-cols-3">
+            {showName && (
+              <form.Field name={`${path}[${index}].name`}>
+                {(field) => (
+                  <div className="flex flex-col gap-1.5 col-span-1">
+                    <span className="text-xs font-semibold text-muted-foreground ml-1">
+                      Contact Name
+                    </span>
+                    <InputWithLocalState
+                      className="rounded-full h-10 px-4 text-sm"
+                      aria-label="Contact name"
+                      onChange={(value) => field.handleChange(value)}
+                      placeholder="E.g. Sarah Smith"
+                      value={field.state.value ?? ""}
+                    />
+                  </div>
+                )}
+              </form.Field>
+            )}
+
+            <form.Field name={`${path}[${index}].email`}>
               {(field) => (
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5 col-span-1">
                   <span className="text-xs font-semibold text-muted-foreground ml-1">
-                    Contact Name
+                    Email Address
                   </span>
-                  <Input
-                    className="rounded-full h-10 px-4 text-sm"
-                    aria-label="Contact name"
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="E.g. Sarah Smith"
-                    value={field.state.value ?? ""}
-                  />
+                  <div className="relative">
+                    <Mail
+                      aria-hidden="true"
+                      className="absolute top-3 left-3.5 size-4 text-muted-foreground/75"
+                    />
+                    <InputWithLocalState
+                      aria-label="Email"
+                      className="pl-10 rounded-full h-10 text-sm"
+                      onChange={(value) => field.handleChange(value)}
+                      placeholder="email@example.com"
+                      value={field.state.value ?? ""}
+                    />
+                  </div>
                 </div>
               )}
             </form.Field>
-          )}
-          <form.Field name={`${path}[${index}].email`}>
-            {(field) => (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold text-muted-foreground ml-1">
-                  Email Address
-                </span>
-                <div className="relative">
-                  <Mail
-                    aria-hidden="true"
-                    className="absolute top-3 left-3.5 size-4 text-muted-foreground/75"
-                  />
-                  <Input
-                    aria-label="Email"
-                    className="pl-10 rounded-full h-10 text-sm"
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="email@example.com"
-                    value={field.state.value ?? ""}
-                  />
+
+            <form.Field name={`${path}[${index}].phone`}>
+              {(field) => (
+                <div className="flex flex-col gap-1.5 col-span-1">
+                  <span className="text-xs font-semibold text-muted-foreground ml-1">
+                    Phone Number
+                  </span>
+                  <div className="relative">
+                    <Phone
+                      aria-hidden="true"
+                      className="absolute top-3 left-3.5 size-4 text-muted-foreground/75"
+                    />
+                    <InputWithLocalState
+                      aria-label="Phone"
+                      className="pl-10 rounded-full h-10 text-sm"
+                      onChange={(value) => {
+                        const formatted = formatPhoneNumber(value);
+                        field.handleChange(formatted);
+                      }}
+                      placeholder="Phone"
+                      value={field.state.value ?? ""}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
-          </form.Field>
-          <form.Field name={`${path}[${index}].phone`}>
-            {(field) => (
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold text-muted-foreground ml-1">
-                  Phone Number
-                </span>
-                <div className="relative">
-                  <Phone
-                    aria-hidden="true"
-                    className="absolute top-3 left-3.5 size-4 text-muted-foreground/75"
-                  />
-                  <Input
-                    aria-label="Phone"
-                    className="pl-10 rounded-full h-10 text-sm"
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="Phone"
-                    value={field.state.value ?? ""}
-                  />
-                </div>
-              </div>
-            )}
-          </form.Field>
-          <div className="flex items-center justify-end sm:pb-0.5">
+              )}
+            </form.Field>
+          </div>
+
+          <div className="flex items-center justify-end md:pb-1 md:self-end self-end">
             <Button
               aria-label="Remove person"
               className="rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all duration-200"
@@ -1638,12 +2058,21 @@ function LiveCaptureDialog({
         setIsRecording(false);
         setCountdown(mode === "video" ? 15 : 0);
 
-        const constraints = {
-          video: { facingMode: mode === "photo" ? "environment" : "user" },
-          audio: mode === "video",
-        };
-        const mediaStream =
-          await navigator.mediaDevices.getUserMedia(constraints);
+        let mediaStream: MediaStream;
+        try {
+          const constraints = {
+            video: { facingMode: mode === "photo" ? "user" : "user" },
+            audio: mode === "video",
+          };
+          mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch {
+          // Fallback constraints for browsers/hardware missing user/environment specs
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: mode === "video",
+          });
+        }
+
         streamRef.current = mediaStream;
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
@@ -1651,7 +2080,7 @@ function LiveCaptureDialog({
       } catch (cameraError) {
         console.error("Camera access error:", cameraError);
         setError(
-          "Camera access is required. Please check your browser permissions."
+          "Camera and Microphone access are required. Please check your browser permissions."
         );
       }
     };

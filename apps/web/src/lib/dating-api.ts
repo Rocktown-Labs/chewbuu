@@ -34,6 +34,8 @@ export interface DatingProfilePayload {
   trustedContacts: { email?: string; name: string; phone?: string }[];
   weight?: string;
   phone?: string;
+  occupation?: string;
+  race?: string;
 }
 
 export interface DatePlace {
