@@ -54,6 +54,7 @@ describe("OnboardingForm", () => {
     expect(screen.getByLabelText(/area/i)).toBeVisible();
     expect(screen.getByText("Sex")).toBeVisible();
     expect(screen.getByText("Sexuality")).toBeVisible();
+    expect(screen.getByText("Relationship Status")).toBeVisible();
   });
 
   it("can move to the media step with live capture and record actions", async () => {
