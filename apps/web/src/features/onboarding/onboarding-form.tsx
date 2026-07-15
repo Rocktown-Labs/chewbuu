@@ -1,5 +1,4 @@
 import { uploadFile } from "@better-upload/client";
-import { env } from "@chewbuu/env/web";
 import { Avatar, AvatarFallback } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button } from "@chewbuu/ui/components/button";
@@ -51,13 +50,13 @@ import {
   Upload,
   Video,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
-  getServerUrl,
+  getApiUrl,
   pricingApi,
   type DatePlace,
   type DateWhat,
@@ -1928,19 +1927,6 @@ function MediaSlot({
   const media = values.media[index] as DatingMedia | undefined;
   const value = media?.url ?? "";
 
-  const getUploadApiUrl = () => {
-    const serverUrl = env.VITE_SERVER_URL || "/";
-    const base = getServerUrl(serverUrl);
-    try {
-      return new URL("/upload", base).toString();
-    } catch {
-      if (typeof window !== "undefined") {
-        return new URL("/upload", window.location.origin).toString();
-      }
-      return "http://localhost:3000/upload";
-    }
-  };
-
   const uploadSelectedFile = async (file: File | undefined) => {
     if (!file) {
       return;
@@ -1949,7 +1935,7 @@ function MediaSlot({
     setIsUploading(true);
     try {
       const result = await uploadFile({
-        api: getUploadApiUrl(),
+        api: getApiUrl("/upload"),
         credentials: "include",
         file,
         metadata: { slot: kind },
@@ -2284,7 +2270,6 @@ function LiveCaptureDialog({
   const streamRef = useRef<MediaStream | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [countdown, setCountdown] = useState(mode === "video" ? 60 : 0);
@@ -2293,6 +2278,26 @@ function LiveCaptureDialog({
 
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      for (const track of streamRef.current.getTracks()) {
+        track.stop();
+      }
+    }
+    streamRef.current = null;
+    setStream(null);
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -2311,67 +2316,56 @@ function LiveCaptureDialog({
     void getDevices();
   }, [isOpen, selectedDeviceId]);
 
+  const startCamera = useCallback(async () => {
+    try {
+      setError(null);
+      setRecordedUrl(null);
+      setCapturedFile(null);
+      setIsRecording(false);
+      setCountdown(mode === "video" ? 60 : 0);
+      clearTimer();
+      stopStream();
+
+      let mediaStream: MediaStream;
+      try {
+        const constraints = {
+          audio: mode === "video",
+          video: selectedDeviceId
+            ? { deviceId: { exact: selectedDeviceId } }
+            : { facingMode: "user" },
+        };
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch {
+        // Fallback constraints for browsers/hardware missing user/environment specs
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: mode === "video",
+          video: true,
+        });
+      }
+
+      streamRef.current = mediaStream;
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (cameraError) {
+      console.error("Camera access error:", cameraError);
+      setError(
+        "Camera and Microphone access are required. Please check your browser permissions."
+      );
+    }
+  }, [clearTimer, mode, selectedDeviceId, stopStream]);
+
   useEffect(() => {
     if (!isOpen) return;
-
-    const startCamera = async () => {
-      try {
-        setError(null);
-        setRecordedUrl(null);
-        setRecordedChunks([]);
-        setCapturedFile(null);
-        setIsRecording(false);
-        setCountdown(mode === "video" ? 60 : 0);
-
-        if (streamRef.current) {
-          for (const track of streamRef.current.getTracks()) {
-            track.stop();
-          }
-        }
-
-        let mediaStream: MediaStream;
-        try {
-          const constraints = {
-            video: selectedDeviceId
-              ? { deviceId: { exact: selectedDeviceId } }
-              : { facingMode: "user" },
-            audio: mode === "video",
-          };
-          mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-        } catch {
-          // Fallback constraints for browsers/hardware missing user/environment specs
-          mediaStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: mode === "video",
-          });
-        }
-
-        streamRef.current = mediaStream;
-        setStream(mediaStream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
-      } catch (cameraError) {
-        console.error("Camera access error:", cameraError);
-        setError(
-          "Camera and Microphone access are required. Please check your browser permissions."
-        );
-      }
-    };
 
     void startCamera();
 
     return () => {
-      if (streamRef.current) {
-        for (const track of streamRef.current.getTracks()) {
-          track.stop();
-        }
-      }
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      stopStream();
+      clearTimer();
     };
-  }, [isOpen, mode, selectedDeviceId]);
+  }, [clearTimer, isOpen, startCamera, stopStream]);
 
   const handleCapturePhoto = () => {
     if (!videoRef.current) return;
@@ -2391,6 +2385,7 @@ function LiveCaptureDialog({
             const url = URL.createObjectURL(blob);
             setRecordedUrl(url);
             setCapturedFile(file);
+            stopStream();
           }
         },
         "image/jpeg",
@@ -2401,7 +2396,6 @@ function LiveCaptureDialog({
 
   const handleStartRecording = () => {
     if (!streamRef.current) return;
-    setRecordedChunks([]);
     setRecordedUrl(null);
     setCapturedFile(null);
     setIsRecording(true);
@@ -2441,10 +2435,23 @@ function LiveCaptureDialog({
     };
 
     mediaRecorder.onstop = () => {
-      const blob = new Blob(chunks, { type: mediaRecorder.mimeType });
+      clearTimer();
+      setIsRecording(false);
+      if (chunks.length === 0) {
+        setError("No video data was recorded. Please try again.");
+        return;
+      }
+
+      const mimeType = mediaRecorder.mimeType || "video/webm";
+      const blob = new Blob(chunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
+      const extension = mimeType.includes("mp4") ? "mp4" : "webm";
+      const file = new File([blob], `intro-video.${extension}`, {
+        type: mimeType,
+      });
       setRecordedUrl(url);
-      setRecordedChunks(chunks);
+      setCapturedFile(file);
+      stopStream();
     };
 
     mediaRecorder.start();
@@ -2468,37 +2475,22 @@ function LiveCaptureDialog({
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    clearTimer();
   };
 
   const handleUseCapturedMedia = () => {
-    if (mode === "photo") {
-      if (capturedFile) {
-        onCapture(capturedFile);
-        onClose();
-      }
-    } else {
-      if (recordedChunks.length === 0) return;
-      const mimeType = mediaRecorderRef.current?.mimeType || "video/webm";
-      const blob = new Blob(recordedChunks, { type: mimeType });
-      const file = new File([blob], "intro_video.webm", { type: mimeType });
-      onCapture(file);
+    if (capturedFile) {
+      onCapture(capturedFile);
       onClose();
     }
   };
 
   const handleRetake = () => {
     setRecordedUrl(null);
-    setRecordedChunks([]);
     setCapturedFile(null);
     setCountdown(mode === "video" ? 60 : 0);
     setIsRecording(false);
-    if (streamRef.current && videoRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-    }
+    void startCamera();
   };
 
   return (
@@ -2608,6 +2600,7 @@ function LiveCaptureDialog({
               </Button>
               <Button
                 onClick={handleUseCapturedMedia}
+                disabled={!capturedFile}
                 className="rounded-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold"
               >
                 {mode === "photo" ? "Use Photo" : "Use Video"}
