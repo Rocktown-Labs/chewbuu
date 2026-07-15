@@ -102,6 +102,8 @@ gh pr create \
   --head <branchName>
 ```
 
+Pull Requests should be opened as ready for review, not drafts, so preview deployments and review gates start immediately.
+
 Only merge when CI and test gates pass:
 
 ```bash
