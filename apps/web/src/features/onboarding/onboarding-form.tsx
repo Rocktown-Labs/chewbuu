@@ -98,6 +98,17 @@ const raceOptions = [
   "Multiracial",
   "Prefer not to say",
 ];
+const maritalStatusOptions = [
+  "Single",
+  "Dating",
+  "Engaged",
+  "Married",
+  "Separated",
+  "Divorced",
+  "Widowed",
+  "Prefer Not to Say",
+];
+const spouseInviteStatuses = new Set(["Dating", "Engaged", "Married"]);
 
 const interestCategories = [
   {
@@ -257,6 +268,7 @@ const defaultValues = {
   weight: "",
   latitude: "",
   longitude: "",
+  maritalStatus: "",
 };
 
 type OnboardingFormApi = any;
@@ -402,6 +414,7 @@ export function OnboardingForm() {
         form.setFieldValue("area", merged.area || "");
         form.setFieldValue("latitude", merged.latitude || "");
         form.setFieldValue("longitude", merged.longitude || "");
+        form.setFieldValue("maritalStatus", merged.maritalStatus || "");
         form.setFieldValue("sex", merged.sex || "");
         form.setFieldValue("sexuality", merged.sexuality || "");
         form.setFieldValue("race", merged.race || "");
@@ -503,6 +516,11 @@ export function OnboardingForm() {
 
       if (!values.sex || !values.sexuality) {
         toast.error("Sex and sexuality are required.");
+        return;
+      }
+
+      if (!values.maritalStatus) {
+        toast.error("Relationship status is required.");
         return;
       }
 
@@ -934,6 +952,14 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
             placeholder="Select sexuality"
           />
         </div>
+
+        <SelectField
+          form={form}
+          label="Relationship Status"
+          name="maritalStatus"
+          options={maritalStatusOptions}
+          placeholder="Select relationship status"
+        />
 
         <form.Field name="bio">
           {(field) => (
@@ -1462,14 +1488,24 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
     <form.Subscribe
       selector={(state) => [
         state.values.friendInvites,
+        state.values.maritalStatus,
         state.values.trustedContacts,
       ]}
     >
-      {([friendInvites, trustedContacts]) => {
-        const friends = (friendInvites || []) as {
+      {([friendInvites, maritalStatus, trustedContacts]) => {
+        const invites = (friendInvites || []) as {
           email?: string;
+          name?: string;
           phone?: string;
+          relationship?: "friend" | "spouse";
         }[];
+        const friends = invites.filter(
+          (invite) => invite.relationship !== "spouse"
+        );
+        const spouseInvite = invites.find(
+          (invite) => invite.relationship === "spouse"
+        );
+        const canInviteSpouse = spouseInviteStatuses.has(maritalStatus || "");
         const contacts = (trustedContacts || []) as {
           email?: string;
           name: string;
@@ -1481,8 +1517,36 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
             <StepIntro
               eyebrow="Friends & Safety"
               title="Chewbuu is better with friends."
-              text="Invite friends to hang out on the platform, and add safety contacts who will receive automatic check-ins when you are on dates."
+              text="Invite your spouse or partner when that applies, bring friends into circles, and add safety contacts who can receive date check-ins."
             />
+            {canInviteSpouse && (
+              <div className="rounded-2xl border bg-background p-5 shadow-sm">
+                <div className="mb-4 flex items-start gap-3">
+                  <Heart
+                    aria-hidden="true"
+                    className="mt-1 size-5 text-primary"
+                  />
+                  <div>
+                    <h3 className="font-semibold text-base">
+                      Invite your spouse or partner
+                    </h3>
+                    <p className="text-muted-foreground text-sm">
+                      Send an invite so they can join Chewbuu with you, verify
+                      their profile, and be part of date planning when needed.
+                    </p>
+                  </div>
+                </div>
+                <DynamicPeopleList
+                  addLabel="Add spouse or partner"
+                  form={form}
+                  items={spouseInvite ? [spouseInvite] : []}
+                  maxItems={1}
+                  path="friendInvites"
+                  relationship="spouse"
+                  showName
+                />
+              </div>
+            )}
             <div className="rounded-2xl border bg-background p-5 shadow-sm">
               <div className="mb-4 flex items-start gap-3">
                 <HeartHandshake
@@ -1504,6 +1568,7 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                 form={form}
                 items={friends}
                 path="friendInvites"
+                relationship="friend"
                 showName={false}
               />
             </div>
@@ -1530,6 +1595,7 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                 items={contacts}
                 maxItems={2}
                 path="trustedContacts"
+                relationship="friend"
                 showName
               />
             </div>
@@ -1782,7 +1848,7 @@ function SelectField({
 }: {
   form: OnboardingFormApi;
   label: string;
-  name: "sex" | "sexuality" | "race";
+  name: "sex" | "sexuality" | "race" | "maritalStatus";
   options: readonly string[];
   placeholder: string;
 }) {
@@ -1793,7 +1859,24 @@ function SelectField({
           <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
           <Select
             name={field.name}
-            onValueChange={(value) => field.handleChange(String(value))}
+            onValueChange={(value) => {
+              const nextValue = String(value);
+              field.handleChange(nextValue);
+
+              if (
+                name === "maritalStatus" &&
+                !spouseInviteStatuses.has(nextValue)
+              ) {
+                const invites = form.state.values.friendInvites || [];
+                form.setFieldValue(
+                  "friendInvites",
+                  invites.filter(
+                    (invite: { relationship?: string }) =>
+                      invite.relationship !== "spouse"
+                  )
+                );
+              }
+            }}
             value={field.state.value || undefined}
           >
             <SelectTrigger
@@ -2032,119 +2115,140 @@ function DynamicPeopleList({
   items,
   maxItems = 6,
   path,
+  relationship,
   showName,
 }: {
   addLabel: string;
   form: OnboardingFormApi;
-  items: { email?: string; name?: string; phone?: string }[];
+  items: {
+    email?: string;
+    name?: string;
+    phone?: string;
+    relationship?: "friend" | "spouse";
+  }[];
   maxItems?: number;
   path: "friendInvites" | "trustedContacts";
+  relationship: "friend" | "spouse";
   showName: boolean;
 }) {
+  const allItems = (form.state.values[path] || []) as typeof items;
   const nextItem = showName
-    ? { email: "", name: "", phone: "" }
-    : { email: "", phone: "" };
+    ? {
+        email: "",
+        name: "",
+        phone: "",
+        ...(path === "friendInvites" ? { relationship } : {}),
+      }
+    : {
+        email: "",
+        phone: "",
+        ...(path === "friendInvites" ? { relationship } : {}),
+      };
 
   return (
     <div className="flex flex-col gap-4">
-      {items.map((_, index) => (
-        <div
-          className="relative flex flex-col md:flex-row md:items-end gap-4 p-5 rounded-2xl border border-border/80 bg-background/50 hover:border-border transition-all duration-200"
-          key={index}
-        >
-          <div className="flex-1 grid gap-4 grid-cols-1 md:grid-cols-3">
-            {showName && (
-              <form.Field name={`${path}[${index}].name`}>
+      {items.map((item, displayIndex) => {
+        const index = allItems.indexOf(item);
+
+        return (
+          <div
+            className="relative flex flex-col md:flex-row md:items-end gap-4 p-5 rounded-2xl border border-border/80 bg-background/50 hover:border-border transition-all duration-200"
+            key={`${relationship}-${displayIndex}`}
+          >
+            <div className="flex-1 grid gap-4 grid-cols-1 md:grid-cols-3">
+              {showName && (
+                <form.Field name={`${path}[${index}].name`}>
+                  {(field) => (
+                    <div className="flex flex-col gap-1.5 col-span-1">
+                      <span className="text-xs font-semibold text-muted-foreground ml-1">
+                        Contact Name
+                      </span>
+                      <InputWithLocalState
+                        className="rounded-full h-10 px-4 text-sm"
+                        aria-label="Contact name"
+                        onChange={(value) => field.handleChange(value)}
+                        placeholder="E.g. Sarah Smith"
+                        value={field.state.value ?? ""}
+                      />
+                    </div>
+                  )}
+                </form.Field>
+              )}
+
+              <form.Field name={`${path}[${index}].email`}>
                 {(field) => (
                   <div className="flex flex-col gap-1.5 col-span-1">
                     <span className="text-xs font-semibold text-muted-foreground ml-1">
-                      Contact Name
+                      Email Address
                     </span>
-                    <InputWithLocalState
-                      className="rounded-full h-10 px-4 text-sm"
-                      aria-label="Contact name"
-                      onChange={(value) => field.handleChange(value)}
-                      placeholder="E.g. Sarah Smith"
-                      value={field.state.value ?? ""}
-                    />
+                    <div className="relative">
+                      <Mail
+                        aria-hidden="true"
+                        className="absolute top-3 left-3.5 size-4 text-muted-foreground/75"
+                      />
+                      <InputWithLocalState
+                        aria-label="Email"
+                        className="pl-10 rounded-full h-10 text-sm"
+                        onChange={(value) => field.handleChange(value)}
+                        placeholder="email@example.com"
+                        value={field.state.value ?? ""}
+                      />
+                    </div>
                   </div>
                 )}
               </form.Field>
-            )}
 
-            <form.Field name={`${path}[${index}].email`}>
-              {(field) => (
-                <div className="flex flex-col gap-1.5 col-span-1">
-                  <span className="text-xs font-semibold text-muted-foreground ml-1">
-                    Email Address
-                  </span>
-                  <div className="relative">
-                    <Mail
-                      aria-hidden="true"
-                      className="absolute top-3 left-3.5 size-4 text-muted-foreground/75"
-                    />
-                    <InputWithLocalState
-                      aria-label="Email"
-                      className="pl-10 rounded-full h-10 text-sm"
-                      onChange={(value) => field.handleChange(value)}
-                      placeholder="email@example.com"
-                      value={field.state.value ?? ""}
-                    />
+              <form.Field name={`${path}[${index}].phone`}>
+                {(field) => (
+                  <div className="flex flex-col gap-1.5 col-span-1">
+                    <span className="text-xs font-semibold text-muted-foreground ml-1">
+                      Phone Number
+                    </span>
+                    <div className="relative">
+                      <Phone
+                        aria-hidden="true"
+                        className="absolute top-3 left-3.5 size-4 text-muted-foreground/75"
+                      />
+                      <InputWithLocalState
+                        aria-label="Phone"
+                        className="pl-10 rounded-full h-10 text-sm"
+                        onChange={(value) => {
+                          const formatted = formatPhoneNumber(value);
+                          field.handleChange(formatted);
+                        }}
+                        placeholder="Phone"
+                        value={field.state.value ?? ""}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
-            </form.Field>
+                )}
+              </form.Field>
+            </div>
 
-            <form.Field name={`${path}[${index}].phone`}>
-              {(field) => (
-                <div className="flex flex-col gap-1.5 col-span-1">
-                  <span className="text-xs font-semibold text-muted-foreground ml-1">
-                    Phone Number
-                  </span>
-                  <div className="relative">
-                    <Phone
-                      aria-hidden="true"
-                      className="absolute top-3 left-3.5 size-4 text-muted-foreground/75"
-                    />
-                    <InputWithLocalState
-                      aria-label="Phone"
-                      className="pl-10 rounded-full h-10 text-sm"
-                      onChange={(value) => {
-                        const formatted = formatPhoneNumber(value);
-                        field.handleChange(formatted);
-                      }}
-                      placeholder="Phone"
-                      value={field.state.value ?? ""}
-                    />
-                  </div>
-                </div>
-              )}
-            </form.Field>
+            <div className="flex items-center justify-end md:pb-1 md:self-end self-end">
+              <Button
+                aria-label="Remove person"
+                className="rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all duration-200"
+                onClick={() => {
+                  form.setFieldValue(
+                    path,
+                    allItems.filter((_, itemIndex) => itemIndex !== index)
+                  );
+                }}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </div>
           </div>
-
-          <div className="flex items-center justify-end md:pb-1 md:self-end self-end">
-            <Button
-              aria-label="Remove person"
-              className="rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all duration-200"
-              onClick={() => {
-                form.setFieldValue(
-                  path,
-                  items.filter((_, itemIndex) => itemIndex !== index)
-                );
-              }}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
       <Button
         className="w-fit rounded-full px-5 border-dashed border-2 hover:border-primary transition-all duration-200 font-semibold"
         disabled={items.length >= maxItems}
-        onClick={() => form.setFieldValue(path, [...items, nextItem])}
+        onClick={() => form.setFieldValue(path, [...allItems, nextItem])}
         type="button"
         variant="outline"
       >

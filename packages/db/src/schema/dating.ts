@@ -41,6 +41,7 @@ export const profile = pgTable(
     introVideoUrl: text("intro_video_url"),
     latitude: text("latitude"),
     longitude: text("longitude"),
+    maritalStatus: text("marital_status"),
     onboarded: boolean("onboarded").default(false).notNull(),
     onboardingCompletedAt: timestamp("onboarding_completed_at"),
     profilePhotoUrl: text("profile_photo_url"),
@@ -104,7 +105,9 @@ export const friendInvite = pgTable(
     email: text("email"),
     id: text("id").primaryKey(),
     inviteToken: text("invite_token").notNull().unique(),
+    name: text("name"),
     phone: text("phone"),
+    relationship: text("relationship").default("friend").notNull(),
     status: text("status").default("pending").notNull(),
     userId: text("user_id")
       .notNull()

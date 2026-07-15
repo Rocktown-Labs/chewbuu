@@ -20,6 +20,7 @@ import { z } from "zod";
 import { getSessionUser } from "../lib/auth-session";
 import type { SessionUser } from "../lib/auth-session";
 import { createRouter } from "../lib/create-app";
+import { sendInviteNotifications } from "../lib/notifications";
 
 const requiredString = z.string().trim().min(1);
 const stringArray = z.array(z.string().trim().min(1)).default([]);
@@ -32,7 +33,9 @@ const trustedContactSchema = z.object({
 
 const friendInviteSchema = z.object({
   email: z.email().optional().or(z.literal("")),
+  name: z.string().optional(),
   phone: z.string().optional(),
+  relationship: z.enum(["friend", "spouse"]).default("friend"),
 });
 
 const mediaSchema = z.object({
@@ -58,6 +61,7 @@ const profilePayloadSchema = z.object({
   interests: stringArray,
   latitude: z.string().optional(),
   longitude: z.string().optional(),
+  maritalStatus: z.string().optional(),
   media: z.array(mediaSchema).max(7).default([]),
   safetyOptIn: z.boolean().default(false),
   sex: requiredString,
@@ -343,6 +347,7 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
         ?.url,
       latitude: input.latitude,
       longitude: input.longitude,
+      maritalStatus: input.maritalStatus,
       onboarded,
       onboardingCompletedAt: onboarded ? new Date() : null,
       profilePhotoUrl: input.media.find((item) => item.kind === "profile_photo")
@@ -375,6 +380,7 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
           ?.url,
         latitude: input.latitude,
         longitude: input.longitude,
+        maritalStatus: input.maritalStatus,
         onboarded,
         onboardingCompletedAt: onboarded ? new Date() : null,
         profilePhotoUrl: input.media.find(
@@ -429,10 +435,24 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
         email: item.email || null,
         id: nowId(),
         inviteToken: nowId(),
+        name: item.name,
         phone: item.phone,
+        relationship: item.relationship,
         userId: sessionUser.id,
       }))
     );
+  }
+
+  const notificationRecipients = input.friendInvites.filter(
+    (item) => item.email || item.phone
+  );
+
+  if (notificationRecipients.length > 0) {
+    try {
+      await sendInviteNotifications(notificationRecipients, sessionUser);
+    } catch (error) {
+      console.error("Failed to send onboarding invite notifications:", error);
+    }
   }
 
   await db

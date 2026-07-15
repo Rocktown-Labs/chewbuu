@@ -117,6 +117,40 @@ describe("dating routes", () => {
     });
   });
 
+  it("persists spouse invites from onboarding", async () => {
+    const headers = authHeaders();
+    const saveResponse = await app.request("/dating/profile", {
+      body: JSON.stringify({
+        ...profilePayload,
+        friendInvites: [
+          {
+            email: "spouse@example.com",
+            name: "Pat Partner",
+            phone: "(555) 555-0100",
+            relationship: "spouse",
+          },
+        ],
+        maritalStatus: "Married",
+      }),
+      headers,
+      method: "PUT",
+    });
+
+    expect(saveResponse.status).toBe(200);
+    expect(await saveResponse.json()).toMatchObject({
+      profile: {
+        friendInvites: [
+          {
+            email: "spouse@example.com",
+            name: "Pat Partner",
+            relationship: "spouse",
+          },
+        ],
+        maritalStatus: "Married",
+      },
+    });
+  });
+
   it("blocks social users from group date requests", async () => {
     const response = await app.request("/dating/requests", {
       body: JSON.stringify({

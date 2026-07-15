@@ -49,6 +49,11 @@ export const env = createEnv({
     STRIPE_SUGAR_ANNUAL_PRICE_ID: z.string().optional(),
     STRIPE_SUGAR_PRICE_ID: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_FROM_EMAIL: z.string().default("Chewbuu <onboarding@chewbuu.com>"),
+    SENT_DM_API_KEY: z.string().optional(),
+    SENT_DM_BASE_URL: z.url().default("https://api.sent.dm"),
+    SENT_DM_FROM: z.string().optional(),
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

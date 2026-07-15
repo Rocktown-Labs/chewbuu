@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added relationship status collection during onboarding with spouse/partner invite capture for applicable users.
+- Added provider-ready onboarding invite notifications through Resend email and Sent.dm SMS adapters.
 - Added persistent Zustand onboarding store to save form progress across page refreshes.
 - Added live photo capture preview stage in camera dialog so users can review the photo before uploading.
 - Extended live video recording countdown limit to 60 seconds and displayed helpful prompt tips.

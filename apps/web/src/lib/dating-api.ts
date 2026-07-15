@@ -22,11 +22,17 @@ export interface DatingProfilePayload {
   bio?: string;
   datingModes: string[];
   favoriteThings: string[];
-  friendInvites: { email?: string; phone?: string }[];
+  friendInvites: {
+    email?: string;
+    name?: string;
+    phone?: string;
+    relationship?: "friend" | "spouse";
+  }[];
   height?: string;
   interestDetails: Record<string, string[]>;
   interestedIn: string[];
   interests: string[];
+  maritalStatus?: string;
   media: DatingMedia[];
   safetyOptIn: boolean;
   sex: string;
