@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import app from "../app";
-import { buildGooglePlacesTextQuery, normalizeGooglePlaces } from "./dating";
+import {
+  buildGooglePlacesTextQuery,
+  mergeInviteRowsForSave,
+  normalizeGooglePlaces,
+} from "./dating";
 
 const authHeaders = (overrides: Record<string, string> = {}) =>
   new Headers({
@@ -148,6 +152,49 @@ describe("dating routes", () => {
         ],
         maritalStatus: "Married",
       },
+    });
+  });
+
+  it("keeps existing sent invites from becoming pending on later profile saves", () => {
+    const [sameInvite, changedInvite] = mergeInviteRowsForSave(
+      [
+        {
+          email: "spouse@example.com",
+          id: "invite-1",
+          inviteToken: "token-1",
+          name: "Original Name",
+          phone: null,
+          relationship: "spouse",
+          status: "sent",
+          userId: "user-1",
+        },
+      ],
+      [
+        {
+          email: "spouse@example.com",
+          name: "Updated Name",
+          relationship: "spouse",
+        },
+        {
+          email: "new-spouse@example.com",
+          name: "New Spouse",
+          relationship: "spouse",
+        },
+      ],
+      "user-1"
+    );
+
+    expect(sameInvite).toMatchObject({
+      id: "invite-1",
+      inviteToken: "token-1",
+      name: "Updated Name",
+      status: "sent",
+    });
+    expect(changedInvite).toMatchObject({
+      email: "new-spouse@example.com",
+      name: "New Spouse",
+      relationship: "spouse",
+      status: "pending",
     });
   });
 

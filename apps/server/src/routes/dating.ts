@@ -137,6 +137,17 @@ type GooglePlacesTextSearchResponse = {
 
 const nowId = () => crypto.randomUUID();
 
+const inviteKey = (invite: {
+  email?: null | string;
+  phone?: null | string;
+  relationship?: string;
+}) =>
+  [
+    invite.relationship ?? "friend",
+    invite.email?.trim().toLowerCase() ?? "",
+    invite.phone?.replaceAll(/\D/g, "") ?? "",
+  ].join(":");
+
 const assertCanDate = async (sessionUser: SessionUser, input: RequestInput) => {
   const readiness = await getReadiness(sessionUser);
 
@@ -188,6 +199,42 @@ type StoredRequest = RequestInput & {
   partySize: number;
   status: string;
   userId: string;
+};
+
+type StoredInvite = {
+  email: string | null;
+  id: string;
+  inviteToken: string;
+  name: string | null;
+  phone: string | null;
+  relationship: "friend" | "spouse";
+  status: string;
+  userId: string;
+};
+
+export const mergeInviteRowsForSave = (
+  existingInvites: StoredInvite[],
+  inputInvites: ProfileInput["friendInvites"],
+  userId: string
+): StoredInvite[] => {
+  const existingInviteByKey = new Map(
+    existingInvites.map((invite) => [inviteKey(invite), invite])
+  );
+
+  return inputInvites.map((item) => {
+    const existingInvite = existingInviteByKey.get(inviteKey(item));
+
+    return {
+      email: item.email || null,
+      id: existingInvite?.id ?? nowId(),
+      inviteToken: existingInvite?.inviteToken ?? nowId(),
+      name: item.name ?? null,
+      phone: item.phone ?? null,
+      relationship: item.relationship,
+      status: existingInvite?.status ?? "pending",
+      userId,
+    };
+  });
 };
 
 const memory = {
@@ -398,6 +445,39 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
       target: profile.userId,
     });
 
+  const existingInvites = await db
+    .select()
+    .from(friendInvite)
+    .where(eq(friendInvite.userId, sessionUser.id));
+  const existingInviteRows = existingInvites.flatMap((invite) => {
+    const { relationship } = invite;
+
+    if (relationship !== "friend" && relationship !== "spouse") {
+      return [];
+    }
+
+    const storedRelationship: StoredInvite["relationship"] =
+      relationship === "spouse" ? "spouse" : "friend";
+
+    return [
+      {
+        email: invite.email,
+        id: invite.id,
+        inviteToken: invite.inviteToken,
+        name: invite.name,
+        phone: invite.phone,
+        relationship: storedRelationship,
+        status: invite.status,
+        userId: invite.userId,
+      },
+    ];
+  });
+  const inviteRows = mergeInviteRowsForSave(
+    existingInviteRows,
+    input.friendInvites,
+    sessionUser.id
+  );
+
   await db.delete(profileMedia).where(eq(profileMedia.userId, sessionUser.id));
   await db
     .delete(trustedContact)
@@ -429,29 +509,37 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
     );
   }
 
-  if (input.friendInvites.length > 0) {
-    await db.insert(friendInvite).values(
-      input.friendInvites.map((item) => ({
-        email: item.email || null,
-        id: nowId(),
-        inviteToken: nowId(),
-        name: item.name,
-        phone: item.phone,
-        relationship: item.relationship,
-        userId: sessionUser.id,
-      }))
-    );
+  if (inviteRows.length > 0) {
+    await db.insert(friendInvite).values(inviteRows);
   }
 
-  const notificationRecipients = input.friendInvites.filter(
-    (item) => item.email || item.phone
-  );
+  const notificationRecipients = inviteRows
+    .filter((item) => item.status !== "sent" && (item.email || item.phone))
+    .map((item) => ({
+      email: item.email ?? undefined,
+      id: item.id,
+      name: item.name ?? undefined,
+      phone: item.phone ?? undefined,
+      relationship: item.relationship,
+    }));
 
   if (notificationRecipients.length > 0) {
-    try {
-      await sendInviteNotifications(notificationRecipients, sessionUser);
-    } catch (error) {
-      console.error("Failed to send onboarding invite notifications:", error);
+    const outcomes = await sendInviteNotifications(
+      notificationRecipients,
+      sessionUser
+    );
+    const deliveredInviteIds = outcomes
+      .filter((outcome) => outcome.results.some((result) => result.sent))
+      .map((outcome) => outcome.recipient.id)
+      .filter((id): id is string => !!id);
+
+    if (deliveredInviteIds.length > 0) {
+      for (const inviteId of deliveredInviteIds) {
+        await db
+          .update(friendInvite)
+          .set({ status: "sent" })
+          .where(eq(friendInvite.id, inviteId));
+      }
     }
   }
 

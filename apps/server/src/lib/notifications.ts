@@ -4,13 +4,16 @@ import type { SessionUser } from "./auth-session";
 
 type InviteRecipient = {
   email?: string;
+  id?: string;
   name?: string;
   phone?: string;
   relationship: "friend" | "spouse";
 };
 
 type NotificationResult = {
+  error?: string;
   skipped: boolean;
+  sent: boolean;
   type: "email" | "sms";
 };
 
@@ -45,7 +48,7 @@ export const sendInviteEmail = async (
   sessionUser: SessionUser
 ): Promise<NotificationResult> => {
   if (!recipient.email || !env.RESEND_API_KEY) {
-    return { skipped: true, type: "email" };
+    return { sent: false, skipped: true, type: "email" };
   }
 
   const relationshipLabel =
@@ -71,7 +74,7 @@ export const sendInviteEmail = async (
     throw new Error(`Resend email failed with status ${response.status}`);
   }
 
-  return { skipped: false, type: "email" };
+  return { sent: true, skipped: false, type: "email" };
 };
 
 export const sendInviteSms = async (
@@ -79,7 +82,7 @@ export const sendInviteSms = async (
   sessionUser: SessionUser
 ): Promise<NotificationResult> => {
   if (!recipient.phone || !env.SENT_DM_API_KEY) {
-    return { skipped: true, type: "sms" };
+    return { sent: false, skipped: true, type: "sms" };
   }
 
   const baseUrl = env.SENT_DM_BASE_URL.replace(/\/$/, "");
@@ -101,20 +104,38 @@ export const sendInviteSms = async (
     throw new Error(`Sent.dm message failed with status ${response.status}`);
   }
 
-  return { skipped: false, type: "sms" };
+  return { sent: true, skipped: false, type: "sms" };
 };
+
+const notificationError = (
+  type: NotificationResult["type"],
+  error: unknown
+): NotificationResult => ({
+  error: error instanceof Error ? error.message : "Invite notification failed.",
+  sent: false,
+  skipped: false,
+  type,
+});
 
 export const sendInviteNotifications = async (
   recipients: InviteRecipient[],
   sessionUser: SessionUser
 ) => {
   const sends = recipients.map(async (recipient) => {
-    const emailResult = await sendInviteEmail(recipient, sessionUser);
-    const smsResult = await sendInviteSms(recipient, sessionUser);
+    const [emailResult, smsResult] = await Promise.all([
+      sendInviteEmail(recipient, sessionUser).catch((error: unknown) =>
+        notificationError("email", error)
+      ),
+      sendInviteSms(recipient, sessionUser).catch((error: unknown) =>
+        notificationError("sms", error)
+      ),
+    ]);
 
-    return [emailResult, smsResult];
+    return {
+      recipient,
+      results: [emailResult, smsResult],
+    };
   });
-  const results = await Promise.all(sends);
 
-  return results.flat();
+  return Promise.all(sends);
 };
