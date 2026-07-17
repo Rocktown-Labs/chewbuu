@@ -143,4 +143,54 @@ describe("OnboardingForm", () => {
     ).toBeVisible();
     expect(screen.getByText(/come back on/i)).toBeVisible();
   });
+
+  it("limits the match age slider to 18-22 for under-21 members", async () => {
+    const user = userEvent.setup();
+    mocks.getProfile.mockResolvedValue({
+      profile: {
+        birthday: birthdayForAge(20),
+      },
+    });
+
+    render(<OnboardingForm />);
+
+    await screen.findByRole("heading", {
+      name: /tell chewbuu who is going out/i,
+    });
+    await user.click(screen.getByRole("button", { name: "Preferences" }));
+
+    expect(
+      await screen.findByText(/limits matching to ages 18-22/i)
+    ).toBeVisible();
+
+    const sliders = await screen.findAllByRole("slider", { hidden: true });
+    expect(sliders).toHaveLength(2);
+    for (const slider of sliders) {
+      expect(slider).toHaveAttribute("max", "22");
+    }
+  });
+
+  it("starts match options at 23 for members 21 and up", async () => {
+    const user = userEvent.setup();
+    mocks.getProfile.mockResolvedValue({
+      profile: {
+        birthday: birthdayForAge(34),
+      },
+    });
+
+    render(<OnboardingForm />);
+
+    await screen.findByRole("heading", {
+      name: /tell chewbuu who is going out/i,
+    });
+    await user.click(screen.getByRole("button", { name: "Preferences" }));
+
+    expect(await screen.findByText(/match options start at 23/i)).toBeVisible();
+
+    const sliders = await screen.findAllByRole("slider", { hidden: true });
+    expect(sliders).toHaveLength(2);
+    for (const slider of sliders) {
+      expect(slider).toHaveAttribute("min", "23");
+    }
+  });
 });

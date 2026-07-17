@@ -1,33 +1,139 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DateWizard } from "./date-wizard";
 
+const mocks = vi.hoisted(() => ({
+  createRequest: vi.fn(),
+  getProfile: vi.fn(),
+  suggestPlaces: vi.fn(),
+}));
+
+vi.mock("@tanstack/react-router", async () => {
+  const React = await import("react");
+
+  return {
+    Link: ({
+      children,
+      to,
+      ...props
+    }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }) => (
+      <a href={to} {...props}>
+        {children}
+      </a>
+    ),
+  };
+});
+
+vi.mock("@/lib/dating-api", () => ({
+  datingApi: {
+    createRequest: mocks.createRequest,
+    getProfile: mocks.getProfile,
+    suggestPlaces: mocks.suggestPlaces,
+  },
+}));
+
+const birthdayForAge = (age: number) => {
+  const today = new Date();
+  return new Date(today.getFullYear() - age, today.getMonth(), today.getDate())
+    .toISOString()
+    .slice(0, 10);
+};
+
 describe("DateWizard", () => {
-  it("keeps social members on solo dates and explains video-first chat", async () => {
-    const user = userEvent.setup();
-
-    render(<DateWizard membershipTier="social" />);
-
-    await user.click(screen.getByRole("button", { name: /next/i }));
-    await user.click(screen.getByRole("button", { name: /next/i }));
-    await user.click(screen.getByRole("button", { name: /next/i }));
-
-    expect(screen.getByText(/social members date solo/i)).toBeVisible();
-    expect(screen.getByLabelText(/friend email/i)).toBeDisabled();
+  beforeEach(() => {
+    mocks.getProfile.mockResolvedValue({ profile: null });
+    mocks.suggestPlaces.mockResolvedValue({ places: [] });
+    mocks.createRequest.mockReset();
   });
 
-  it("lets sugar members choose to cover the date", async () => {
+  it("keeps social members on solo dates with locked dutch payment", async () => {
+    render(<DateWizard membershipTier="social" />);
+
+    expect(screen.getByText(/social members date solo/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add guest/i })).toBeDisabled();
+
+    const dutch = screen.getByRole("checkbox", {
+      name: /split the bill/i,
+    });
+    expect(dutch).toBeChecked();
+    expect(dutch).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByText(/go sugar to cover the date yourself/i)
+    ).toBeInTheDocument();
+  });
+
+  it("lets sugar members uncheck dutch to cover the date", async () => {
     const user = userEvent.setup();
 
     render(<DateWizard membershipTier="sugar" />);
 
-    await user.click(screen.getByRole("button", { name: /next/iu }));
-    await user.click(screen.getByRole("button", { name: /next/iu }));
-    await user.click(screen.getByRole("button", { name: /next/iu }));
-    await user.click(screen.getByRole("button", { name: /next/iu }));
+    const dutch = await screen.findByRole("checkbox", {
+      name: /split the bill/i,
+    });
+    expect(dutch).toBeEnabled();
 
-    expect(screen.getByRole("button", { name: "Me" })).toBeEnabled();
+    await user.click(dutch);
+    expect(dutch).not.toBeChecked();
+  });
+
+  it("hides the drink option for under-21 members", async () => {
+    mocks.getProfile.mockResolvedValue({
+      profile: {
+        area: "Nashville, TN",
+        birthday: birthdayForAge(20),
+      },
+    });
+
+    render(<DateWizard membershipTier="social" />);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: /drink/i })
+      ).not.toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(/drink dates unlock when you turn 21/i)
+    ).toBeInTheDocument();
+  });
+
+  it("offers eat, drink, and play toggles to members 21 and up", async () => {
+    mocks.getProfile.mockResolvedValue({
+      profile: {
+        area: "Nashville, TN",
+        birthday: birthdayForAge(30),
+      },
+    });
+
+    render(<DateWizard membershipTier="mingle" />);
+
+    expect(
+      await screen.findByRole("button", { name: /^eat/i })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^drink/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^play/i })).toBeInTheDocument();
+  });
+
+  it("moves to the places step once the plan is valid", async () => {
+    const user = userEvent.setup();
+    mocks.getProfile.mockResolvedValue({
+      profile: {
+        area: "Nashville, TN",
+        birthday: birthdayForAge(28),
+      },
+    });
+
+    render(<DateWizard membershipTier="mingle" />);
+
+    await screen.findByRole("button", { name: /^eat/i });
+    await user.click(
+      screen.getByRole("button", { name: /continue to spots/i })
+    );
+
+    expect(await screen.findByText(/your spots/i)).toBeInTheDocument();
+    expect(mocks.suggestPlaces).toHaveBeenCalledWith(
+      expect.objectContaining({ area: "Nashville, TN", what: ["eat"] })
+    );
   });
 });

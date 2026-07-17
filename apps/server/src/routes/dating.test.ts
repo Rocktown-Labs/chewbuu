@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import app from "../app";
 import {
   buildGooglePlacesTextQuery,
+  isJoinableInvite,
   mergeInviteRowsForSave,
   normalizeGooglePlaces,
 } from "./dating";
@@ -516,5 +517,63 @@ describe("dating routes", () => {
         types: ["restaurant", "bar", "food"],
       },
     ]);
+  });
+
+  it("keeps Google Places coordinates when present", () => {
+    expect(
+      normalizeGooglePlaces([
+        {
+          displayName: { text: "Big Orange" },
+          id: "place-with-coords",
+          location: { latitude: 34.7465, longitude: -92.2896 },
+        },
+      ])
+    ).toEqual([
+      {
+        latitude: 34.7465,
+        longitude: -92.2896,
+        name: "Big Orange",
+        placeId: "place-with-coords",
+        types: [],
+      },
+    ]);
+  });
+});
+
+describe("isJoinableInvite", () => {
+  it("joins when the invite email matches the new account", () => {
+    expect(
+      isJoinableInvite(
+        { email: "Friend@Example.com", status: "sent" },
+        { email: "friend@example.com" }
+      )
+    ).toBe(true);
+  });
+
+  it("joins when normalized phone numbers match", () => {
+    expect(
+      isJoinableInvite(
+        { phone: "(555) 123-4567", status: "pending" },
+        { email: "other@example.com", phone: "555.123.4567" }
+      )
+    ).toBe(true);
+  });
+
+  it("does not re-join an already joined invite", () => {
+    expect(
+      isJoinableInvite(
+        { email: "friend@example.com", status: "joined" },
+        { email: "friend@example.com" }
+      )
+    ).toBe(false);
+  });
+
+  it("does not join unrelated invites", () => {
+    expect(
+      isJoinableInvite(
+        { email: "someone@example.com", status: "sent" },
+        { email: "other@example.com" }
+      )
+    ).toBe(false);
   });
 });
