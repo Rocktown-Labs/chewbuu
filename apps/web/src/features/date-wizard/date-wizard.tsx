@@ -5,7 +5,7 @@ import {
   AvatarImage,
 } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
-import { Button } from "@chewbuu/ui/components/button";
+import { Button, buttonVariants } from "@chewbuu/ui/components/button";
 import {
   Card,
   CardContent,
@@ -33,6 +33,7 @@ import {
   ToggleGroupItem,
 } from "@chewbuu/ui/components/toggle-group";
 import { useForm } from "@tanstack/react-form";
+import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ChevronRight,
@@ -237,10 +238,14 @@ export function DateWizard({ membershipTier }: { membershipTier: string }) {
                 <Video data-icon="inline-start" />
                 View intro
               </Button>
-              <Button variant="outline">
+              <Link
+                className={buttonVariants({ variant: "outline" })}
+                params={{ matchid: activeMatch?.id ?? "" }}
+                to="/matches/$matchid"
+              >
                 <MessageCircle data-icon="inline-start" />
                 Open room
-              </Button>
+              </Link>
             </div>
             <p className="text-xs text-muted-foreground">
               Intro videos are exchanged first. Each person sends three more

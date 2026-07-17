@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added Stream-backed match rooms with server-issued Stream tokens, deterministic chat channels, video call setup, staged video-reply prompts, and recap feed draft posting.
 - Added a dedicated onboarding Values step for politics, religion, kids, future kids, and what users are looking for.
 - Added a public homepage pricing section backed by the pricing API and a footer with public navigation.
 - Added a dashboard Matches tab for date requests, chat/save/decline actions, and honest empty states.
