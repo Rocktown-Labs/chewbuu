@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@chewbuu/ui/components/dropdown-menu";
 import { Skeleton } from "@chewbuu/ui/components/skeleton";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";
 
@@ -22,13 +22,7 @@ export default function UserMenu() {
   }
 
   if (!session) {
-    return (
-      <Link to="/login">
-        <Button className="rounded-full" variant="outline">
-          Sign In
-        </Button>
-      </Link>
-    );
+    return null;
   }
 
   return (

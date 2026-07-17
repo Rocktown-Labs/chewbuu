@@ -125,6 +125,10 @@ const FAQS = [
     a: "At the end of every date, users are required to review the place and rate their date partner. Your Chewbuu Score reflects your safety, friendliness, and compatibility history, keeping the community safe.",
   },
   {
+    q: "How does Chewbuu use my data?",
+    a: "Chewbuu uses profile, date, location, and safety data to run the service, prevent fake profiles, suggest places, manage dates, and keep people safer. We are built around subscriptions and date commerce, not selling personal dating data.",
+  },
+  {
     q: "Where is Chewbuu currently available?",
     a: "Chewbuu is currently active in Nashville, TN, Little Rock, AR, and surrounding areas. We are rapidly expanding to other cities!",
   },
@@ -392,6 +396,12 @@ const HomeComponent = () => {
             <a className="hover:text-foreground" href="/#pricing">
               Pricing
             </a>
+            <Link className="hover:text-foreground" to="/privacy">
+              Privacy
+            </Link>
+            <Link className="hover:text-foreground" to="/terms">
+              Terms
+            </Link>
             <Link className="hover:text-foreground" to="/auth/sign-in">
               Sign In
             </Link>

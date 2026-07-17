@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added launch-draft Privacy Policy and Terms of Service pages linked from the homepage footer.
+- Added AI overview and acknowledgement controls for Privacy and Terms pages, plus required policy acceptance during signup.
 - Added a dedicated onboarding Values step for politics, religion, kids, future kids, and what users are looking for.
 - Added a public homepage pricing section backed by the pricing API and a footer with public navigation.
 - Added a dashboard Matches tab for date requests, chat/save/decline actions, and honest empty states.
@@ -27,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed authenticated header navigation to center app menu items and remove duplicate sign-in actions.
 - Fixed public navigation so logged-out users see marketing/auth routes and logged-in users no longer see app/admin routes on the homepage.
 - Replaced fake homepage trending couples, dashboard recaps, ratings, and compatibility placeholders with real profile/request/recap data or clear empty states.
 - Updated dashboard dating readiness to reflect complete profile values, media, location, and safety contacts instead of partially complete onboarding.
