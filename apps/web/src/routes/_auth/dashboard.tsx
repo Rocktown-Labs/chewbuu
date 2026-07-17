@@ -1,14 +1,12 @@
 import {
   Avatar,
   AvatarFallback,
-  AvatarGroup,
   AvatarImage,
 } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button, buttonVariants } from "@chewbuu/ui/components/button";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -21,13 +19,11 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   CalendarCheck,
   CalendarHeart,
-  Camera,
   Check,
   ChevronRight,
   ClipboardList,
   Heart,
   Home,
-  ImagePlus,
   LogOut,
   MapPin,
   MessageSquare,
@@ -60,136 +56,44 @@ interface DateRecap {
   placeAddress: string;
   photos: string[];
   caption: string;
-  placeRating: number;
   personName: string;
-  compatibilityScore: number;
   createdAt: string;
 }
-
-const defaultRecaps: DateRecap[] = [
-  {
-    id: "recap-1",
-    userName: "Sarah Smith",
-    userAvatar: "",
-    placeName: "KJ's Market & Sandwich Shop",
-    placeAddress: "123 Date St, Nashville, TN",
-    photos: [
-      "https://images.unsplash.com/photo-1509722747041-616f39b57569?w=500&auto=format&fit=crop&q=60",
-    ],
-    caption:
-      "Grabbing lunch at KJ's was amazing! The chicken and waffles were perfect.",
-    placeRating: 5,
-    personName: "Dax",
-    compatibilityScore: 94,
-    createdAt: "2026-07-13T18:30:00.000Z",
-  },
-  {
-    id: "recap-2",
-    userName: "Dax Stewart",
-    userAvatar: "",
-    placeName: "Cue & Co. Pool Hall",
-    placeAddress: "456 Social Ave, Little Rock, AR",
-    photos: [
-      "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=500&auto=format&fit=crop&q=60",
-    ],
-    caption:
-      "Washed Sarah at pool tonight. Extremely fun spot for drinks and games.",
-    placeRating: 4,
-    personName: "Sarah",
-    compatibilityScore: 89,
-    createdAt: "2026-07-12T22:15:00.000Z",
-  },
-  {
-    id: "recap-3",
-    userName: "Jessica Miller",
-    userAvatar: "",
-    placeName: "The Golden Booth",
-    placeAddress: "789 Table Rd, Nashville, TN",
-    photos: [
-      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=500&auto=format&fit=crop&q=60",
-    ],
-    caption: "Mingle date went great! Food and mocktails were lovely.",
-    placeRating: 5,
-    personName: "Cameron & Friends",
-    compatibilityScore: 91,
-    createdAt: "2026-07-11T20:00:00.000Z",
-  },
-];
-
-const mockSpots = {
-  eat: [
-    {
-      id: "spot-1",
-      name: "KJ's Market & Sandwich Shop",
-      address: "Nashville, TN",
-      rating: "4.8",
-      image:
-        "https://images.unsplash.com/photo-1509722747041-616f39b57569?w=300&auto=format&fit=crop&q=60",
-      tags: ["Sandwiches", "Lunch", "Casual"],
-    },
-    {
-      id: "spot-2",
-      name: "The Golden Booth",
-      address: "Nashville, TN",
-      rating: "4.7",
-      image:
-        "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=300&auto=format&fit=crop&q=60",
-      tags: ["Italian", "Fine Dining", "Cocktails"],
-    },
-  ],
-  drink: [
-    {
-      id: "spot-3",
-      name: "Whiskey Cabin",
-      address: "Nashville, TN",
-      rating: "4.9",
-      image:
-        "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=300&auto=format&fit=crop&q=60",
-      tags: ["Bourbon", "Bar", "Live Music"],
-    },
-    {
-      id: "spot-4",
-      name: "Boba Haven",
-      address: "Little Rock, AR",
-      rating: "4.5",
-      image:
-        "https://images.unsplash.com/photo-1507133750040-4a8f57021571?w=300&auto=format&fit=crop&q=60",
-      tags: ["Tea", "Mocktails", "Desserts"],
-    },
-  ],
-  play: [
-    {
-      id: "spot-5",
-      name: "Cue & Co.",
-      address: "Little Rock, AR",
-      rating: "4.6",
-      image:
-        "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=300&auto=format&fit=crop&q=60",
-      tags: ["Billiards", "Social", "Arcade"],
-    },
-    {
-      id: "spot-6",
-      name: "Good Company Social",
-      address: "Nashville, TN",
-      rating: "4.8",
-      image:
-        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=60",
-      tags: ["Comedy", "Bowling", "Games"],
-    },
-  ],
-};
 
 export const Route = createFileRoute("/_auth/dashboard")({
   component: RouteComponent,
 });
 
+const getAge = (birthdayString: string) => {
+  const birthday = new Date(birthdayString);
+  if (Number.isNaN(birthday.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthday.getFullYear();
+  const monthOffset = today.getMonth() - birthday.getMonth();
+  if (
+    monthOffset < 0 ||
+    (monthOffset === 0 && today.getDate() < birthday.getDate())
+  ) {
+    age -= 1;
+  }
+
+  return age;
+};
+
+const formatLabel = (value: string) =>
+  value
+    .split("_")
+    .join(" ")
+    .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
+
 function RouteComponent() {
   const { session } = Route.useRouteContext();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<"feed" | "spots" | "profile">(
-    "feed"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "feed" | "matches" | "spots" | "profile"
+  >("feed");
   const [spotsCategory, setSpotsCategory] = useState<
     "all" | "eat" | "drink" | "play"
   >("all");
@@ -199,6 +103,9 @@ function RouteComponent() {
 
   const [summary, setSummary] = useState<DatingSummary | null>(null);
   const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
+  const [spots, setSpots] = useState<DatePlace[]>([]);
+  const [spotsQuery, setSpotsQuery] = useState("");
+  const [isLoadingSpots, setIsLoadingSpots] = useState(false);
 
   // Local state for user's own uploaded date recaps (persisted to localStorage)
   const [userRecaps, setUserRecaps] = useState<DateRecap[]>([]);
@@ -207,9 +114,7 @@ function RouteComponent() {
     placeName: "",
     placeAddress: "",
     caption: "",
-    placeRating: 5,
     personName: "",
-    compatibilityScore: 90,
     photoUrl: "",
   });
 
@@ -243,7 +148,7 @@ function RouteComponent() {
   }, []);
 
   const allRecaps = useMemo(() => {
-    return [...userRecaps, ...defaultRecaps].toSorted(
+    return userRecaps.toSorted(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -257,6 +162,39 @@ function RouteComponent() {
   const profilePhoto = media.find((item) => item.kind === "profile_photo")?.url;
   const introVideo = media.find((item) => item.kind === "intro_video")?.url;
   const extraPhotos = media.filter((item) => item.kind === "photo");
+  const profilePhotos = [
+    ...(profilePhoto ? [{ url: profilePhoto }] : []),
+    ...extraPhotos,
+  ];
+  const trustedContactCount = profile?.trustedContacts?.length ?? 0;
+  const spouseInvite = profile?.friendInvites?.find(
+    (invite) => invite.relationship === "spouse"
+  );
+  const circleInvites =
+    profile?.friendInvites?.filter(
+      (invite) => invite.relationship !== "spouse"
+    ) ?? [];
+  const age = profile?.birthday ? getAge(profile.birthday) : null;
+  const profileComplete = Boolean(
+    profile?.bio &&
+    profile?.area &&
+    profile?.birthday &&
+    profile?.lookingFor?.length &&
+    profile?.politics &&
+    profile?.religion &&
+    profile?.kids &&
+    profile?.wantsKids
+  );
+  const readinessItems = [
+    { checked: profileComplete, label: "Profile Details" },
+    { checked: !!profilePhoto, label: "Verified Photo" },
+    { checked: !!introVideo, label: "Verified Video" },
+    { checked: !!profile?.area, label: "Dating Location" },
+    { checked: trustedContactCount > 0, label: "Safety Contact" },
+  ];
+  const readinessReady =
+    canDate && readinessItems.every((item) => item.checked);
+  const pendingRequests = summary?.requests ?? [];
 
   const handleSignOut = async () => {
     try {
@@ -281,14 +219,9 @@ function RouteComponent() {
       userAvatar: profilePhoto ?? "",
       placeName: recapForm.placeName,
       placeAddress: recapForm.placeAddress || "Nashville, TN",
-      photos: [
-        recapForm.photoUrl ||
-          "https://images.unsplash.com/photo-1509722747041-616f39b57569?w=500&auto=format&fit=crop&q=60",
-      ],
+      photos: recapForm.photoUrl ? [recapForm.photoUrl] : [],
       caption: recapForm.caption,
-      placeRating: Number(recapForm.placeRating),
       personName: recapForm.personName || "Date Partner",
-      compatibilityScore: Number(recapForm.compatibilityScore),
       createdAt: new Date().toISOString(),
     };
 
@@ -301,13 +234,56 @@ function RouteComponent() {
       placeName: "",
       placeAddress: "",
       caption: "",
-      placeRating: 5,
       personName: "",
-      compatibilityScore: 90,
       photoUrl: "",
     });
     toast.success("Date recap uploaded to your feed!");
   };
+
+  useEffect(() => {
+    if (!profile?.area) {
+      setSpots([]);
+      return;
+    }
+
+    const fetchSpots = async () => {
+      setIsLoadingSpots(true);
+      try {
+        const what =
+          spotsCategory === "all"
+            ? (["eat", "drink", "play"] as const)
+            : ([spotsCategory] as const);
+        const { places } = await datingApi.suggestPlaces({
+          area: profile.area,
+          filters: spotsQuery.trim() ? [spotsQuery.trim()] : ["date spot"],
+          latitude: profile.latitude || undefined,
+          longitude: profile.longitude || undefined,
+          what: [...what],
+        });
+        setSpots(places);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Could not load nearby date spots."
+        );
+      } finally {
+        setIsLoadingSpots(false);
+      }
+    };
+
+    const timeout = window.setTimeout(() => {
+      void fetchSpots();
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    profile?.area,
+    profile?.latitude,
+    profile?.longitude,
+    spotsCategory,
+    spotsQuery,
+  ]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex justify-center">
@@ -352,6 +328,18 @@ function RouteComponent() {
               >
                 <MapPin className="size-5" />
                 <span>Spots</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("matches")}
+                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                  activeTab === "matches"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <Heart className="size-5" />
+                <span>Matches</span>
               </button>
               <button
                 type="button"
@@ -433,6 +421,7 @@ function RouteComponent() {
           <div className="flex gap-2">
             <button
               type="button"
+              aria-label="Feed"
               onClick={() => setActiveTab("feed")}
               className={`p-2 rounded-full ${activeTab === "feed" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
             >
@@ -440,6 +429,7 @@ function RouteComponent() {
             </button>
             <button
               type="button"
+              aria-label="Spots"
               onClick={() => setActiveTab("spots")}
               className={`p-2 rounded-full ${activeTab === "spots" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
             >
@@ -447,6 +437,15 @@ function RouteComponent() {
             </button>
             <button
               type="button"
+              aria-label="Matches"
+              onClick={() => setActiveTab("matches")}
+              className={`p-2 rounded-full ${activeTab === "matches" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
+            >
+              <Heart className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Profile"
               onClick={() => setActiveTab("profile")}
               className={`p-2 rounded-full ${activeTab === "profile" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
             >
@@ -511,9 +510,29 @@ function RouteComponent() {
 
               {/* Recaps Feed List */}
               <div className="flex flex-col divide-y divide-border/70">
+                {allRecaps.length === 0 && (
+                  <div className="p-8 text-center">
+                    <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <CalendarCheck className="size-6" />
+                    </div>
+                    <h3 className="font-bold text-lg">No recaps yet</h3>
+                    <p className="mx-auto mt-2 max-w-md text-muted-foreground text-sm/relaxed">
+                      After you go on a date, you can collect photos and videos
+                      into a recap and choose when to post it.
+                    </p>
+                    <Link
+                      to={canDate ? "/date/new" : "/onboarding"}
+                      className={buttonVariants({
+                        className: "mt-5 rounded-full text-sm font-semibold",
+                        size: "sm",
+                      })}
+                    >
+                      {canDate ? "Plan a Date" : "Finish Profile"}
+                    </Link>
+                  </div>
+                )}
                 {allRecaps.map((recap) => (
                   <article className="p-5 flex flex-col gap-4" key={recap.id}>
-                    {/* Recap Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <Avatar className="size-10 border border-border">
@@ -535,21 +554,15 @@ function RouteComponent() {
                         </div>
                       </div>
 
-                      {/* Compatibility Badge */}
-                      <Badge
-                        className="rounded-full bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-bold"
-                        variant="outline"
-                      >
-                        {recap.compatibilityScore}% Compatibility
+                      <Badge className="rounded-full" variant="secondary">
+                        Recap
                       </Badge>
                     </div>
 
-                    {/* Recap Body */}
                     <p className="text-sm/relaxed font-medium text-foreground">
                       {recap.caption}
                     </p>
 
-                    {/* Place Card Inside Recap */}
                     <div className="rounded-2xl border border-border/80 p-3 bg-card/40 flex items-center justify-between gap-4">
                       <div className="flex items-start gap-2.5">
                         <MapPin className="size-4 text-primary shrink-0 mt-0.5" />
@@ -562,13 +575,8 @@ function RouteComponent() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0 bg-yellow-500/10 text-yellow-600 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                        <Star className="size-3 fill-yellow-500 text-yellow-500" />
-                        <span>{recap.placeRating}.0</span>
-                      </div>
                     </div>
 
-                    {/* Recap Image */}
                     {recap.photos.length > 0 && (
                       <div className="aspect-video w-full rounded-2xl overflow-hidden border border-border/80 bg-muted/20">
                         <img
@@ -579,16 +587,13 @@ function RouteComponent() {
                       </div>
                     )}
 
-                    {/* Feedback Rating details */}
                     <p className="text-xs text-muted-foreground italic">
-                      Date partner rating:{" "}
+                      Date with{" "}
                       <span className="font-bold text-foreground">
                         {recap.personName}
-                      </span>{" "}
-                      was rated 5/5. Both place & person reviews cleared.
+                      </span>
                     </p>
 
-                    {/* Interaction Bar */}
                     <div className="flex items-center gap-6 border-t border-border/40 pt-3 text-muted-foreground text-xs font-semibold">
                       <button
                         type="button"
@@ -611,6 +616,96 @@ function RouteComponent() {
             </div>
           )}
 
+          {activeTab === "matches" && (
+            <div className="flex flex-col">
+              <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
+                <h2 className="text-xl font-bold">Matches & Requests</h2>
+                <p className="mt-1 text-muted-foreground text-xs">
+                  Review date requests, save people for later, decline, or chat
+                  once the match is ready.
+                </p>
+              </div>
+              <div className="grid gap-4 p-5">
+                {pendingRequests.length === 0 ? (
+                  <Card className="rounded-2xl border-border bg-card/45">
+                    <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
+                      <Heart className="size-8 text-primary" />
+                      <CardTitle className="text-base">
+                        No active date requests yet
+                      </CardTitle>
+                      <CardDescription className="max-w-sm">
+                        Start with a date request. Chewbuu will use your profile
+                        and chosen spots to find people you can match, chat
+                        with, decline, or save for later.
+                      </CardDescription>
+                      <Link
+                        to={canDate ? "/date/new" : "/onboarding"}
+                        className={buttonVariants({
+                          className: "mt-2 rounded-full text-xs font-semibold",
+                          size: "sm",
+                        })}
+                      >
+                        {canDate ? "Request a Date" : "Finish Profile"}
+                      </Link>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  pendingRequests.map((request) => (
+                    <Card
+                      className="rounded-2xl border-border bg-card/45"
+                      key={request.id}
+                    >
+                      <CardHeader>
+                        <CardTitle className="text-base">
+                          {request.what.map(formatLabel).join(", ")} date
+                        </CardTitle>
+                        <CardDescription>
+                          {new Date(request.scheduledAt).toLocaleString()} in{" "}
+                          {request.searchArea}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-3">
+                        <div className="flex flex-wrap gap-2">
+                          {request.places?.length ? (
+                            request.places.map((place) => (
+                              <Badge key={place.placeId} variant="secondary">
+                                {place.name}
+                              </Badge>
+                            ))
+                          ) : (
+                            <Badge variant="secondary">Places pending</Badge>
+                          )}
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-3">
+                          <Button className="rounded-full" disabled size="sm">
+                            <MessageSquare className="mr-1.5 size-4" />
+                            Chat Soon
+                          </Button>
+                          <Button
+                            className="rounded-full"
+                            disabled
+                            size="sm"
+                            variant="outline"
+                          >
+                            Save Soon
+                          </Button>
+                          <Button
+                            className="rounded-full"
+                            disabled
+                            size="sm"
+                            variant="ghost"
+                          >
+                            Decline Soon
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
           {/* SPOTS SUB-VIEW (DoorDash Style) */}
           {activeTab === "spots" && (
             <div className="flex flex-col">
@@ -621,7 +716,9 @@ function RouteComponent() {
                   <Search className="absolute left-3.5 top-3.5 size-4 text-muted-foreground" />
                   <Input
                     className="pl-10 rounded-full h-11 bg-card/60"
+                    onChange={(event) => setSpotsQuery(event.target.value)}
                     placeholder={`Search Eat, Drink, Play spots in ${profile?.area || "Nashville, TN"}...`}
+                    value={spotsQuery}
                   />
                 </div>
               </div>
@@ -631,7 +728,9 @@ function RouteComponent() {
                 {["all", "eat", "drink", "play"].map((cat) => (
                   <button
                     key={cat}
-                    onClick={() => setSpotsCategory(cat as any)}
+                    onClick={() =>
+                      setSpotsCategory(cat as "all" | "drink" | "eat" | "play")
+                    }
                     className={`rounded-full px-5 py-1.5 text-xs font-bold capitalize transition shrink-0 cursor-pointer ${
                       spotsCategory === cat
                         ? "bg-primary text-primary-foreground"
@@ -644,64 +743,37 @@ function RouteComponent() {
                 ))}
               </div>
 
-              {/* Spot Grid Content */}
               <div className="p-5 flex flex-col gap-8">
-                {(spotsCategory === "all" || spotsCategory === "eat") && (
-                  <div className="flex flex-col gap-4">
-                    <h3 className="font-bold text-lg text-foreground flex items-center justify-between">
-                      <span>Top Eat Spots Near You</span>
-                      <ChevronRight className="size-4 text-muted-foreground" />
-                    </h3>
+                <div className="flex flex-col gap-4">
+                  <h3 className="font-bold text-lg text-foreground flex items-center justify-between">
+                    <span>
+                      Date spots near {profile?.area || "your saved area"}
+                    </span>
+                    <ChevronRight className="size-4 text-muted-foreground" />
+                  </h3>
+                  {isLoadingSpots ? (
+                    <p className="text-sm text-muted-foreground">
+                      Finding nearby date spots...
+                    </p>
+                  ) : spots.length === 0 ? (
+                    <Card className="rounded-2xl border-border bg-card/45">
+                      <CardContent className="p-6 text-sm text-muted-foreground">
+                        Add your dating location in onboarding to fetch real
+                        spots near you.
+                      </CardContent>
+                    </Card>
+                  ) : (
                     <div className="grid gap-4 md:grid-cols-2">
-                      {mockSpots.eat.map((spot) => (
+                      {spots.map((spot) => (
                         <SpotCard
-                          key={spot.id}
+                          key={spot.placeId}
                           spot={spot}
-                          category="eat"
                           canDate={canDate}
                         />
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {(spotsCategory === "all" || spotsCategory === "drink") && (
-                  <div className="flex flex-col gap-4">
-                    <h3 className="font-bold text-lg text-foreground flex items-center justify-between">
-                      <span>Top Drink Spots Near You</span>
-                      <ChevronRight className="size-4 text-muted-foreground" />
-                    </h3>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {mockSpots.drink.map((spot) => (
-                        <SpotCard
-                          key={spot.id}
-                          spot={spot}
-                          category="drink"
-                          canDate={canDate}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {(spotsCategory === "all" || spotsCategory === "play") && (
-                  <div className="flex flex-col gap-4">
-                    <h3 className="font-bold text-lg text-foreground flex items-center justify-between">
-                      <span>Top Play Spots Near You</span>
-                      <ChevronRight className="size-4 text-muted-foreground" />
-                    </h3>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {mockSpots.play.map((spot) => (
-                        <SpotCard
-                          key={spot.id}
-                          spot={spot}
-                          category="play"
-                          canDate={canDate}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -746,16 +818,15 @@ function RouteComponent() {
                     </div>
                     <div className="flex flex-col border-x border-border/80">
                       <span className="font-extrabold text-lg md:text-xl text-foreground flex items-center justify-center gap-0.5">
-                        4.9{" "}
-                        <Star className="size-3.5 fill-yellow-500 text-yellow-500 shrink-0" />
+                        {pendingRequests.length}
                       </span>
                       <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
-                        Score
+                        Requests
                       </span>
                     </div>
                     <div className="flex flex-col">
                       <span className="font-extrabold text-lg md:text-xl text-foreground">
-                        {profile?.friendInvites?.length ?? 0}
+                        {circleInvites.length}
                       </span>
                       <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
                         Circle
@@ -768,11 +839,16 @@ function RouteComponent() {
                 <div className="flex flex-col text-left gap-1.5 mt-2">
                   <h3 className="font-bold text-lg text-foreground flex items-center gap-1.5">
                     {displayName}
+                    {age ? (
+                      <span className="text-muted-foreground font-semibold">
+                        {age}
+                      </span>
+                    ) : null}
                     <Check className="size-4 text-primary fill-primary/10 rounded-full" />
                   </h3>
                   {profile?.occupation && (
-                    <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                      💼 {profile.occupation}
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      {profile.occupation}
                     </p>
                   )}
                   {profile?.bio && (
@@ -782,23 +858,62 @@ function RouteComponent() {
                   )}
 
                   {/* Private Details */}
-                  {profile?.race && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] font-semibold rounded-full px-2.5 py-0.5"
-                      >
-                        Private Race: {profile.race}
-                      </Badge>
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] font-semibold rounded-full px-2.5 py-0.5"
-                      >
-                        Sexuality: {profile.sexuality}
-                      </Badge>
-                    </div>
+                  {spouseInvite && (
+                    <p className="text-xs text-muted-foreground">
+                      Spouse or partner invited:{" "}
+                      <span className="font-semibold text-foreground">
+                        @
+                        {spouseInvite.name ||
+                          spouseInvite.email?.split("@")[0] ||
+                          spouseInvite.phone ||
+                          "pending"}
+                      </span>
+                    </p>
                   )}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {profile?.lookingFor?.map((item) => (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] font-semibold rounded-full px-2.5 py-0.5"
+                        key={item}
+                      >
+                        {item}
+                      </Badge>
+                    ))}
+                    {profile?.kids && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] font-semibold rounded-full px-2.5 py-0.5"
+                      >
+                        {profile.kids}
+                      </Badge>
+                    )}
+                    {profile?.wantsKids && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] font-semibold rounded-full px-2.5 py-0.5"
+                      >
+                        {profile.wantsKids}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+                {profilePhotos.length > 0 && (
+                  <div className="flex gap-3 overflow-x-auto pt-2">
+                    {profilePhotos.slice(0, 6).map((photo, index) => (
+                      <div
+                        className="h-28 w-28 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted/20"
+                        key={`${photo.url}-${index}`}
+                      >
+                        <img
+                          alt={`Profile ${index + 1}`}
+                          className="h-full w-full object-cover"
+                          src={photo.url}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Instagram Sub-tabs */}
@@ -812,7 +927,7 @@ function RouteComponent() {
                       : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  Date Reels
+                  Recaps
                 </button>
                 <button
                   type="button"
@@ -849,7 +964,7 @@ function RouteComponent() {
                       variant="outline"
                     >
                       <Plus className="size-4" />
-                      Upload New Date Recap (Reel)
+                      Upload New Date Recap
                     </Button>
 
                     {/* Add Recap Form Dialog */}
@@ -899,42 +1014,6 @@ function RouteComponent() {
                           </div>
 
                           <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-bold text-muted-foreground ml-1">
-                                Place Rating (1-5)
-                              </span>
-                              <Input
-                                type="number"
-                                min="1"
-                                max="5"
-                                value={recapForm.placeRating}
-                                onChange={(e) =>
-                                  setRecapForm({
-                                    ...recapForm,
-                                    placeRating: Number(e.target.value),
-                                  })
-                                }
-                                className="rounded-full h-9 text-xs"
-                              />
-                            </div>
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-bold text-muted-foreground ml-1">
-                                Compatibility Score (1-100)
-                              </span>
-                              <Input
-                                type="number"
-                                min="1"
-                                max="100"
-                                value={recapForm.compatibilityScore}
-                                onChange={(e) =>
-                                  setRecapForm({
-                                    ...recapForm,
-                                    compatibilityScore: Number(e.target.value),
-                                  })
-                                }
-                                className="rounded-full h-9 text-xs"
-                              />
-                            </div>
                             <div className="flex flex-col gap-1">
                               <span className="text-[10px] font-bold text-muted-foreground ml-1">
                                 Photo URL (Optional)
@@ -991,51 +1070,41 @@ function RouteComponent() {
                       </Card>
                     )}
 
-                    {/* User's own recaps grid */}
                     <div className="grid gap-4 md:grid-cols-2">
-                      {allRecaps
-                        .filter((r) => r.userName === displayName)
-                        .map((recap) => (
-                          <div
-                            className="rounded-2xl border bg-card overflow-hidden shadow-sm hover:shadow-md transition duration-200"
-                            key={recap.id}
-                          >
+                      {userRecaps.map((recap) => (
+                        <div
+                          className="rounded-2xl border bg-card overflow-hidden shadow-sm hover:shadow-md transition duration-200"
+                          key={recap.id}
+                        >
+                          {recap.photos[0] && (
                             <div className="aspect-video w-full relative bg-muted/10">
                               <img
                                 src={recap.photos[0]}
                                 alt={recap.placeName}
                                 className="w-full h-full object-cover"
                               />
-                              <Badge
-                                className="absolute top-3 right-3 rounded-full bg-black/60 text-white font-bold text-[10px]"
-                                variant="secondary"
-                              >
-                                {recap.compatibilityScore}% Co.
-                              </Badge>
                             </div>
-                            <div className="p-4 flex flex-col gap-2">
-                              <span className="font-bold text-xs text-primary">
-                                {recap.placeName}
+                          )}
+                          <div className="p-4 flex flex-col gap-2">
+                            <span className="font-bold text-xs text-primary">
+                              {recap.placeName}
+                            </span>
+                            <p className="text-xs text-foreground/90 font-medium truncate">
+                              {recap.caption}
+                            </p>
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-2 border-t pt-2">
+                              <span>With {recap.personName}</span>
+                              <span>
+                                {new Date(recap.createdAt).toLocaleDateString()}
                               </span>
-                              <p className="text-xs text-foreground/90 font-medium truncate">
-                                {recap.caption}
-                              </p>
-                              <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-2 border-t pt-2">
-                                <span>{recap.personName} was rated 5/5</span>
-                                <span>
-                                  {new Date(
-                                    recap.createdAt
-                                  ).toLocaleDateString()}
-                                </span>
-                              </div>
                             </div>
                           </div>
-                        ))}
-                      {allRecaps.filter((r) => r.userName === displayName)
-                        .length === 0 && (
+                        </div>
+                      ))}
+                      {userRecaps.length === 0 && (
                         <p className="text-sm text-muted-foreground italic col-span-2 text-center py-8">
                           No date recaps uploaded yet. Go on dates to post
-                          reels!
+                          recaps.
                         </p>
                       )}
                     </div>
@@ -1094,43 +1163,36 @@ function RouteComponent() {
         {/* RIGHT SIDEBAR WIDGETS */}
         <aside className="lg:col-span-3 p-5 hidden lg:flex flex-col gap-6 sticky top-0 h-sticky overflow-y-auto">
           {/* Geolocation & Verification Checklist */}
-          <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold flex items-center gap-1.5">
-                <ShieldCheck className="size-4 text-primary" />
-                Dating Readiness
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground font-medium">
-                  Status:
-                </span>
-                <Badge
-                  className={`rounded-full text-[10px] font-bold ${canDate ? "bg-emerald-500/10 text-emerald-600" : "bg-yellow-500/10 text-yellow-600"}`}
-                >
-                  {canDate ? "Ready to Mingle" : "Action Required"}
-                </Badge>
-              </div>
+          {!readinessReady && (
+            <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="size-4 text-primary" />
+                  Dating Readiness
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground font-medium">
+                    Status:
+                  </span>
+                  <Badge className="rounded-full bg-red-500/10 text-[10px] font-bold text-red-500">
+                    Action Required
+                  </Badge>
+                </div>
 
-              {/* Checklist */}
-              <div className="flex flex-col gap-1.5 border-t border-border/40 pt-2">
-                <ChecklistItem
-                  label="Verified Photo"
-                  checked={!!profilePhoto}
-                />
-                <ChecklistItem label="Verified Video" checked={!!introVideo} />
-                <ChecklistItem
-                  label="Dating Location"
-                  checked={!!profile?.area}
-                />
-                <ChecklistItem
-                  label="Safety Contact"
-                  checked={(profile?.trustedContacts?.length ?? 0) > 0}
-                />
-              </div>
-            </CardContent>
-          </Card>
+                <div className="flex flex-col gap-1.5 border-t border-border/40 pt-2">
+                  {readinessItems.map((item) => (
+                    <ChecklistItem
+                      checked={item.checked}
+                      key={item.label}
+                      label={item.label}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Daily Limit Progress */}
           <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
@@ -1172,11 +1234,11 @@ function RouteComponent() {
             <CardContent className="flex flex-col gap-2.5">
               <div className="flex items-center justify-between text-xs font-bold text-muted-foreground border-b pb-2 mb-1">
                 <span>Circle Friends</span>
-                <span>({profile?.friendInvites?.length ?? 0})</span>
+                <span>({circleInvites.length})</span>
               </div>
-              {profile?.friendInvites && profile.friendInvites.length > 0 ? (
+              {circleInvites.length > 0 ? (
                 <div className="flex flex-col gap-2">
-                  {profile.friendInvites.map((friend, i) => (
+                  {circleInvites.map((friend, i) => (
                     <div
                       className="flex items-center justify-between gap-2"
                       key={i}
@@ -1193,7 +1255,7 @@ function RouteComponent() {
                         className="text-[8px] font-bold uppercase rounded-full"
                         variant="secondary"
                       >
-                        Active
+                        {friend.status ?? "pending"}
                       </Badge>
                     </div>
                   ))}
@@ -1223,55 +1285,41 @@ function ChecklistItem({
       <span className={checked ? "text-foreground" : "text-muted-foreground"}>
         {label}
       </span>
-      {checked ? (
-        <Check className="size-3 text-primary" />
-      ) : (
-        <span className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
-      )}
+      <span
+        aria-label={checked ? "Complete" : "Incomplete"}
+        className={`h-2.5 w-2.5 rounded-full ${
+          checked ? "bg-emerald-500" : "bg-red-500"
+        }`}
+      />
     </div>
   );
 }
 
-function SpotCard({
-  spot,
-  category,
-  canDate,
-}: {
-  spot: {
-    id: string;
-    name: string;
-    address: string;
-    rating: string;
-    image: string;
-    tags: string[];
-  };
-  category: string;
-  canDate: boolean;
-}) {
+function SpotCard({ spot, canDate }: { spot: DatePlace; canDate: boolean }) {
   return (
     <div className="rounded-2xl border border-border bg-card overflow-hidden hover:shadow-md transition duration-200 flex flex-col justify-between">
-      <div className="aspect-video w-full relative bg-muted/10 border-b border-border/40">
-        <img
-          src={spot.image}
-          alt={spot.name}
-          className="w-full h-full object-cover"
-        />
-        <Badge
-          className="absolute top-3 right-3 rounded-full bg-black/60 text-white font-bold text-[10px] flex items-center gap-0.5 border-0"
-          variant="secondary"
-        >
-          <Star className="size-3 fill-yellow-500 text-yellow-500" />
-          {spot.rating}
-        </Badge>
+      <div className="flex items-center justify-between border-b border-border/40 bg-muted/10 p-4">
+        <MapPin className="size-5 text-primary" />
+        {spot.rating && (
+          <Badge
+            className="rounded-full font-bold text-[10px] flex items-center gap-0.5"
+            variant="secondary"
+          >
+            <Star className="size-3 fill-yellow-500 text-yellow-500" />
+            {spot.rating}
+          </Badge>
+        )}
       </div>
       <div className="p-4 flex flex-col gap-3 justify-between flex-1">
         <div className="flex flex-col gap-1">
           <h4 className="font-bold text-sm text-foreground leading-snug">
             {spot.name}
           </h4>
-          <p className="text-[10px] text-muted-foreground">{spot.address}</p>
+          {spot.address && (
+            <p className="text-[10px] text-muted-foreground">{spot.address}</p>
+          )}
           <div className="flex flex-wrap gap-1 mt-1.5">
-            {spot.tags.map((tag) => (
+            {spot.types.slice(0, 3).map((tag) => (
               <Badge
                 key={tag}
                 className="text-[9px] font-semibold rounded-full px-2 py-0"
@@ -1285,7 +1333,7 @@ function SpotCard({
         <Link
           to={
             canDate
-              ? `/date/new?placeId=${spot.id}&placeName=${encodeURIComponent(spot.name)}`
+              ? `/date/new?placeId=${spot.placeId}&placeName=${encodeURIComponent(spot.name)}`
               : "/onboarding"
           }
           className={buttonVariants({
@@ -1293,7 +1341,8 @@ function SpotCard({
             size: "sm",
           })}
         >
-          📍 Plan Date Here
+          <MapPin className="mr-1.5 size-4" />
+          Plan Date Here
         </Link>
       </div>
     </div>

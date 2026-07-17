@@ -17,6 +17,8 @@ export interface DatingMedia {
 }
 
 export interface DatingProfilePayload {
+  ageRangeMax?: number;
+  ageRangeMin?: number;
   area: string;
   birthday: string;
   bio?: string;
@@ -32,13 +34,18 @@ export interface DatingProfilePayload {
   interestDetails: Record<string, string[]>;
   interestedIn: string[];
   interests: string[];
+  kids?: string;
+  lookingFor: string[];
   maritalStatus?: string;
   media: DatingMedia[];
+  politics?: string;
+  religion?: string;
   safetyOptIn: boolean;
   sex: string;
   sexuality: string;
   trustedContacts: { email?: string; name: string; phone?: string }[];
   weight?: string;
+  wantsKids?: string;
   phone?: string;
   occupation?: string;
   race?: string;

@@ -15,6 +15,7 @@ import aiRoute from "./routes/ai";
 import authRoute from "./routes/auth";
 import datingRoute from "./routes/dating";
 import pricingRoute from "./routes/pricing";
+import streamRoute from "./routes/stream";
 import uploadRoute from "./routes/upload";
 
 initLogger({
@@ -68,6 +69,7 @@ const routes = app
   .route("/", aiRoute)
   .route("/", datingRoute)
   .route("/", pricingRoute)
+  .route("/", streamRoute)
   .route("/", uploadRoute);
 
 app.notFound(notFound);

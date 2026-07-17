@@ -3,10 +3,21 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OnboardingForm } from "./onboarding-form";
+import { useOnboardingStore } from "./onboarding-store";
 
 const mocks = vi.hoisted(() => ({
+  getProfile: vi.fn(),
   getPlans: vi.fn(),
   navigate: vi.fn(),
+  saveProfile: vi.fn(),
+  session: {
+    data: {
+      user: {
+        email: "casey@example.com",
+        name: "Casey Tester",
+      },
+    },
+  },
 }));
 
 vi.mock("@tanstack/react-router", async () => {
@@ -28,8 +39,8 @@ vi.mock("@tanstack/react-router", async () => {
 
 vi.mock("@/lib/dating-api", () => ({
   datingApi: {
-    getProfile: vi.fn().mockResolvedValue(null),
-    saveProfile: vi.fn(),
+    getProfile: mocks.getProfile,
+    saveProfile: mocks.saveProfile,
   },
   getServerUrl: (url: string) => url,
   pricingApi: {
@@ -37,10 +48,34 @@ vi.mock("@/lib/dating-api", () => ({
   },
 }));
 
+vi.mock("@/lib/auth-client", () => ({
+  authClient: {
+    stripe: {
+      upgrade: vi.fn(),
+    },
+    updateUser: vi.fn(),
+    useSession: () => mocks.session,
+  },
+}));
+
+const birthdayForAge = (age: number, dayOffset = 0) => {
+  const today = new Date();
+  const birthday = new Date(
+    today.getFullYear() - age,
+    today.getMonth(),
+    today.getDate() + dayOffset
+  );
+  return birthday.toISOString().slice(0, 10);
+};
+
 describe("OnboardingForm", () => {
   beforeEach(() => {
+    localStorage.clear();
+    useOnboardingStore.getState().clear();
+    mocks.getProfile.mockResolvedValue(null);
     mocks.getPlans.mockResolvedValue({ plans: [] });
     mocks.navigate.mockReset();
+    mocks.saveProfile.mockReset();
   });
 
   it("renders the redesigned basics step with profile validation fields", async () => {
@@ -75,5 +110,37 @@ describe("OnboardingForm", () => {
       screen.getByRole("button", { name: /camera shutter/i })
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /record live/i })).toBeVisible();
+  });
+
+  it("shows an 18 and older stop screen after basics for underage users", async () => {
+    const user = userEvent.setup();
+    mocks.getProfile.mockResolvedValue({
+      profile: {
+        area: "Little Rock, AR",
+        bio: "I like real plans and good food.",
+        birthday: birthdayForAge(17, 1),
+        maritalStatus: "Single",
+        occupation: "Student",
+        phone: "(555) 555-5555",
+        race: "Prefer not to say",
+        sex: "Female",
+        sexuality: "Straight",
+      },
+    });
+
+    render(<OnboardingForm />);
+
+    await screen.findByRole("heading", {
+      name: /tell chewbuu who is going out/i,
+    });
+
+    await user.click(screen.getByRole("button", { name: /^next/i }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /sorry, chewbuu is for adults/i,
+      })
+    ).toBeVisible();
+    expect(screen.getByText(/come back on/i)).toBeVisible();
   });
 });

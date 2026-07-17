@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added launch-draft Privacy Policy and Terms of Service pages linked from the homepage footer.
+- Added AI overview and acknowledgement controls for Privacy and Terms pages, plus required policy acceptance during signup.
+- Added Stream-backed match rooms with server-issued Stream tokens, deterministic chat channels, video call setup, staged video-reply prompts, and recap feed draft posting.
+- Added a dedicated onboarding Values step for politics, religion, kids, future kids, and what users are looking for.
+- Added a public homepage pricing section backed by the pricing API and a footer with public navigation.
+- Added a dashboard Matches tab for date requests, chat/save/decline actions, and honest empty states.
 - Added relationship status collection during onboarding with spouse/partner invite capture for applicable users.
 - Added provider-ready onboarding invite notifications through Resend email and Sent.dm SMS adapters.
 - Added persistent Zustand onboarding store to save form progress across page refreshes.
@@ -21,9 +27,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Expanded Google Places category support to include eat, drink, play, move, watch, and talk with category-specific search keywords.
 - Added locationBias and includedType parameters to Google Places Text Search for more relevant results.
 - Added tests for move-category place suggestions and updated text query assertions.
+- Added explicit per-interest local spot searches in onboarding so Places results load only after a selected signal or manual query.
+- Added an onboarding Preferences step for match age range, interested-in choices, and looking-for choices.
+- Added an under-18 onboarding stop screen with a return date and under-21 match range limits.
 
 ### Fixed
 
+- Split the Stream match-room route into a lazy route chunk to reduce the default app bundle.
+- Fixed onboarding media uploads saving invalid fallback URLs when the upload provider does not return a public base URL.
+- Fixed onboarding multi-select pills for interested-in and looking-for fields.
+- Fixed circle friend invites so Social users can join circles by invite but cannot start one during onboarding.
+- Changed dashboard readiness indicators to red/green status dots and hide the readiness widget after the profile is date-ready.
+- Fixed authenticated header navigation to center app menu items and remove duplicate sign-in actions.
+- Fixed public navigation so logged-out users see marketing/auth routes and logged-in users no longer see app/admin routes on the homepage.
+- Replaced fake homepage trending couples, dashboard recaps, ratings, and compatibility placeholders with real profile/request/recap data or clear empty states.
+- Updated dashboard dating readiness to reflect complete profile values, media, location, and safety contacts instead of partially complete onboarding.
 - Fixed onboarding redirection loop by relaxing the gateway middleware to only check for completed basics profile fields.
 - Fixed dynamic inputs rendering delay in Friends & Safety tab by using store-level React state subscriptions.
 - Fixed missing assertion in the Google Places text query test.

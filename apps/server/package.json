@@ -21,12 +21,14 @@
     "@hono/node-server": "^2.0.8",
     "@hono/zod-openapi": "^1.4.0",
     "@scalar/hono-api-reference": "^0.11.9",
+    "@stream-io/node-sdk": "^0.7.62",
     "ai": "catalog:",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "evlog": "catalog:",
     "hono": "^4.12.27",
     "stoker": "^2.0.1",
+    "stream-chat": "^9.50.2",
     "zod": "catalog:"
   },
   "devDependencies": {

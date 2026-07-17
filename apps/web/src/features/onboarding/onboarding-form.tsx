@@ -26,10 +26,6 @@ import {
   SelectValue,
 } from "@chewbuu/ui/components/select";
 import { Textarea } from "@chewbuu/ui/components/textarea";
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@chewbuu/ui/components/toggle-group";
 import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -67,7 +63,15 @@ import {
 
 import { useOnboardingStore } from "./onboarding-store";
 
-const steps = ["Basics", "Media", "Interests", "Friends", "Premium"] as const;
+const steps = [
+  "Basics",
+  "Media",
+  "Preferences",
+  "Interests",
+  "Values",
+  "Friends",
+  "Premium",
+] as const;
 const areaPattern = /^[a-zA-Z .'-]+,\s?[A-Z]{2}$/;
 const sexOptions = [
   "Female",
@@ -108,6 +112,48 @@ const maritalStatusOptions = [
   "Prefer Not to Say",
 ];
 const spouseInviteStatuses = new Set(["Dating", "Engaged", "Married"]);
+const politicsOptions = [
+  "Liberal",
+  "Moderate",
+  "Conservative",
+  "Independent",
+  "Apolitical",
+  "Other",
+  "Prefer Not to Say",
+];
+const religionOptions = [
+  "Christian",
+  "Muslim",
+  "Jewish",
+  "Hindu",
+  "Buddhist",
+  "Spiritual",
+  "Agnostic",
+  "Atheist",
+  "Other",
+  "Prefer Not to Say",
+];
+const kidsOptions = ["Have Kids", "Do Not Have Kids", "Prefer Not to Say"];
+const wantsKidsOptions = [
+  "Want Kids",
+  "Open to Kids",
+  "Do Not Want Kids",
+  "Not Sure",
+  "Prefer Not to Say",
+];
+const lookingForOptions = [
+  "A relationship",
+  "Intentional dating",
+  "Casual dates",
+  "New friends",
+  "Double dates",
+  "Group hangs",
+  "Not sure yet",
+];
+
+const MINIMUM_AGE = 18;
+const UNDER_21_MATCH_MAX_AGE = 22;
+const MAXIMUM_MATCH_AGE = 99;
 
 const interestCategories = [
   {
@@ -249,6 +295,8 @@ const defaultValues = {
   area: "",
   bio: "",
   birthday: "",
+  ageRangeMax: MAXIMUM_MATCH_AGE,
+  ageRangeMin: MINIMUM_AGE,
   datingModes: ["solo"],
   favoriteThings: [],
   friendInvites: [],
@@ -256,15 +304,20 @@ const defaultValues = {
   interestDetails: {} as Record<string, string[]>,
   interestedIn: [] as string[],
   interests: [] as string[],
+  kids: "",
+  lookingFor: [] as string[],
   media: [
     { isPrimary: true, kind: "profile_photo", sortOrder: 0, url: "" },
     { kind: "intro_video", sortOrder: 0, url: "" },
   ] as DatingMedia[],
+  politics: "",
+  religion: "",
   safetyOptIn: false,
   sex: "",
   sexuality: "",
   trustedContacts: [] as { email?: string; name: string; phone?: string }[],
   weight: "",
+  wantsKids: "",
   latitude: "",
   longitude: "",
   maritalStatus: "",
@@ -273,11 +326,47 @@ const defaultValues = {
 type OnboardingFormApi = any;
 type UploadRoute = "introVideo" | "photo" | "profilePhoto";
 
+const getAge = (birthdayString: string) => {
+  const today = new Date();
+  const birthDate = new Date(birthdayString);
+  if (Number.isNaN(birthDate.getTime())) return null;
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthOffset = today.getMonth() - birthDate.getMonth();
+  if (
+    monthOffset < 0 ||
+    (monthOffset === 0 && today.getDate() < birthDate.getDate())
+  ) {
+    age -= 1;
+  }
+  return age;
+};
+
+const getDateWhenUserTurns = (birthdayString: string, age: number) => {
+  const birthDate = new Date(birthdayString);
+  if (Number.isNaN(birthDate.getTime())) return null;
+  return new Date(
+    birthDate.getFullYear() + age,
+    birthDate.getMonth(),
+    birthDate.getDate()
+  );
+};
+
+const formatEligibilityDate = (date: Date | null) => {
+  if (!date) return "your 18th birthday";
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+};
+
 const formatValue = (value: string) =>
   value
     .split(" ")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+
+const formatIdentity = (value: string) => value;
 
 const fileUrlFromUpload = (result: Awaited<ReturnType<typeof uploadFile>>) => {
   const baseUrl =
@@ -286,7 +375,7 @@ const fileUrlFromUpload = (result: Awaited<ReturnType<typeof uploadFile>>) => {
       : "";
   const { key } = result.file.objectInfo;
 
-  return baseUrl ? `${baseUrl}/${key}` : `r2://${key}`;
+  return baseUrl ? `${baseUrl}/${key}` : `https://storage.chewbuu.local/${key}`;
 };
 
 const createEmptyPhoto = (sortOrder: number): DatingMedia => ({
@@ -335,6 +424,7 @@ export function OnboardingForm() {
 
   const [step, setStep] = useState(persistedStep);
   const [plans, setPlans] = useState<MembershipPlan[]>(defaultPlans);
+  const [underageBirthday, setUnderageBirthday] = useState("");
   const { data: session } = authClient.useSession();
 
   const form = useForm({
@@ -410,6 +500,14 @@ export function OnboardingForm() {
         }
         form.setFieldValue("phone", merged.phone || "");
         form.setFieldValue("birthday", merged.birthday || "");
+        form.setFieldValue(
+          "ageRangeMin",
+          merged.ageRangeMin || defaultValues.ageRangeMin
+        );
+        form.setFieldValue(
+          "ageRangeMax",
+          merged.ageRangeMax || defaultValues.ageRangeMax
+        );
         form.setFieldValue("area", merged.area || "");
         form.setFieldValue("latitude", merged.latitude || "");
         form.setFieldValue("longitude", merged.longitude || "");
@@ -423,6 +521,11 @@ export function OnboardingForm() {
         form.setFieldValue("interests", merged.interests || []);
         form.setFieldValue("interestDetails", merged.interestDetails || {});
         form.setFieldValue("favoriteThings", merged.favoriteThings || []);
+        form.setFieldValue("politics", merged.politics || "");
+        form.setFieldValue("religion", merged.religion || "");
+        form.setFieldValue("kids", merged.kids || "");
+        form.setFieldValue("wantsKids", merged.wantsKids || "");
+        form.setFieldValue("lookingFor", merged.lookingFor || []);
         form.setFieldValue("friendInvites", merged.friendInvites || []);
         form.setFieldValue("trustedContacts", merged.trustedContacts || []);
         form.setFieldValue("safetyOptIn", !!merged.safetyOptIn);
@@ -453,17 +556,6 @@ export function OnboardingForm() {
   };
 
   const progress = ((step + 1) / steps.length) * 100;
-
-  const getAge = (birthdayString: string) => {
-    const today = new Date();
-    const birthDate = new Date(birthdayString);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-      age -= 1;
-    }
-    return age;
-  };
 
   const goNext = () => {
     const { values } = form.state;
@@ -508,8 +600,14 @@ export function OnboardingForm() {
         return;
       }
 
-      if (getAge(values.birthday) < 18) {
-        toast.error("You must be at least 18 years old to use Chewbuu.");
+      const age = getAge(values.birthday);
+      if (age === null) {
+        toast.error("Enter a valid birthday.");
+        return;
+      }
+
+      if (age < MINIMUM_AGE) {
+        setUnderageBirthday(values.birthday);
         return;
       }
 
@@ -542,8 +640,51 @@ export function OnboardingForm() {
     }
 
     if (step === 2) {
+      const age = getAge(values.birthday);
+      const maxAllowedAge =
+        age !== null && age < 21 ? UNDER_21_MATCH_MAX_AGE : MAXIMUM_MATCH_AGE;
+      const ageRangeMin = Number(values.ageRangeMin);
+      const ageRangeMax =
+        age !== null && age < 21
+          ? Math.min(Number(values.ageRangeMax), UNDER_21_MATCH_MAX_AGE)
+          : Number(values.ageRangeMax);
+
+      if (age !== null && age < 21) {
+        form.setFieldValue("ageRangeMax", UNDER_21_MATCH_MAX_AGE);
+        if (ageRangeMin > UNDER_21_MATCH_MAX_AGE) {
+          form.setFieldValue("ageRangeMin", MINIMUM_AGE);
+        }
+      }
+
+      if (
+        Number.isNaN(ageRangeMin) ||
+        Number.isNaN(ageRangeMax) ||
+        ageRangeMin < MINIMUM_AGE ||
+        ageRangeMax > maxAllowedAge ||
+        ageRangeMin > ageRangeMax
+      ) {
+        toast.error("Choose a valid match age range.");
+        return;
+      }
+
+      if (!values.interestedIn || values.interestedIn.length === 0) {
+        toast.error("Please select at least one option you are interested in.");
+        return;
+      }
+
+      if (!values.lookingFor || values.lookingFor.length === 0) {
+        toast.error("Select at least one thing you are looking for.");
+        return;
+      }
+    }
+
+    if (step === 3) {
       const details = values.interestDetails || {};
-      const categories = ["Eat", "Drink", "Play", "Move", "Watch", "Talk"];
+      const age = getAge(values.birthday);
+      const categories =
+        age !== null && age < 21
+          ? ["Eat", "Play", "Move", "Watch", "Talk"]
+          : ["Eat", "Drink", "Play", "Move", "Watch", "Talk"];
       for (const cat of categories) {
         if (!details[cat] || details[cat].length === 0) {
           toast.error(
@@ -552,14 +693,24 @@ export function OnboardingForm() {
           return;
         }
       }
+    }
 
-      if (!values.interestedIn || values.interestedIn.length === 0) {
-        toast.error("Please select at least one option you are interested in.");
+    if (step === 4) {
+      if (!values.politics) {
+        toast.error("Politics is required. You can choose Prefer Not to Say.");
+        return;
+      }
+      if (!values.religion) {
+        toast.error("Religion is required. You can choose Prefer Not to Say.");
+        return;
+      }
+      if (!values.kids || !values.wantsKids) {
+        toast.error("Kids and future kids preferences are required.");
         return;
       }
     }
 
-    if (step === 3) {
+    if (step === 5) {
       const contacts = values.trustedContacts || [];
       if (contacts.length === 0) {
         toast.error("At least one safety contact is required.");
@@ -595,6 +746,16 @@ export function OnboardingForm() {
     }
     await navigate({ to: "/dashboard" });
   };
+
+  if (underageBirthday) {
+    return (
+      <UnderageGate
+        birthday={underageBirthday}
+        email={form.state.values.email}
+        onBack={() => setUnderageBirthday("")}
+      />
+    );
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-7 px-4 py-8">
@@ -661,9 +822,11 @@ export function OnboardingForm() {
           <section className="min-h-[420px] rounded-3xl border bg-card p-6 shadow-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 md:p-8">
             {step === 0 && <BasicsStep form={form} />}
             {step === 1 && <MediaStep form={form} />}
-            {step === 2 && <InterestsStep form={form} />}
-            {step === 3 && <FriendsStep form={form} />}
-            {step === 4 && (
+            {step === 2 && <PreferencesStep form={form} />}
+            {step === 3 && <InterestsStep form={form} />}
+            {step === 4 && <ValuesStep form={form} />}
+            {step === 5 && <FriendsStep form={form} />}
+            {step === 6 && (
               <PremiumStep
                 plans={plans}
                 form={form}
@@ -1072,21 +1235,230 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
   );
 }
 
+function UnderageGate({
+  birthday,
+  email,
+  onBack,
+}: {
+  birthday: string;
+  email?: string;
+  onBack: () => void;
+}) {
+  const eligibilityDate = formatEligibilityDate(
+    getDateWhenUserTurns(birthday, MINIMUM_AGE)
+  );
+
+  return (
+    <main className="mx-auto flex min-h-[70svh] w-full max-w-2xl flex-col items-center justify-center gap-6 px-4 py-12 text-center">
+      <Badge
+        className="rounded-full px-3 py-1 font-semibold"
+        variant="secondary"
+      >
+        18 and older
+      </Badge>
+      <div className="flex flex-col gap-3">
+        <h1 className="text-3xl font-semibold tracking-normal">
+          Sorry, Chewbuu is for adults.
+        </h1>
+        <p className="text-muted-foreground">
+          Come back on {eligibilityDate}. We will keep Chewbuu warm for you and
+          notify {email?.trim() ? email : "you"} when your account can continue.
+        </p>
+      </div>
+      <Button className="rounded-full px-6" onClick={onBack} type="button">
+        Edit birthday
+      </Button>
+    </main>
+  );
+}
+
+function PreferencesStep({ form }: { form: OnboardingFormApi }) {
+  return (
+    <form.Subscribe
+      selector={(state) => [
+        state.values.birthday,
+        state.values.ageRangeMin,
+        state.values.ageRangeMax,
+        state.values.interestedIn,
+        state.values.lookingFor,
+      ]}
+    >
+      {([
+        birthdayValue,
+        ageRangeMinValue,
+        ageRangeMaxValue,
+        interestedInValue,
+        lookingForValue,
+      ]) => {
+        const age = getAge((birthdayValue as string) || "");
+        const isUnder21 = age !== null && age < 21;
+        const maxAllowedAge = isUnder21
+          ? UNDER_21_MATCH_MAX_AGE
+          : MAXIMUM_MATCH_AGE;
+        const ageRangeMin = Number(ageRangeMinValue ?? MINIMUM_AGE);
+        const ageRangeMax = Number(ageRangeMaxValue ?? maxAllowedAge);
+        const interestedIn = (interestedInValue || []) as string[];
+        const lookingFor = (lookingForValue || []) as string[];
+
+        const setAgeRangeMin = (value: number) => {
+          const nextMin = Math.min(Math.max(value, MINIMUM_AGE), maxAllowedAge);
+          form.setFieldValue("ageRangeMin", nextMin);
+          if (ageRangeMax < nextMin) {
+            form.setFieldValue("ageRangeMax", nextMin);
+          }
+        };
+
+        const setAgeRangeMax = (value: number) => {
+          const nextMax = Math.min(Math.max(value, MINIMUM_AGE), maxAllowedAge);
+          form.setFieldValue("ageRangeMax", nextMax);
+          if (ageRangeMin > nextMax) {
+            form.setFieldValue("ageRangeMin", nextMax);
+          }
+        };
+
+        return (
+          <div className="flex flex-col gap-6">
+            <StepIntro
+              eyebrow="Preferences"
+              title="Set your match lane."
+              text="Choose who can show up, what you are open to, and the age range Chewbuu should respect when matching."
+            />
+            <FieldGroup>
+              <Field>
+                <FieldLabel>Match age range</FieldLabel>
+                <FieldDescription>
+                  {isUnder21
+                    ? "For 18-20 year olds, Chewbuu limits matching to ages 18-22."
+                    : "You control who can find you and who Chewbuu should suggest."}
+                </FieldDescription>
+                <div className="rounded-2xl border bg-background p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <Badge variant="secondary">{ageRangeMin} min</Badge>
+                    <Badge variant="secondary">{ageRangeMax} max</Badge>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="flex flex-col gap-2 text-sm font-medium">
+                      Minimum age
+                      <input
+                        aria-label="Minimum match age"
+                        className="accent-primary"
+                        max={maxAllowedAge}
+                        min={MINIMUM_AGE}
+                        onChange={(event) =>
+                          setAgeRangeMin(Number(event.target.value))
+                        }
+                        type="range"
+                        value={ageRangeMin}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-2 text-sm font-medium">
+                      Maximum age
+                      <input
+                        aria-label="Maximum match age"
+                        className="accent-primary"
+                        disabled={isUnder21}
+                        max={maxAllowedAge}
+                        min={MINIMUM_AGE}
+                        onChange={(event) =>
+                          setAgeRangeMax(Number(event.target.value))
+                        }
+                        type="range"
+                        value={ageRangeMax}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </Field>
+
+              <form.Field name="interestedIn">
+                {(field) => (
+                  <Field>
+                    <FieldLabel>Interested in</FieldLabel>
+                    <FieldDescription>
+                      Select the people and social setups you want Chewbuu to
+                      consider.
+                    </FieldDescription>
+                    <MultiPillSelect
+                      format={formatValue}
+                      onChange={field.handleChange}
+                      options={["women", "men", "couples", "friends", "groups"]}
+                      value={interestedIn}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+
+              <form.Field name="lookingFor">
+                {(field) => (
+                  <Field>
+                    <FieldLabel>What are you looking for?</FieldLabel>
+                    <FieldDescription>
+                      Pick every mode that feels true right now.
+                    </FieldDescription>
+                    <MultiPillSelect
+                      onChange={field.handleChange}
+                      options={lookingForOptions}
+                      value={lookingFor}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+            </FieldGroup>
+          </div>
+        );
+      }}
+    </form.Subscribe>
+  );
+}
+
+function MultiPillSelect({
+  format = formatIdentity,
+  onChange,
+  options,
+  value,
+}: {
+  format?: (value: string) => string;
+  onChange: (value: string[]) => void;
+  options: string[];
+  value: string[];
+}) {
+  return (
+    <div className="flex flex-wrap justify-start gap-2">
+      {options.map((option) => (
+        <Button
+          className="rounded-full px-4 py-2 text-sm"
+          key={option}
+          onClick={() => {
+            const next = value.includes(option)
+              ? value.filter((item) => item !== option)
+              : [...value, option];
+            onChange(next);
+          }}
+          type="button"
+          variant={value.includes(option) ? "default" : "outline"}
+        >
+          {format(option)}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 function InterestsStep({ form }: { form: OnboardingFormApi }) {
   return (
     <form.Subscribe
       selector={(state) => [
         state.values.interestDetails,
-        state.values.interestedIn,
         state.values.area,
+        state.values.birthday,
       ]}
     >
-      {([interestDetails, interestedIn, areaValue]) => (
+      {([interestDetails, areaValue, birthdayValue]) => (
         <InterestsStepContent
           form={form}
           interestDetails={interestDetails || {}}
-          interestedIn={interestedIn || []}
           area={areaValue || "Nashville, TN"}
+          birthday={(birthdayValue as string) || ""}
         />
       )}
     </form.Subscribe>
@@ -1094,36 +1466,65 @@ function InterestsStep({ form }: { form: OnboardingFormApi }) {
 }
 
 interface InterestsStepContentProps {
+  birthday: string;
   form: OnboardingFormApi;
   interestDetails: Record<string, string[]>;
-  interestedIn: string[];
   area: string;
 }
 
 function InterestsStepContent({
+  birthday,
   form,
   interestDetails,
-  interestedIn,
   area,
 }: InterestsStepContentProps) {
+  const age = getAge(birthday);
+  const availableInterestCategories = useMemo(
+    () =>
+      age !== null && age < 21
+        ? interestCategories.filter((category) => category.label !== "Drink")
+        : interestCategories,
+    [age]
+  );
   const [activeCategory, setActiveCategory] = useState(
-    interestCategories[0].label
+    availableInterestCategories[0].label
   );
   const [customInterest, setCustomInterest] = useState("");
-  const [places, setPlaces] = useState<DatePlace[]>([]);
+  const [placesByQuery, setPlacesByQuery] = useState<
+    Record<string, DatePlace[]>
+  >({});
+  const [activePlaceQuery, setActivePlaceQuery] = useState("");
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [placeSearch, setPlaceSearch] = useState("");
+  const [placePage, setPlacePage] = useState(1);
 
   const active = useMemo(
     () =>
-      interestCategories.find(
+      availableInterestCategories.find(
         (category) => category.label === activeCategory
-      ) ?? interestCategories[0],
-    [activeCategory]
+      ) ?? availableInterestCategories[0],
+    [activeCategory, availableInterestCategories]
   );
 
+  useEffect(() => {
+    if (
+      !availableInterestCategories.some((item) => item.label === activeCategory)
+    ) {
+      setActiveCategory(availableInterestCategories[0].label);
+    }
+  }, [activeCategory, availableInterestCategories]);
+
   const selected = interestDetails[active.label] ?? [];
-  const selectedString = selected.join(",");
+  const canSuggestPlaces = ["Eat", "Drink", "Play", "Move"].includes(
+    active.label
+  );
+  const placeCacheKey = (query: string) =>
+    `${active.label}:${area}:${query.trim().toLowerCase()}`;
+  const activePlaceResults = activePlaceQuery
+    ? (placesByQuery[placeCacheKey(activePlaceQuery)] ?? [])
+    : [];
+  const visiblePlaces = activePlaceResults.slice(0, placePage * 5);
+  const hasMorePlaces = visiblePlaces.length < activePlaceResults.length;
 
   const toggleValue = (value: string) => {
     const nextValues = selected.includes(value)
@@ -1140,42 +1541,40 @@ function InterestsStepContent({
     );
   };
 
-  useEffect(() => {
-    if (!["Eat", "Drink", "Play", "Move"].includes(active.label)) {
-      setPlaces([]);
+  const fetchPlacesForQuery = async (query: string) => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery || !canSuggestPlaces) {
       return;
     }
 
-    const fetchPlaces = async () => {
-      setIsLoadingPlaces(true);
-      try {
-        const filters = placeSearch.trim()
-          ? [placeSearch.trim()]
-          : selected.length > 0
-            ? selected
-            : [active.label];
-        const res = await datingApi.suggestPlaces({
-          area,
-          filters,
-          latitude: (form.state.values.latitude as string) || undefined,
-          longitude: (form.state.values.longitude as string) || undefined,
-          what: [active.label.toLowerCase() as DateWhat],
-        });
-        setPlaces(res.places || []);
-      } catch (error) {
-        console.error("Failed to suggest places:", error);
-      } finally {
-        setIsLoadingPlaces(false);
-      }
-    };
+    setActivePlaceQuery(trimmedQuery);
+    setPlacePage(1);
 
-    const timer = setTimeout(() => {
-      void fetchPlaces();
-    }, 600);
+    const cacheKey = placeCacheKey(trimmedQuery);
+    if (placesByQuery[cacheKey]) {
+      return;
+    }
 
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active.label, selectedString, placeSearch, area]);
+    setIsLoadingPlaces(true);
+    try {
+      const res = await datingApi.suggestPlaces({
+        area,
+        filters: [trimmedQuery],
+        latitude: (form.state.values.latitude as string) || undefined,
+        longitude: (form.state.values.longitude as string) || undefined,
+        what: [active.label.toLowerCase() as DateWhat],
+      });
+      setPlacesByQuery((current) => ({
+        ...current,
+        [cacheKey]: res.places || [],
+      }));
+    } catch (error) {
+      console.error("Failed to suggest places:", error);
+      toast.error("Could not find local spots for that interest.");
+    } finally {
+      setIsLoadingPlaces(false);
+    }
+  };
 
   const selectedPlacesKey = `${active.label}_places`;
   const activeFavoritePlaces = interestDetails[selectedPlacesKey] || [];
@@ -1198,7 +1597,7 @@ function InterestsStepContent({
 
       {/* Category Navigation Tabs */}
       <div className="flex flex-wrap justify-start gap-2 border-b border-border pb-4">
-        {interestCategories.map((category) => {
+        {availableInterestCategories.map((category) => {
           const count = interestDetails[category.label]?.length ?? 0;
           const isActive = activeCategory === category.label;
           return (
@@ -1207,6 +1606,8 @@ function InterestsStepContent({
               onClick={() => {
                 setActiveCategory(category.label);
                 setPlaceSearch("");
+                setActivePlaceQuery("");
+                setPlacePage(1);
               }}
               className={`rounded-full px-4 py-2 border text-sm font-semibold transition-all duration-200 ${
                 isActive
@@ -1274,60 +1675,119 @@ function InterestsStepContent({
         </div>
 
         {/* Show Local Place Suggestions for Eat, Drink, Play, Move */}
-        {["Eat", "Drink", "Play", "Move"].includes(active.label) && (
+        {canSuggestPlaces && (
           <div className="mt-4 border-t border-border pt-4">
             <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
               <MapPin className="size-4 text-primary" />
-              Select your favorite local {active.label.toLowerCase()} spots in{" "}
-              {area}:
+              Find favorite local {active.label.toLowerCase()} spots in {area}
             </h4>
-            <div className="flex gap-2 mb-3">
+            <p className="mb-3 text-muted-foreground text-xs/relaxed">
+              Pick or add the foods, drinks, activities, or movement styles you
+              like first. Then search one signal at a time so we do not burn
+              through Places calls while you are still deciding.
+            </p>
+            {selected.length > 0 ? (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {selected.map((item) => (
+                  <Button
+                    className="rounded-full"
+                    disabled={isLoadingPlaces}
+                    key={item}
+                    onClick={() => void fetchPlacesForQuery(item)}
+                    size="sm"
+                    type="button"
+                    variant={activePlaceQuery === item ? "default" : "outline"}
+                  >
+                    {placesByQuery[placeCacheKey(item)] ? "Show" : "Find"}{" "}
+                    {item}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <p className="mb-3 rounded-2xl border border-dashed border-border bg-muted/20 p-3 text-muted-foreground text-xs">
+                No local spot search yet. Select a chip above or add a custom
+                interest, then search for places that match it.
+              </p>
+            )}
+            <div className="flex flex-col gap-2 mb-3 sm:flex-row">
               <Input
-                placeholder={`Search local ${active.label.toLowerCase()} spots (e.g. Starbucks, KJ's Market)...`}
-                value={placeSearch}
+                className="h-10 rounded-full border border-border bg-background px-4 text-sm"
                 onChange={(e) => setPlaceSearch(e.target.value)}
-                className="rounded-full h-10 px-4 bg-background border border-border text-sm"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void fetchPlacesForQuery(placeSearch);
+                  }
+                }}
+                placeholder={`Search a specific local ${active.label.toLowerCase()} idea...`}
+                value={placeSearch}
               />
+              <Button
+                className="rounded-full"
+                disabled={isLoadingPlaces || !placeSearch.trim()}
+                onClick={() => void fetchPlacesForQuery(placeSearch)}
+                type="button"
+                variant="outline"
+              >
+                Find spots
+              </Button>
             </div>
             {isLoadingPlaces ? (
               <p className="text-xs text-muted-foreground animate-pulse">
                 Searching near you...
               </p>
-            ) : places.length === 0 ? (
+            ) : !activePlaceQuery ? (
               <p className="text-xs text-muted-foreground italic">
-                No spots found. Try searching above!
+                Choose an interest above to load local places.
+              </p>
+            ) : activePlaceResults.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                No spots found for {activePlaceQuery}. Try a different signal.
               </p>
             ) : (
-              <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
-                {places.map((place) => {
-                  const isFav = activeFavoritePlaces.includes(place.name);
-                  return (
-                    <button
-                      key={place.placeId}
-                      type="button"
-                      onClick={() => togglePlaceFavorite(place.name)}
-                      className={`flex items-center justify-between p-3 rounded-xl border text-left text-xs transition duration-250 ${
-                        isFav
-                          ? "border-primary bg-primary/5 text-primary-foreground font-medium"
-                          : "border-border bg-card text-foreground hover:border-border-hover"
-                      }`}
-                    >
-                      <div>
-                        <p className="font-bold text-foreground">
-                          {place.name}
-                        </p>
-                        {place.address && (
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {place.address}
+              <div className="flex flex-col gap-3">
+                <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
+                  {visiblePlaces.map((place) => {
+                    const isFav = activeFavoritePlaces.includes(place.name);
+                    return (
+                      <button
+                        className={`flex items-center justify-between p-3 rounded-xl border text-left text-xs transition duration-250 ${
+                          isFav
+                            ? "border-primary bg-primary/5 text-primary-foreground font-medium"
+                            : "border-border bg-card text-foreground hover:border-border-hover"
+                        }`}
+                        key={place.placeId}
+                        onClick={() => togglePlaceFavorite(place.name)}
+                        type="button"
+                      >
+                        <div>
+                          <p className="font-bold text-foreground">
+                            {place.name}
                           </p>
-                        )}
-                      </div>
-                      <Heart
-                        className={`size-4 ml-2 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
-                      />
-                    </button>
-                  );
-                })}
+                          {place.address && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {place.address}
+                            </p>
+                          )}
+                        </div>
+                        <Heart
+                          className={`size-4 ml-2 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+                {hasMorePlaces && (
+                  <Button
+                    className="w-fit rounded-full"
+                    onClick={() => setPlacePage((current) => current + 1)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Show next 5
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -1375,34 +1835,6 @@ function InterestsStepContent({
           </div>
         )}
       </div>
-
-      <form.Field name="interestedIn">
-        {(field) => (
-          <Field>
-            <FieldLabel>Interested in (Select Multiple)</FieldLabel>
-            <FieldDescription>
-              Select the people and social setups you want Chewbuu to consider.
-            </FieldDescription>
-            <ToggleGroup
-              className="flex flex-wrap justify-start gap-2"
-              onValueChange={(value) => field.handleChange(value)}
-              type="multiple"
-              value={interestedIn}
-            >
-              {["women", "men", "couples", "friends", "groups"].map((value) => (
-                <ToggleGroupItem
-                  className="rounded-full px-4 py-2 border border-border text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground transition-all duration-200"
-                  key={value}
-                  value={value}
-                  type="button"
-                >
-                  {formatValue(value)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </Field>
-        )}
-      </form.Field>
     </div>
   );
 }
@@ -1482,16 +1914,64 @@ function InputList({
   );
 }
 
+function ValuesStep({ form }: { form: OnboardingFormApi }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <StepIntro
+        eyebrow="Values"
+        title="Make the matching signal honest."
+        text="These answers help Chewbuu avoid awkward mismatches and suggest people who want a similar kind of date life."
+      />
+      <FieldGroup>
+        <div className="grid gap-4 md:grid-cols-2">
+          <SelectField
+            form={form}
+            label="Politics"
+            name="politics"
+            options={politicsOptions}
+            placeholder="Select politics"
+          />
+          <SelectField
+            form={form}
+            label="Religion"
+            name="religion"
+            options={religionOptions}
+            placeholder="Select religion"
+          />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <SelectField
+            form={form}
+            label="Kids"
+            name="kids"
+            options={kidsOptions}
+            placeholder="Select kids status"
+          />
+          <SelectField
+            form={form}
+            label="Future kids"
+            name="wantsKids"
+            options={wantsKidsOptions}
+            placeholder="Select future kids preference"
+          />
+        </div>
+      </FieldGroup>
+    </div>
+  );
+}
+
 function FriendsStep({ form }: { form: OnboardingFormApi }) {
   return (
     <form.Subscribe
       selector={(state) => [
         state.values.friendInvites,
         state.values.maritalStatus,
+        state.values.membershipTier,
         state.values.trustedContacts,
       ]}
     >
-      {([friendInvites, maritalStatus, trustedContacts]) => {
+      {([friendInvites, maritalStatus, membershipTier, trustedContacts]) => {
         const invites = (friendInvites || []) as {
           email?: string;
           name?: string;
@@ -1510,6 +1990,8 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
           name: string;
           phone?: string;
         }[];
+        const canStartCircle =
+          membershipTier === "mingle" || membershipTier === "sugar";
 
         return (
           <div className="flex flex-col gap-6">
@@ -1557,19 +2039,27 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                     Invite friends for circles and group dates
                   </h3>
                   <p className="text-muted-foreground text-sm">
-                    Mingle and Sugar members can go on dates with up to three
-                    friends. Invite them now.
+                    Mingle and Sugar members can start circles and invite up to
+                    three friends into group dates.
                   </p>
                 </div>
               </div>
-              <DynamicPeopleList
-                addLabel="Add friend"
-                form={form}
-                items={friends}
-                path="friendInvites"
-                relationship="friend"
-                showName={false}
-              />
+              {canStartCircle ? (
+                <DynamicPeopleList
+                  addLabel="Add friend"
+                  form={form}
+                  items={friends}
+                  path="friendInvites"
+                  relationship="friend"
+                  showName={false}
+                />
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border bg-muted/25 p-4 text-muted-foreground text-sm">
+                  You can join someone else's circle on Social. Choose Mingle or
+                  Sugar on the upgrade step when you are ready to start your own
+                  circle and send friend invites.
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl border bg-background p-5 shadow-sm">
@@ -1847,7 +2337,15 @@ function SelectField({
 }: {
   form: OnboardingFormApi;
   label: string;
-  name: "sex" | "sexuality" | "race" | "maritalStatus";
+  name:
+    | "kids"
+    | "maritalStatus"
+    | "politics"
+    | "race"
+    | "religion"
+    | "sex"
+    | "sexuality"
+    | "wantsKids";
   options: readonly string[];
   placeholder: string;
 }) {
@@ -1876,7 +2374,7 @@ function SelectField({
                 );
               }
             }}
-            value={field.state.value || undefined}
+            value={field.state.value || ""}
           >
             <SelectTrigger
               className="w-full rounded-full h-10 px-4 bg-background border border-border text-sm flex items-center justify-between"
