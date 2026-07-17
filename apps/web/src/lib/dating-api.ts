@@ -23,6 +23,8 @@ export interface DatingProfilePayload {
   birthday: string;
   bio?: string;
   datingModes: string[];
+  latitude?: string;
+  longitude?: string;
   favoriteThings: string[];
   friendInvites: {
     email?: string;

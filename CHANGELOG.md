@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-07-17
+
+### Added
+
+- Redesigned the Date Wizard step 1 booking form into a unified, compact single-card view using pill-shaped inline activity toggles and circular friend avatars for guest selection from the user's Circle.
+- Configured Places suggestion scroll areas in step 2 to remain horizontal scrollers on all devices, and integrated rating-based 'Featured' and cross-category 'Combo' badges.
+
 ## [0.6.0] - 2026-07-17
 
 ### Added
