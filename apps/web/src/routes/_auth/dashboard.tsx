@@ -666,30 +666,36 @@ function RouteComponent() {
                       </CardHeader>
                       <CardContent className="flex flex-col gap-3">
                         <div className="flex flex-wrap gap-2">
-                          {request.places.map((place) => (
-                            <Badge key={place.placeId} variant="secondary">
-                              {place.name}
-                            </Badge>
-                          ))}
+                          {request.places?.length ? (
+                            request.places.map((place) => (
+                              <Badge key={place.placeId} variant="secondary">
+                                {place.name}
+                              </Badge>
+                            ))
+                          ) : (
+                            <Badge variant="secondary">Places pending</Badge>
+                          )}
                         </div>
                         <div className="grid gap-2 sm:grid-cols-3">
-                          <Button className="rounded-full" size="sm">
+                          <Button className="rounded-full" disabled size="sm">
                             <MessageSquare className="mr-1.5 size-4" />
-                            Chat
+                            Chat Soon
                           </Button>
                           <Button
                             className="rounded-full"
+                            disabled
                             size="sm"
                             variant="outline"
                           >
-                            Save for Later
+                            Save Soon
                           </Button>
                           <Button
                             className="rounded-full"
+                            disabled
                             size="sm"
                             variant="ghost"
                           >
-                            Decline
+                            Decline Soon
                           </Button>
                         </div>
                       </CardContent>
