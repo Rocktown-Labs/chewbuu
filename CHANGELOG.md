@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added a dedicated onboarding Values step for politics, religion, kids, future kids, and what users are looking for.
+- Added a public homepage pricing section backed by the pricing API and a footer with public navigation.
+- Added a dashboard Matches tab for date requests, chat/save/decline actions, and honest empty states.
 - Added relationship status collection during onboarding with spouse/partner invite capture for applicable users.
 - Added provider-ready onboarding invite notifications through Resend email and Sent.dm SMS adapters.
 - Added persistent Zustand onboarding store to save form progress across page refreshes.
@@ -24,6 +27,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed public navigation so logged-out users see marketing/auth routes and logged-in users no longer see app/admin routes on the homepage.
+- Replaced fake homepage trending couples, dashboard recaps, ratings, and compatibility placeholders with real profile/request/recap data or clear empty states.
+- Updated dashboard dating readiness to reflect complete profile values, media, location, and safety contacts instead of partially complete onboarding.
 - Fixed onboarding redirection loop by relaxing the gateway middleware to only check for completed basics profile fields.
 - Fixed dynamic inputs rendering delay in Friends & Safety tab by using store-level React state subscriptions.
 - Fixed missing assertion in the Google Places text query test.

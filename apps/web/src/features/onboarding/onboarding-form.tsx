@@ -67,7 +67,14 @@ import {
 
 import { useOnboardingStore } from "./onboarding-store";
 
-const steps = ["Basics", "Media", "Interests", "Friends", "Premium"] as const;
+const steps = [
+  "Basics",
+  "Media",
+  "Interests",
+  "Values",
+  "Friends",
+  "Premium",
+] as const;
 const areaPattern = /^[a-zA-Z .'-]+,\s?[A-Z]{2}$/;
 const sexOptions = [
   "Female",
@@ -108,6 +115,44 @@ const maritalStatusOptions = [
   "Prefer Not to Say",
 ];
 const spouseInviteStatuses = new Set(["Dating", "Engaged", "Married"]);
+const politicsOptions = [
+  "Liberal",
+  "Moderate",
+  "Conservative",
+  "Independent",
+  "Apolitical",
+  "Other",
+  "Prefer Not to Say",
+];
+const religionOptions = [
+  "Christian",
+  "Muslim",
+  "Jewish",
+  "Hindu",
+  "Buddhist",
+  "Spiritual",
+  "Agnostic",
+  "Atheist",
+  "Other",
+  "Prefer Not to Say",
+];
+const kidsOptions = ["Have Kids", "Do Not Have Kids", "Prefer Not to Say"];
+const wantsKidsOptions = [
+  "Want Kids",
+  "Open to Kids",
+  "Do Not Want Kids",
+  "Not Sure",
+  "Prefer Not to Say",
+];
+const lookingForOptions = [
+  "A relationship",
+  "Intentional dating",
+  "Casual dates",
+  "New friends",
+  "Double dates",
+  "Group hangs",
+  "Not sure yet",
+];
 
 const interestCategories = [
   {
@@ -256,15 +301,20 @@ const defaultValues = {
   interestDetails: {} as Record<string, string[]>,
   interestedIn: [] as string[],
   interests: [] as string[],
+  kids: "",
+  lookingFor: [] as string[],
   media: [
     { isPrimary: true, kind: "profile_photo", sortOrder: 0, url: "" },
     { kind: "intro_video", sortOrder: 0, url: "" },
   ] as DatingMedia[],
+  politics: "",
+  religion: "",
   safetyOptIn: false,
   sex: "",
   sexuality: "",
   trustedContacts: [] as { email?: string; name: string; phone?: string }[],
   weight: "",
+  wantsKids: "",
   latitude: "",
   longitude: "",
   maritalStatus: "",
@@ -423,6 +473,11 @@ export function OnboardingForm() {
         form.setFieldValue("interests", merged.interests || []);
         form.setFieldValue("interestDetails", merged.interestDetails || {});
         form.setFieldValue("favoriteThings", merged.favoriteThings || []);
+        form.setFieldValue("politics", merged.politics || "");
+        form.setFieldValue("religion", merged.religion || "");
+        form.setFieldValue("kids", merged.kids || "");
+        form.setFieldValue("wantsKids", merged.wantsKids || "");
+        form.setFieldValue("lookingFor", merged.lookingFor || []);
         form.setFieldValue("friendInvites", merged.friendInvites || []);
         form.setFieldValue("trustedContacts", merged.trustedContacts || []);
         form.setFieldValue("safetyOptIn", !!merged.safetyOptIn);
@@ -560,6 +615,25 @@ export function OnboardingForm() {
     }
 
     if (step === 3) {
+      if (!values.politics) {
+        toast.error("Politics is required. You can choose Prefer Not to Say.");
+        return;
+      }
+      if (!values.religion) {
+        toast.error("Religion is required. You can choose Prefer Not to Say.");
+        return;
+      }
+      if (!values.kids || !values.wantsKids) {
+        toast.error("Kids and future kids preferences are required.");
+        return;
+      }
+      if (!values.lookingFor || values.lookingFor.length === 0) {
+        toast.error("Select at least one thing you are looking for.");
+        return;
+      }
+    }
+
+    if (step === 4) {
       const contacts = values.trustedContacts || [];
       if (contacts.length === 0) {
         toast.error("At least one safety contact is required.");
@@ -662,8 +736,9 @@ export function OnboardingForm() {
             {step === 0 && <BasicsStep form={form} />}
             {step === 1 && <MediaStep form={form} />}
             {step === 2 && <InterestsStep form={form} />}
-            {step === 3 && <FriendsStep form={form} />}
-            {step === 4 && (
+            {step === 3 && <ValuesStep form={form} />}
+            {step === 4 && <FriendsStep form={form} />}
+            {step === 5 && (
               <PremiumStep
                 plans={plans}
                 form={form}
@@ -1482,6 +1557,89 @@ function InputList({
   );
 }
 
+function ValuesStep({ form }: { form: OnboardingFormApi }) {
+  return (
+    <form.Subscribe selector={(state) => [state.values.lookingFor]}>
+      {([lookingForValue]) => {
+        const lookingFor = (lookingForValue || []) as string[];
+
+        return (
+          <div className="flex flex-col gap-6">
+            <StepIntro
+              eyebrow="Values"
+              title="Make the matching signal honest."
+              text="These answers help Chewbuu avoid awkward mismatches and suggest people who want a similar kind of date life."
+            />
+            <FieldGroup>
+              <div className="grid gap-4 md:grid-cols-2">
+                <SelectField
+                  form={form}
+                  label="Politics"
+                  name="politics"
+                  options={politicsOptions}
+                  placeholder="Select politics"
+                />
+                <SelectField
+                  form={form}
+                  label="Religion"
+                  name="religion"
+                  options={religionOptions}
+                  placeholder="Select religion"
+                />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <SelectField
+                  form={form}
+                  label="Kids"
+                  name="kids"
+                  options={kidsOptions}
+                  placeholder="Select kids status"
+                />
+                <SelectField
+                  form={form}
+                  label="Future kids"
+                  name="wantsKids"
+                  options={wantsKidsOptions}
+                  placeholder="Select future kids preference"
+                />
+              </div>
+
+              <form.Field name="lookingFor">
+                {(field) => (
+                  <Field>
+                    <FieldLabel>What are you looking for?</FieldLabel>
+                    <FieldDescription>
+                      Pick every mode that feels true right now.
+                    </FieldDescription>
+                    <ToggleGroup
+                      className="flex flex-wrap justify-start gap-2"
+                      onValueChange={(value) => field.handleChange(value)}
+                      type="multiple"
+                      value={lookingFor}
+                    >
+                      {lookingForOptions.map((value) => (
+                        <ToggleGroupItem
+                          className="rounded-full px-4 py-2 border border-border text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground transition-all duration-200"
+                          key={value}
+                          value={value}
+                          type="button"
+                        >
+                          {value}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </Field>
+                )}
+              </form.Field>
+            </FieldGroup>
+          </div>
+        );
+      }}
+    </form.Subscribe>
+  );
+}
+
 function FriendsStep({ form }: { form: OnboardingFormApi }) {
   return (
     <form.Subscribe
@@ -1847,7 +2005,15 @@ function SelectField({
 }: {
   form: OnboardingFormApi;
   label: string;
-  name: "sex" | "sexuality" | "race" | "maritalStatus";
+  name:
+    | "kids"
+    | "maritalStatus"
+    | "politics"
+    | "race"
+    | "religion"
+    | "sex"
+    | "sexuality"
+    | "wantsKids";
   options: readonly string[];
   placeholder: string;
 }) {
