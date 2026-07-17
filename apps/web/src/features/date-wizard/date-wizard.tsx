@@ -21,11 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@chewbuu/ui/components/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-} from "@chewbuu/ui/components/field";
+import { Field, FieldLabel } from "@chewbuu/ui/components/field";
 import { Input } from "@chewbuu/ui/components/input";
 import {
   Popover,
@@ -37,17 +33,18 @@ import { useForm } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  Beer,
   Calendar as CalendarIcon,
   Check,
   ChevronRight,
+  Gamepad2,
   MapPin,
   MessageCircle,
-  Minus,
   Plus,
   Sparkles,
   Star,
-  UserPlus,
   Users,
+  Utensils,
   Video,
   X,
 } from "lucide-react";
@@ -108,6 +105,31 @@ const CATEGORY_FILTERS: Record<WizardWhat, string[]> = {
 const MAX_GUESTS = 3;
 const REQUIRED_SPOTS = 3;
 
+const isComboPlace = (types: string[]): boolean => {
+  const hasFood = types.some((t) =>
+    ["restaurant", "food", "cafe", "meal_takeaway", "diner"].includes(t)
+  );
+  const hasDrink = types.some((t) =>
+    ["bar", "night_club", "brewery"].includes(t)
+  );
+  const hasPlay = types.some((t) =>
+    [
+      "amusement_park",
+      "bowling_alley",
+      "movie_theater",
+      "casino",
+      "museum",
+      "tourist_attraction",
+      "park",
+      "zoo",
+      "stadium",
+      "aquarium",
+      "video_arcade",
+    ].includes(t)
+  );
+  return [hasFood, hasDrink, hasPlay].filter(Boolean).length >= 2;
+};
+
 const getAge = (birthdayString: string) => {
   const birthday = new Date(birthdayString);
   if (Number.isNaN(birthday.getTime())) return null;
@@ -162,6 +184,7 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
     latitude?: string;
     longitude?: string;
   }>({});
+  const [circleFriends, setCircleFriends] = useState<any[]>([]);
 
   const form = useForm({
     defaultValues: {
@@ -199,7 +222,8 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
   useEffect(() => {
     const load = async () => {
       try {
-        const { profile } = await datingApi.getProfile();
+        const response = await datingApi.getProfile();
+        const profile = response?.profile;
         if (!profile) {
           return;
         }
@@ -221,6 +245,11 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
           latitude: profile.latitude || undefined,
           longitude: profile.longitude || undefined,
         });
+
+        const joinedFriends = (profile.friendInvites || []).filter(
+          (invite) => invite.status === "joined"
+        );
+        setCircleFriends(joinedFriends);
       } catch {
         // Profile is optional for the wizard; the server enforces readiness.
       }
@@ -297,6 +326,7 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
             form={form}
             isSugar={isSugar}
             isUnder21={isUnder21}
+            circleFriends={circleFriends}
           />
         )}
         {step === 1 && <PlacesStep form={form} profileCoords={profileCoords} />}
@@ -322,19 +352,20 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
             )}
             {step === 1 && (
               <form.Subscribe
-                selector={(state) => [state.values.places, state.isSubmitting]}
+                selector={(state: any) => ({
+                  places: state.values.places,
+                  isSubmitting: state.isSubmitting,
+                })}
               >
-                {([selectedPlaces, isSubmitting]) => (
+                {({ places, isSubmitting }: any) => (
                   <Button
-                    disabled={
-                      selectedPlaces.length !== REQUIRED_SPOTS || isSubmitting
-                    }
+                    disabled={places.length !== REQUIRED_SPOTS || isSubmitting}
                     type="submit"
                   >
                     <Sparkles data-icon="inline-start" />
                     {isSubmitting
                       ? "Finding matches..."
-                      : `Find matches (${selectedPlaces.length}/${REQUIRED_SPOTS} spots)`}
+                      : `Find matches (${places.length}/${REQUIRED_SPOTS} spots)`}
                   </Button>
                 )}
               </form.Subscribe>
@@ -355,287 +386,477 @@ function PlanStep({
   form,
   isSugar,
   isUnder21,
+  circleFriends,
 }: {
   canGroup: boolean;
   form: WizardForm;
   isSugar: boolean;
   isUnder21: boolean;
+  circleFriends: any[];
 }) {
   const availableActivities = isUnder21
     ? activityOptions.filter((option) => option.value !== "drink")
     : activityOptions;
 
+  const [showEmailInput, setShowEmailInput] = useState(false);
+  const [newGuestEmail, setNewGuestEmail] = useState("");
+  const [newGuestName, setNewGuestName] = useState("");
+
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>What are you up for?</CardTitle>
+      <Card className="overflow-hidden border-border bg-card">
+        <CardHeader className="border-b bg-muted/10 pb-4">
+          <CardTitle className="text-lg font-bold">
+            Customize your booking request
+          </CardTitle>
           <CardDescription>
-            Pick any combination — stack dinner, drinks, and an activity.
+            Select your activities, date and time, and invite guests below.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form.Field name="what">
-            {(field) => (
-              <div
-                className="grid gap-3 sm:grid-cols-3"
-                role="group"
-                aria-label="Date activities"
-              >
-                {availableActivities.map((option) => {
-                  const selected = field.state.value.includes(option.value);
-                  return (
-                    <button
-                      aria-pressed={selected}
-                      className={`flex flex-col items-start gap-1 rounded-2xl border p-4 text-left transition ${
-                        selected
-                          ? "border-primary bg-primary/10 text-foreground"
-                          : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                      }`}
-                      key={option.value}
-                      onClick={() => {
-                        const next = selected
-                          ? field.state.value.filter(
-                              (item: DateWhat) => item !== option.value
-                            )
-                          : [...field.state.value, option.value];
-                        field.handleChange(next);
-                      }}
-                      type="button"
-                    >
-                      <span className="flex w-full items-center justify-between font-semibold">
+        <CardContent className="divide-y divide-border p-0">
+          {/* Section 1: What are you up for */}
+          <div className="p-6">
+            <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
+              <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                1
+              </span>
+              What are you up for?
+            </h3>
+            <form.Field name="what">
+              {(field: any) => (
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="group"
+                  aria-label="Date activities"
+                >
+                  {availableActivities.map((option) => {
+                    const selected = field.state.value.includes(option.value);
+                    const Icon =
+                      option.value === "eat"
+                        ? Utensils
+                        : option.value === "drink"
+                          ? Beer
+                          : Gamepad2;
+                    return (
+                      <button
+                        aria-pressed={selected}
+                        className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                          selected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        }`}
+                        key={option.value}
+                        onClick={() => {
+                          const next = selected
+                            ? field.state.value.filter(
+                                (item: DateWhat) => item !== option.value
+                              )
+                            : [...field.state.value, option.value];
+                          field.handleChange(next);
+                        }}
+                        type="button"
+                      >
+                        <Icon className="size-4" />
                         {option.label}
-                        {selected && <Check className="size-4 text-primary" />}
-                      </span>
-                      <span className="text-xs">{option.hint}</span>
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </form.Field>
+            {isUnder21 && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Drink dates unlock when you turn 21.
+              </p>
             )}
-          </form.Field>
-          {isUnder21 && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              Drink dates unlock when you turn 21.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>When & where</CardTitle>
-          <CardDescription>
-            Chewbuu optimizes matches and spots around this window.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <form.Field name="scheduledAt">
-            {(field) => {
-              const dateValue = field.state.value.slice(0, 10);
-              const timeValue = field.state.value.slice(11, 16);
+          {/* Section 2: When & Where */}
+          <div className="p-6">
+            <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
+              <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                2
+              </span>
+              When & where?
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <form.Field name="scheduledAt">
+                {(field: any) => {
+                  const dateValue = field.state.value.slice(0, 10);
+                  const timeValue = field.state.value.slice(11, 16);
 
-              const setDate = (date: Date | undefined) => {
-                if (!date) return;
-                field.handleChange(
-                  `${toLocalInputValue(date).slice(0, 10)}T${timeValue}`
-                );
-              };
-              const setTime = (time: string) => {
-                field.handleChange(`${dateValue}T${time || "19:00"}`);
-              };
+                  const setDate = (date: Date | undefined) => {
+                    if (!date) return;
+                    field.handleChange(
+                      `${toLocalInputValue(date).slice(0, 10)}T${timeValue}`
+                    );
+                  };
+                  const setTime = (time: string) => {
+                    field.handleChange(`${dateValue}T${time || "19:00"}`);
+                  };
 
-              return (
-                <>
-                  <Field>
-                    <FieldLabel>Date</FieldLabel>
-                    <Popover>
-                      <PopoverTrigger className="flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs transition hover:bg-muted/60 focus-visible:outline-1 focus-visible:outline-ring/50 data-placeholder:text-muted-foreground">
-                        <CalendarIcon className="size-4 text-muted-foreground" />
-                        {formatDateLabel(dateValue)}
-                      </PopoverTrigger>
-                      <PopoverContent align="start" className="w-auto p-0">
-                        <Calendar
-                          disabled={{ before: new Date() }}
-                          mode="single"
-                          onSelect={setDate}
-                          selected={new Date(`${dateValue}T00:00:00`)}
+                  return (
+                    <>
+                      <Field>
+                        <FieldLabel>Date</FieldLabel>
+                        <Popover>
+                          <PopoverTrigger className="flex h-9 w-full items-center justify-start gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs transition hover:bg-muted/60 focus-visible:outline-1 focus-visible:outline-ring/50 data-placeholder:text-muted-foreground">
+                            <CalendarIcon className="size-4 text-muted-foreground" />
+                            {formatDateLabel(dateValue)}
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="w-auto p-0">
+                            <Calendar
+                              disabled={{ before: new Date() }}
+                              mode="single"
+                              onSelect={setDate}
+                              selected={new Date(`${dateValue}T00:00:00`)}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="date-time">Time</FieldLabel>
+                        <Input
+                          id="date-time"
+                          onChange={(event) => setTime(event.target.value)}
+                          type="time"
+                          value={timeValue}
                         />
-                      </PopoverContent>
-                    </Popover>
-                  </Field>
+                      </Field>
+                    </>
+                  );
+                }}
+              </form.Field>
+              <form.Field name="searchArea">
+                {(field: any) => (
                   <Field>
-                    <FieldLabel htmlFor="date-time">Time</FieldLabel>
+                    <FieldLabel htmlFor={field.name}>Area</FieldLabel>
                     <Input
-                      id="date-time"
-                      onChange={(event) => setTime(event.target.value)}
-                      type="time"
-                      value={timeValue}
+                      id={field.name}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                      placeholder="Nashville, TN"
+                      value={field.state.value}
                     />
                   </Field>
-                </>
-              );
-            }}
-          </form.Field>
-          <form.Field name="searchArea">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor={field.name}>Area</FieldLabel>
-                <Input
-                  id={field.name}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="Nashville, TN"
-                  value={field.state.value}
-                />
-                <FieldDescription>
-                  Spots and matches stay close to this area.
-                </FieldDescription>
-              </Field>
-            )}
-          </form.Field>
-        </CardContent>
-      </Card>
+                )}
+              </form.Field>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Spots and matches stay close to your designated area.
+            </p>
+          </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Guests</CardTitle>
-          <CardDescription>
-            {canGroup
-              ? "Bring up to three friends. They get an invite with the plan."
-              : "Social members date solo. Upgrade to Mingle to bring friends."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <form.Subscribe selector={(state) => state.values.partyMembers}>
-            {(partyMembers) => {
-              const guests = partyMembers.length;
-              const setGuests = (next: number) => {
-                const clamped = Math.max(0, Math.min(MAX_GUESTS, next));
-                if (clamped > guests) {
-                  form.setFieldValue("partyMembers", [
-                    ...partyMembers,
-                    { email: "" },
-                  ]);
-                } else if (clamped < guests) {
+          {/* Section 3: Guests */}
+          <div className="p-6">
+            <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
+              <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                3
+              </span>
+              Guests
+            </h3>
+
+            <form.Subscribe
+              selector={(state: any) => state.values.partyMembers}
+            >
+              {(partyMembers: any) => {
+                const guests = partyMembers || [];
+
+                const toggleFriend = (friend: any) => {
+                  if (!canGroup) return;
+                  const exists = guests.some(
+                    (m: any) => m.email === friend.email
+                  );
+
+                  if (exists) {
+                    form.setFieldValue(
+                      "partyMembers",
+                      guests.filter((m: any) => m.email !== friend.email)
+                    );
+                  } else {
+                    if (guests.length >= MAX_GUESTS) {
+                      toast.error(`You can add up to ${MAX_GUESTS} guests.`);
+                      return;
+                    }
+                    form.setFieldValue("partyMembers", [
+                      ...guests,
+                      {
+                        email: friend.email,
+                        name: friend.name,
+                        phone: friend.phone,
+                      },
+                    ]);
+                  }
+                };
+
+                const removeGuestIndex = (index: number) => {
                   form.setFieldValue(
                     "partyMembers",
-                    partyMembers.slice(0, clamped)
+                    guests.filter((_: any, idx: number) => idx !== index)
                   );
-                }
-              };
+                };
 
-              return (
-                <div className="flex items-center justify-between rounded-2xl border bg-background p-4">
-                  <div className="flex items-center gap-3">
-                    <Users className="size-5 text-primary" />
-                    <div className="flex flex-col">
-                      <span className="text-sm font-semibold">
-                        {guests === 0
-                          ? "Just you"
-                          : `You + ${guests} guest${guests > 1 ? "s" : ""}`}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {canGroup ? "Group date" : "Solo date"}
-                      </span>
+                const addGuestByEmail = () => {
+                  if (
+                    !newGuestEmail ||
+                    !emailPattern.test(newGuestEmail.trim())
+                  ) {
+                    toast.error("Enter a valid email address.");
+                    return;
+                  }
+                  const exists = guests.some(
+                    (m: any) => m.email === newGuestEmail.trim()
+                  );
+                  if (exists) {
+                    toast.error("This guest is already added.");
+                    return;
+                  }
+                  if (guests.length >= MAX_GUESTS) {
+                    toast.error(`You can add up to ${MAX_GUESTS} guests.`);
+                    return;
+                  }
+                  form.setFieldValue("partyMembers", [
+                    ...guests,
+                    {
+                      email: newGuestEmail.trim(),
+                      name: newGuestName.trim() || "Guest",
+                    },
+                  ]);
+                  setNewGuestEmail("");
+                  setNewGuestName("");
+                  setShowEmailInput(false);
+                };
+
+                return (
+                  <div className="flex flex-col gap-4">
+                    {canGroup ? (
+                      <>
+                        <p className="text-xs text-muted-foreground -mt-1">
+                          Bring up to three friends. They get an invite with the
+                          plan details.
+                        </p>
+
+                        {circleFriends.length > 0 ? (
+                          <div className="flex flex-col gap-2">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                              Choose from your Circle
+                            </span>
+                            <div className="flex flex-wrap gap-3">
+                              {circleFriends.map((friend) => {
+                                const isSelected = guests.some(
+                                  (g: any) => g.email === friend.email
+                                );
+                                return (
+                                  <button
+                                    key={friend.email}
+                                    onClick={() => toggleFriend(friend)}
+                                    className={`relative flex flex-col items-center gap-1.5 p-2 rounded-2xl border transition ${
+                                      isSelected
+                                        ? "border-primary bg-primary/5"
+                                        : "border-transparent bg-transparent hover:bg-muted/40"
+                                    }`}
+                                    type="button"
+                                  >
+                                    <div className="relative">
+                                      <Avatar className="size-10">
+                                        <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+                                          {friend.name
+                                            ?.slice(0, 2)
+                                            .toUpperCase() ?? "??"}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      {isSelected && (
+                                        <span className="absolute -bottom-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground shadow-sm">
+                                          <Check className="size-2.5" />
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-xs font-medium max-w-[80px] truncate">
+                                      {friend.name}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            No active friends in your circle yet.
+                          </p>
+                        )}
+
+                        {/* Custom Guests list */}
+                        {guests.some(
+                          (g: any) =>
+                            !circleFriends.some((f) => f.email === g.email)
+                        ) && (
+                          <div className="flex flex-col gap-2">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                              Other Invited Guests
+                            </span>
+                            <div className="flex flex-wrap gap-2">
+                              {guests.map((guest: any, idx: number) => {
+                                const isCircle = circleFriends.some(
+                                  (f) => f.email === guest.email
+                                );
+                                if (isCircle) return null;
+                                return (
+                                  <Badge
+                                    key={guest.email}
+                                    variant="secondary"
+                                    className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium"
+                                  >
+                                    <span className="max-w-[120px] truncate">
+                                      {guest.name || guest.email}
+                                    </span>
+                                    <button
+                                      aria-label="Remove guest"
+                                      onClick={() => removeGuestIndex(idx)}
+                                      className="ml-1 text-muted-foreground hover:text-destructive transition"
+                                      type="button"
+                                    >
+                                      <X className="size-3" />
+                                    </button>
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {guests.length < MAX_GUESTS && (
+                          <div className="mt-1">
+                            {!showEmailInput ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full flex items-center gap-1 text-xs px-3 h-8"
+                                onClick={() => setShowEmailInput(true)}
+                                type="button"
+                              >
+                                <Plus className="size-3" />
+                                Invite by Email
+                              </Button>
+                            ) : (
+                              <div className="flex flex-col gap-2 p-4 rounded-2xl border bg-muted/10 max-w-sm">
+                                <span className="text-xs font-semibold">
+                                  Invite guest by email
+                                </span>
+                                <Input
+                                  placeholder="friend@example.com"
+                                  type="email"
+                                  value={newGuestEmail}
+                                  onChange={(e) =>
+                                    setNewGuestEmail(e.target.value)
+                                  }
+                                  className="h-9 text-xs"
+                                />
+                                <Input
+                                  placeholder="Guest Name (optional)"
+                                  type="text"
+                                  value={newGuestName}
+                                  onChange={(e) =>
+                                    setNewGuestName(e.target.value)
+                                  }
+                                  className="h-9 text-xs"
+                                />
+                                <div className="flex gap-2 justify-end mt-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-xs h-8 rounded-full"
+                                    onClick={() => setShowEmailInput(false)}
+                                    type="button"
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="text-xs h-8 rounded-full px-4"
+                                    onClick={addGuestByEmail}
+                                    type="button"
+                                  >
+                                    Add
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex flex-col gap-3 rounded-2xl border border-dashed bg-muted/5 p-4 opacity-85">
+                        <div className="flex items-center gap-3">
+                          <Users className="size-5 text-muted-foreground" />
+                          <div className="flex flex-col flex-1">
+                            <span className="text-sm font-semibold text-muted-foreground">
+                              Social members date solo
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Upgrade to Mingle to bring guests.
+                            </span>
+                          </div>
+                        </div>
+                        <Button
+                          aria-label="Add guest"
+                          disabled
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full flex items-center gap-1 text-xs w-fit"
+                          type="button"
+                        >
+                          <Plus className="size-3" /> Add guest
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              }}
+            </form.Subscribe>
+          </div>
+
+          {/* Section 4: Payment */}
+          <div className="p-6 bg-muted/5">
+            <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
+              <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                4
+              </span>
+              Payment options
+            </h3>
+            <form.Field name="paymentMode">
+              {(field: any) => (
+                <Field>
+                  <label
+                    className={`flex w-fit items-center gap-3 rounded-2xl border bg-background px-4 py-3 text-sm font-medium transition ${
+                      isSugar
+                        ? "cursor-pointer hover:border-primary/40 border-border"
+                        : "opacity-80 border-dashed bg-muted/20"
+                    }`}
+                  >
+                    <Checkbox
+                      aria-label="Split the bill (Dutch)"
+                      checked={field.state.value === "dutch"}
+                      disabled={!isSugar}
+                      onCheckedChange={(checked) =>
+                        field.handleChange(
+                          checked ? "dutch" : "requester_covers"
+                        )
+                      }
+                    />
+                    <div className="flex flex-col text-left">
+                      <span>Split the bill (Dutch)</span>
+                      {!isSugar && (
+                        <span className="text-xs text-muted-foreground font-normal mt-0.5">
+                          Go Sugar to cover the date yourself.
+                        </span>
+                      )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      aria-label="Remove guest"
-                      disabled={!canGroup || guests === 0}
-                      onClick={() => setGuests(guests - 1)}
-                      size="icon-sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <Minus />
-                    </Button>
-                    <span className="w-6 text-center text-sm font-semibold">
-                      {guests}
-                    </span>
-                    <Button
-                      aria-label="Add guest"
-                      disabled={!canGroup || guests >= MAX_GUESTS}
-                      onClick={() => setGuests(guests + 1)}
-                      size="icon-sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      <Plus />
-                    </Button>
-                  </div>
-                </div>
-              );
-            }}
-          </form.Subscribe>
-
-          <form.Subscribe selector={(state) => state.values.partyMembers}>
-            {(partyMembers) =>
-              partyMembers.map((member, index) => (
-                <form.Field
-                  key={member.id ?? index}
-                  name={`partyMembers[${index}].email`}
-                >
-                  {(field) => (
-                    <Field>
-                      <FieldLabel htmlFor={field.name}>
-                        <UserPlus data-icon="inline-start" />
-                        Guest {index + 1} email
-                      </FieldLabel>
-                      <Input
-                        id={field.name}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
-                        placeholder="friend@example.com"
-                        type="email"
-                        value={field.state.value ?? ""}
-                      />
-                    </Field>
-                  )}
-                </form.Field>
-              ))
-            }
-          </form.Subscribe>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment</CardTitle>
-          <CardDescription>
-            Dutch is the default. Sugar members can cover the whole date.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form.Field name="paymentMode">
-            {(field) => (
-              <Field>
-                <label
-                  className={`flex w-fit items-center gap-3 rounded-2xl border bg-background px-4 py-3 text-sm font-medium ${
-                    isSugar
-                      ? "cursor-pointer hover:border-primary/40"
-                      : "opacity-80"
-                  }`}
-                >
-                  <Checkbox
-                    aria-label="Split the bill (Dutch)"
-                    checked={field.state.value === "dutch"}
-                    disabled={!isSugar}
-                    onCheckedChange={(checked) =>
-                      field.handleChange(checked ? "dutch" : "requester_covers")
-                    }
-                  />
-                  Split the bill (Dutch)
-                </label>
-                {!isSugar && (
-                  <FieldDescription>
-                    Go Sugar to cover the date yourself.
-                  </FieldDescription>
-                )}
-              </Field>
-            )}
-          </form.Field>
+                  </label>
+                </Field>
+              )}
+            </form.Field>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -751,7 +972,7 @@ function PlacesStep({
       setAnchor(place);
       for (const category of categories) {
         if (
-          !selected.some((item) =>
+          !selected.some((item: any) =>
             placesByCategory[category]?.some((p) => p.placeId === item.placeId)
           )
         ) {
@@ -767,8 +988,8 @@ function PlacesStep({
   }, [activeFilters, form]);
 
   return (
-    <form.Subscribe selector={(state) => state.values.places}>
-      {(selectedPlaces) => (
+    <form.Subscribe selector={(state: any) => state.values.places}>
+      {(selectedPlaces: any) => (
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
@@ -785,7 +1006,7 @@ function PlacesStep({
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {selectedPlaces.map((place) => (
+                  {selectedPlaces.map((place: any) => (
                     <Badge
                       className="flex items-center gap-1 rounded-full px-3 py-1.5"
                       key={place.placeId}
@@ -808,14 +1029,14 @@ function PlacesStep({
             </CardContent>
           </Card>
 
-          {categories.map((category) => (
+          {categories.map((category: WizardWhat) => (
             <Card key={category}>
               <CardHeader>
                 <CardTitle className="capitalize">{category} spots</CardTitle>
                 <CardDescription>
                   {anchor &&
                   !selectedPlaces.some(
-                    (item) => item.placeId === anchor.placeId
+                    (item: any) => item.placeId === anchor.placeId
                   )
                     ? `Near ${anchor.name}`
                     : anchor
@@ -850,23 +1071,42 @@ function PlacesStep({
                     Finding {category} spots...
                   </p>
                 ) : (
-                  <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:grid md:grid-cols-3 md:overflow-visible">
-                    {(placesByCategory[category] ?? []).map((place) => {
+                  <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 scrollbar-thin">
+                    {(placesByCategory[category] ?? []).map((place: any) => {
                       const selected = selectedPlaces.some(
-                        (item) => item.placeId === place.placeId
+                        (item: any) => item.placeId === place.placeId
                       );
+                      const isHighRating =
+                        place.rating && Number(place.rating) >= 4.7;
+                      const combo = isComboPlace(place.types);
                       return (
                         <button
                           aria-pressed={selected}
-                          className={`flex w-56 shrink-0 snap-start flex-col gap-2 rounded-2xl border p-4 text-left transition md:w-auto ${
+                          className={`flex w-64 md:w-72 shrink-0 snap-start flex-col gap-2 rounded-2xl border p-4 text-left transition ${
                             selected
-                              ? "border-primary bg-primary/10"
+                              ? "border-primary bg-primary/5"
                               : "border-border bg-card hover:border-primary/40"
                           }`}
                           key={place.placeId}
                           onClick={() => togglePlace(place)}
                           type="button"
                         >
+                          <div className="flex items-center gap-2">
+                            {isHighRating && (
+                              <Badge className="bg-amber-500 text-white border-none flex items-center gap-0.5 text-[9px] font-semibold px-2 py-0.5">
+                                <Star className="size-2.5 fill-white text-white" />{" "}
+                                Featured
+                              </Badge>
+                            )}
+                            {combo && (
+                              <Badge
+                                variant="outline"
+                                className="bg-primary/5 text-primary border-primary/20 flex items-center gap-0.5 text-[9px] font-semibold px-2 py-0.5"
+                              >
+                                <Sparkles className="size-2.5" /> Combo
+                              </Badge>
+                            )}
+                          </div>
                           <span className="flex items-start justify-between gap-2">
                             <span className="text-sm font-semibold leading-snug">
                               {place.name}
@@ -874,7 +1114,8 @@ function PlacesStep({
                             {selected ? (
                               <Check className="size-4 shrink-0 text-primary" />
                             ) : (
-                              place.rating && (
+                              place.rating &&
+                              !isHighRating && (
                                 <span className="flex shrink-0 items-center gap-0.5 text-xs font-semibold">
                                   <Star className="size-3 fill-yellow-500 text-yellow-500" />
                                   {place.rating}
@@ -883,12 +1124,12 @@ function PlacesStep({
                             )}
                           </span>
                           {place.address && (
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-muted-foreground line-clamp-2">
                               {place.address}
                             </span>
                           )}
                           <span className="mt-auto flex flex-wrap gap-1">
-                            {place.types.slice(0, 3).map((type) => (
+                            {place.types.slice(0, 3).map((type: any) => (
                               <Badge
                                 className="text-[9px] font-semibold"
                                 key={type}
