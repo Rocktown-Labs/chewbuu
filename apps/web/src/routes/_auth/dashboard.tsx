@@ -26,20 +26,19 @@ import {
   Home,
   LogOut,
   MapPin,
+  MessageCircle,
   MessageSquare,
   Plus,
   Search,
   ShieldCheck,
-  Sparkles,
   Star,
-  Tv,
   User,
   UserPlus,
-  Video,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { DashboardChats } from "@/features/stream/dashboard-chats";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
@@ -92,7 +91,7 @@ function RouteComponent() {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<
-    "feed" | "matches" | "spots" | "profile"
+    "chats" | "feed" | "matches" | "profile" | "spots"
   >("feed");
   const [spotsCategory, setSpotsCategory] = useState<
     "all" | "eat" | "drink" | "play"
@@ -174,6 +173,12 @@ function RouteComponent() {
     profile?.friendInvites?.filter(
       (invite) => invite.relationship !== "spouse"
     ) ?? [];
+  const circleMembers = circleInvites.filter(
+    (invite) => invite.status === "joined"
+  );
+  const pendingCircleInvites = circleInvites.filter(
+    (invite) => invite.status !== "joined"
+  );
   const age = profile?.birthday ? getAge(profile.birthday) : null;
   const profileComplete = Boolean(
     profile?.bio &&
@@ -289,7 +294,7 @@ function RouteComponent() {
     <div className="min-h-screen bg-background text-foreground flex justify-center">
       <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12">
         {/* LEFT SIDEBAR NAVIGATION */}
-        <aside className="lg:col-span-3 border-r border-border/80 p-5 flex flex-col justify-between h-sticky sticky top-0 hidden md:flex">
+        <aside className="lg:col-span-3 border-r border-border/80 p-5 hidden lg:flex flex-col justify-between sticky top-0 h-screen overflow-y-auto">
           <div className="flex flex-col gap-8">
             {/* Logo */}
             <Link to="/dashboard" className="flex items-center gap-2 px-2">
@@ -340,6 +345,18 @@ function RouteComponent() {
               >
                 <Heart className="size-5" />
                 <span>Matches</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("chats")}
+                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                  activeTab === "chats"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <MessageCircle className="size-5" />
+                <span>Chats</span>
               </button>
               <button
                 type="button"
@@ -409,7 +426,7 @@ function RouteComponent() {
         </aside>
 
         {/* MOBILE TOP BAR (visible on mobile only) */}
-        <header className="md:hidden border-b border-border/80 p-4 flex items-center justify-between sticky top-0 bg-background/80 backdrop-blur-md z-40 w-full col-span-1">
+        <header className="lg:hidden border-b border-border/80 p-4 flex items-center justify-between sticky top-0 bg-background/80 backdrop-blur-md z-40 w-full col-span-1">
           <div className="flex items-center gap-2">
             <img
               src="/brand/chewbuu-logo-500-trans.png"
@@ -418,44 +435,20 @@ function RouteComponent() {
             />
             <span className="font-extrabold tracking-tight">chewbuu</span>
           </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              aria-label="Feed"
-              onClick={() => setActiveTab("feed")}
-              className={`p-2 rounded-full ${activeTab === "feed" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
-            >
-              <Home className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="Spots"
-              onClick={() => setActiveTab("spots")}
-              className={`p-2 rounded-full ${activeTab === "spots" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
-            >
-              <MapPin className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="Matches"
-              onClick={() => setActiveTab("matches")}
-              className={`p-2 rounded-full ${activeTab === "matches" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
-            >
-              <Heart className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="Profile"
-              onClick={() => setActiveTab("profile")}
-              className={`p-2 rounded-full ${activeTab === "profile" ? "bg-primary/15 text-primary" : "text-muted-foreground"}`}
-            >
-              <User className="size-4" />
-            </button>
-          </div>
+          <Link
+            to={canDate ? "/date/new" : "/onboarding"}
+            className={buttonVariants({
+              className: "rounded-full text-xs font-semibold h-8",
+              size: "sm",
+            })}
+          >
+            <CalendarHeart className="size-4" />
+            Plan a Date
+          </Link>
         </header>
 
-        {/* MAIN MIDDLE COLUMN (FEED / SPOTS / PROFILE) */}
-        <main className="lg:col-span-6 md:col-span-9 border-r border-border/80 min-h-screen pb-16 md:pb-6">
+        {/* MAIN MIDDLE COLUMN (FEED / SPOTS / MATCHES / CHATS / PROFILE) */}
+        <main className="lg:col-span-6 border-r border-border/80 min-h-screen pb-24 lg:pb-6">
           {/* FEED SUB-VIEW */}
           {activeTab === "feed" && (
             <div className="flex flex-col">
@@ -677,9 +670,13 @@ function RouteComponent() {
                           )}
                         </div>
                         <div className="grid gap-2 sm:grid-cols-3">
-                          <Button className="rounded-full" disabled size="sm">
+                          <Button
+                            className="rounded-full"
+                            onClick={() => setActiveTab("chats")}
+                            size="sm"
+                          >
                             <MessageSquare className="mr-1.5 size-4" />
-                            Chat Soon
+                            Chat
                           </Button>
                           <Button
                             className="rounded-full"
@@ -703,6 +700,19 @@ function RouteComponent() {
                   ))
                 )}
               </div>
+            </div>
+          )}
+
+          {/* CHATS SUB-VIEW (Stream) */}
+          {activeTab === "chats" && (
+            <div className="flex flex-col">
+              <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
+                <h2 className="text-xl font-bold">Chats</h2>
+                <p className="mt-1 text-muted-foreground text-xs">
+                  Every match gets its own room with the video-first rules.
+                </p>
+              </div>
+              <DashboardChats />
             </div>
           )}
 
@@ -783,16 +793,27 @@ function RouteComponent() {
             <div className="flex flex-col">
               <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30 flex items-center justify-between">
                 <h2 className="text-xl font-bold">My Profile</h2>
-                <Link
-                  to="/onboarding"
-                  className={buttonVariants({
-                    className: "rounded-full text-xs font-semibold h-8",
-                    size: "sm",
-                    variant: "outline",
-                  })}
-                >
-                  Edit Profile
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/onboarding"
+                    className={buttonVariants({
+                      className: "rounded-full text-xs font-semibold h-8",
+                      size: "sm",
+                      variant: "outline",
+                    })}
+                  >
+                    Edit Profile
+                  </Link>
+                  <Button
+                    aria-label="Sign out"
+                    className="rounded-full lg:hidden"
+                    onClick={handleSignOut}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <LogOut className="size-4" />
+                  </Button>
+                </div>
               </div>
 
               {/* Instagram Header */}
@@ -826,7 +847,7 @@ function RouteComponent() {
                     </div>
                     <div className="flex flex-col">
                       <span className="font-extrabold text-lg md:text-xl text-foreground">
-                        {circleInvites.length}
+                        {circleMembers.length}
                       </span>
                       <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
                         Circle
@@ -914,6 +935,18 @@ function RouteComponent() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Mobile widgets (desktop shows them in the right rail) */}
+              <div className="flex flex-col gap-4 p-5 lg:hidden">
+                <DashboardWidgets
+                  circleMembers={circleMembers}
+                  pendingCircleInvites={pendingCircleInvites}
+                  readinessItems={readinessItems}
+                  readinessReady={readinessReady}
+                  requestsCount={summary?.requests.length ?? 0}
+                  tier={tier}
+                />
               </div>
 
               {/* Instagram Sub-tabs */}
@@ -1161,115 +1194,209 @@ function RouteComponent() {
         </main>
 
         {/* RIGHT SIDEBAR WIDGETS */}
-        <aside className="lg:col-span-3 p-5 hidden lg:flex flex-col gap-6 sticky top-0 h-sticky overflow-y-auto">
-          {/* Geolocation & Verification Checklist */}
-          {!readinessReady && (
-            <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold flex items-center gap-1.5">
-                  <ShieldCheck className="size-4 text-primary" />
-                  Dating Readiness
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-xs flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground font-medium">
-                    Status:
-                  </span>
-                  <Badge className="rounded-full bg-red-500/10 text-[10px] font-bold text-red-500">
-                    Action Required
-                  </Badge>
-                </div>
-
-                <div className="flex flex-col gap-1.5 border-t border-border/40 pt-2">
-                  {readinessItems.map((item) => (
-                    <ChecklistItem
-                      checked={item.checked}
-                      key={item.label}
-                      label={item.label}
-                    />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Daily Limit Progress */}
-          <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold">
-                Daily Bookings Limit
-              </CardTitle>
-              <CardDescription className="text-[10px] capitalize">
-                {tier} Membership
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2">
-              <div className="flex justify-between text-xs font-semibold">
-                <span>Booked today</span>
-                <span>
-                  {summary?.requests.length ?? 0} /{" "}
-                  {tier === "social" ? 2 : tier === "mingle" ? 8 : 24}
-                </span>
-              </div>
-              <Progress
-                value={
-                  ((summary?.requests.length ?? 0) /
-                    (tier === "social" ? 2 : tier === "mingle" ? 8 : 24)) *
-                  100
-                }
-                className="h-2 rounded-full"
-              />
-            </CardContent>
-          </Card>
-
-          {/* Friends Widget */}
-          <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold flex items-center gap-1.5">
-                <UserPlus className="size-4 text-primary" />
-                Dating Circle
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2.5">
-              <div className="flex items-center justify-between text-xs font-bold text-muted-foreground border-b pb-2 mb-1">
-                <span>Circle Friends</span>
-                <span>({circleInvites.length})</span>
-              </div>
-              {circleInvites.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {circleInvites.map((friend, i) => (
-                    <div
-                      className="flex items-center justify-between gap-2"
-                      key={i}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="relative flex h-2 w-2 rounded-full bg-emerald-500" />
-                        <span className="text-xs font-bold truncate max-w-28 text-foreground/90">
-                          {friend.email?.split("@")[0] ||
-                            friend.phone ||
-                            "Circle Friend"}
-                        </span>
-                      </div>
-                      <Badge
-                        className="text-[8px] font-bold uppercase rounded-full"
-                        variant="secondary"
-                      >
-                        {friend.status ?? "pending"}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground italic">
-                  Add friends to build your group circles.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+        <aside className="hidden lg:flex lg:col-span-3 p-5 flex-col gap-6 sticky top-0 h-screen overflow-y-auto">
+          <DashboardWidgets
+            circleMembers={circleMembers}
+            pendingCircleInvites={pendingCircleInvites}
+            readinessItems={readinessItems}
+            readinessReady={readinessReady}
+            requestsCount={summary?.requests.length ?? 0}
+            tier={tier}
+          />
         </aside>
+
+        {/* MOBILE BOTTOM TAB BAR */}
+        <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border/80 bg-background/90 backdrop-blur-md lg:hidden">
+          <div className="grid grid-cols-5">
+            {(
+              [
+                { icon: Home, label: "Feed", tab: "feed" },
+                { icon: MapPin, label: "Spots", tab: "spots" },
+                { icon: Heart, label: "Matches", tab: "matches" },
+                { icon: MessageCircle, label: "Chats", tab: "chats" },
+                { icon: User, label: "Profile", tab: "profile" },
+              ] as const
+            ).map((item) => (
+              <button
+                aria-label={item.label}
+                className={`flex flex-col items-center gap-1 py-2.5 text-[10px] font-bold transition ${
+                  activeTab === item.tab
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                key={item.tab}
+                onClick={() => setActiveTab(item.tab)}
+                type="button"
+              >
+                <item.icon className="size-5" />
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </nav>
       </div>
     </div>
+  );
+}
+
+interface CircleInvite {
+  email?: string;
+  name?: string;
+  phone?: string;
+  status?: string;
+}
+
+function DashboardWidgets({
+  circleMembers,
+  pendingCircleInvites,
+  readinessItems,
+  readinessReady,
+  requestsCount,
+  tier,
+}: {
+  circleMembers: CircleInvite[];
+  pendingCircleInvites: CircleInvite[];
+  readinessItems: { checked: boolean; label: string }[];
+  readinessReady: boolean;
+  requestsCount: number;
+  tier: string;
+}) {
+  const dailyLimit = tier === "social" ? 2 : tier === "mingle" ? 8 : 24;
+
+  return (
+    <>
+      {/* Verification Checklist */}
+      {!readinessReady && (
+        <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-1.5">
+              <ShieldCheck className="size-4 text-primary" />
+              Dating Readiness
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground font-medium">Status:</span>
+              <Badge className="rounded-full bg-red-500/10 text-[10px] font-bold text-red-500">
+                Action Required
+              </Badge>
+            </div>
+
+            <div className="flex flex-col gap-1.5 border-t border-border/40 pt-2">
+              {readinessItems.map((item) => (
+                <ChecklistItem
+                  checked={item.checked}
+                  key={item.label}
+                  label={item.label}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Daily Limit Progress */}
+      <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-bold">
+            Daily Bookings Limit
+          </CardTitle>
+          <CardDescription className="text-[10px] capitalize">
+            {tier} Membership
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <div className="flex justify-between text-xs font-semibold">
+            <span>Booked today</span>
+            <span>
+              {requestsCount} / {dailyLimit}
+            </span>
+          </div>
+          <Progress
+            value={(requestsCount / dailyLimit) * 100}
+            className="h-2 rounded-full"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Dating Circle */}
+      <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-bold flex items-center gap-1.5">
+            <UserPlus className="size-4 text-primary" />
+            Dating Circle
+          </CardTitle>
+          <CardDescription className="text-[10px]">
+            Friends join once they finish setting up their account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2.5">
+          <div className="flex items-center justify-between text-xs font-bold text-muted-foreground border-b pb-2 mb-1">
+            <span>Members</span>
+            <span>({circleMembers.length})</span>
+          </div>
+          {circleMembers.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {circleMembers.map((friend, i) => (
+                <div
+                  className="flex items-center justify-between gap-2"
+                  key={friend.email ?? friend.phone ?? i}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-bold truncate max-w-28 text-foreground/90">
+                      {friend.name ||
+                        friend.email?.split("@")[0] ||
+                        friend.phone ||
+                        "Circle Friend"}
+                    </span>
+                  </div>
+                  <Badge className="text-[8px] font-bold uppercase rounded-full bg-emerald-500/10 text-emerald-600">
+                    In circle
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              No one is in your circle yet.
+            </p>
+          )}
+          {pendingCircleInvites.length > 0 && (
+            <>
+              <div className="flex items-center justify-between text-xs font-bold text-muted-foreground border-b pb-2 mb-1 mt-2">
+                <span>Invites</span>
+                <span>({pendingCircleInvites.length})</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {pendingCircleInvites.map((friend, i) => (
+                  <div
+                    className="flex items-center justify-between gap-2"
+                    key={friend.email ?? friend.phone ?? i}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2 w-2 rounded-full bg-amber-500" />
+                      <span className="text-xs font-bold truncate max-w-28 text-muted-foreground">
+                        {friend.name ||
+                          friend.email?.split("@")[0] ||
+                          friend.phone ||
+                          "Invited Friend"}
+                      </span>
+                    </div>
+                    <Badge
+                      className="text-[8px] font-bold uppercase rounded-full"
+                      variant="secondary"
+                    >
+                      {friend.status === "sent" ? "Invited" : "Pending"}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }
 

@@ -1,5 +1,5 @@
 import { db } from "@chewbuu/db";
-import { and, eq } from "@chewbuu/db/orm";
+import { and, eq, ilike, or, sql } from "@chewbuu/db/orm";
 import { user } from "@chewbuu/db/schema/auth";
 import {
   dateMatch,
@@ -154,6 +154,8 @@ const profilePayloadSchema = z
 
 const placeSchema = z.object({
   address: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
   name: requiredString,
   placeId: requiredString,
   rating: z.string().optional(),
@@ -205,6 +207,10 @@ type GooglePlace = {
   };
   formattedAddress?: string;
   id?: string;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+  };
   name?: string;
   primaryType?: string;
   rating?: number;
@@ -226,6 +232,27 @@ const inviteKey = (invite: {
     invite.email?.trim().toLowerCase() ?? "",
     invite.phone?.replaceAll(/\D/g, "") ?? "",
   ].join(":");
+
+const JOINABLE_INVITE_STATUSES = new Set(["pending", "sent"]);
+
+export const isJoinableInvite = (
+  invite: { email?: null | string; phone?: null | string; status: string },
+  joiner: { email?: null | string; phone?: null | string }
+) => {
+  if (!JOINABLE_INVITE_STATUSES.has(invite.status)) {
+    return false;
+  }
+
+  const inviteEmail = invite.email?.trim().toLowerCase();
+  const joinerEmail = joiner.email?.trim().toLowerCase();
+  if (inviteEmail && joinerEmail && inviteEmail === joinerEmail) {
+    return true;
+  }
+
+  const invitePhone = invite.phone?.replaceAll(/\D/g, "");
+  const joinerPhone = joiner.phone?.replaceAll(/\D/g, "");
+  return Boolean(invitePhone && joinerPhone && invitePhone === joinerPhone);
+};
 
 const assertCanDate = async (sessionUser: SessionUser, input: RequestInput) => {
   const readiness = await getReadiness(sessionUser);
@@ -641,12 +668,70 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
     })
     .where(eq(user.id, sessionUser.id));
 
+  if (onboarded) {
+    await syncCircleJoins(sessionUser, input.phone);
+  }
+
   return {
     ...input,
     canDate,
     onboarded,
     userId: sessionUser.id,
   };
+};
+
+// Circle activation: an invited friend only becomes a circle member once they
+// have an account AND have finished onboarding. Runs on every onboarded
+// profile save in both directions.
+const syncCircleJoins = async (
+  sessionUser: SessionUser,
+  joinerPhone?: string
+) => {
+  // Joiner side: this user just finished onboarding, so flip any pending
+  // invites other users sent to this email/phone.
+  const phoneDigits = joinerPhone?.replaceAll(/\D/g, "");
+  const joinerConditions = [ilike(friendInvite.email, sessionUser.email)];
+  if (phoneDigits) {
+    joinerConditions.push(
+      sql`regexp_replace(${friendInvite.phone}, '\D', '', 'g') = ${phoneDigits}` as never
+    );
+  }
+  const incomingInvites = await db
+    .select()
+    .from(friendInvite)
+    .where(or(...joinerConditions));
+  const joinableIncoming = incomingInvites.filter((invite) =>
+    isJoinableInvite(invite, { email: sessionUser.email, phone: joinerPhone })
+  );
+  for (const invite of joinableIncoming) {
+    await db
+      .update(friendInvite)
+      .set({ status: "joined" })
+      .where(eq(friendInvite.id, invite.id));
+  }
+
+  // Inviter side: this user's own pending invites may point at people who
+  // already finished onboarding.
+  const outgoingInvites = await db
+    .select()
+    .from(friendInvite)
+    .where(eq(friendInvite.userId, sessionUser.id));
+  for (const invite of outgoingInvites) {
+    if (!invite.email || !JOINABLE_INVITE_STATUSES.has(invite.status)) {
+      continue;
+    }
+    const [invitee] = await db
+      .select()
+      .from(user)
+      .where(ilike(user.email, invite.email))
+      .limit(1);
+    if (invitee?.hasCompletedOnboarding) {
+      await db
+        .update(friendInvite)
+        .set({ status: "joined" })
+        .where(eq(friendInvite.id, invite.id));
+    }
+  }
 };
 
 const getProfile = async (sessionUser: SessionUser) => {
@@ -770,6 +855,13 @@ export const normalizeGooglePlaces = (
     return [
       {
         ...(place.formattedAddress ? { address: place.formattedAddress } : {}),
+        ...(typeof place.location?.latitude === "number" &&
+        typeof place.location?.longitude === "number"
+          ? {
+              latitude: place.location.latitude,
+              longitude: place.location.longitude,
+            }
+          : {}),
         name,
         placeId,
         ...(typeof place.rating === "number"
@@ -822,7 +914,7 @@ const googlePlacesTextSearch = async (
           "content-type": "application/json",
           "x-goog-api-key": googlePlacesApiKey,
           "x-goog-fieldmask":
-            "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.primaryType",
+            "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.primaryType,places.location",
         },
         method: "POST",
       }

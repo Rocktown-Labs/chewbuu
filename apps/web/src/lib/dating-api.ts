@@ -26,9 +26,11 @@ export interface DatingProfilePayload {
   favoriteThings: string[];
   friendInvites: {
     email?: string;
+    inviteToken?: string;
     name?: string;
     phone?: string;
     relationship?: "friend" | "spouse";
+    status?: string;
   }[];
   height?: string;
   interestDetails: Record<string, string[]>;
@@ -53,6 +55,8 @@ export interface DatingProfilePayload {
 
 export interface DatePlace {
   address?: string;
+  latitude?: number;
+  longitude?: number;
   name: string;
   placeId: string;
   rating?: string;

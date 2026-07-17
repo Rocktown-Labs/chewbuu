@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@chewbuu/ui/components/select";
+import { Slider } from "@chewbuu/ui/components/slider";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -153,6 +154,7 @@ const lookingForOptions = [
 
 const MINIMUM_AGE = 18;
 const UNDER_21_MATCH_MAX_AGE = 22;
+const ADULT_MATCH_MIN_AGE = 23;
 const MAXIMUM_MATCH_AGE = 99;
 
 const interestCategories = [
@@ -643,6 +645,8 @@ export function OnboardingForm() {
       const age = getAge(values.birthday);
       const maxAllowedAge =
         age !== null && age < 21 ? UNDER_21_MATCH_MAX_AGE : MAXIMUM_MATCH_AGE;
+      const minAllowedAge =
+        age !== null && age >= 21 ? ADULT_MATCH_MIN_AGE : MINIMUM_AGE;
       const ageRangeMin = Number(values.ageRangeMin);
       const ageRangeMax =
         age !== null && age < 21
@@ -656,10 +660,14 @@ export function OnboardingForm() {
         }
       }
 
+      if (age !== null && age >= 21 && ageRangeMin < ADULT_MATCH_MIN_AGE) {
+        form.setFieldValue("ageRangeMin", ADULT_MATCH_MIN_AGE);
+      }
+
       if (
         Number.isNaN(ageRangeMin) ||
         Number.isNaN(ageRangeMax) ||
-        ageRangeMin < MINIMUM_AGE ||
+        ageRangeMin < minAllowedAge ||
         ageRangeMax > maxAllowedAge ||
         ageRangeMin > ageRangeMax
       ) {
@@ -1277,44 +1285,13 @@ function PreferencesStep({ form }: { form: OnboardingFormApi }) {
     <form.Subscribe
       selector={(state) => [
         state.values.birthday,
-        state.values.ageRangeMin,
-        state.values.ageRangeMax,
         state.values.interestedIn,
         state.values.lookingFor,
       ]}
     >
-      {([
-        birthdayValue,
-        ageRangeMinValue,
-        ageRangeMaxValue,
-        interestedInValue,
-        lookingForValue,
-      ]) => {
-        const age = getAge((birthdayValue as string) || "");
-        const isUnder21 = age !== null && age < 21;
-        const maxAllowedAge = isUnder21
-          ? UNDER_21_MATCH_MAX_AGE
-          : MAXIMUM_MATCH_AGE;
-        const ageRangeMin = Number(ageRangeMinValue ?? MINIMUM_AGE);
-        const ageRangeMax = Number(ageRangeMaxValue ?? maxAllowedAge);
+      {([birthdayValue, interestedInValue, lookingForValue]) => {
         const interestedIn = (interestedInValue || []) as string[];
         const lookingFor = (lookingForValue || []) as string[];
-
-        const setAgeRangeMin = (value: number) => {
-          const nextMin = Math.min(Math.max(value, MINIMUM_AGE), maxAllowedAge);
-          form.setFieldValue("ageRangeMin", nextMin);
-          if (ageRangeMax < nextMin) {
-            form.setFieldValue("ageRangeMax", nextMin);
-          }
-        };
-
-        const setAgeRangeMax = (value: number) => {
-          const nextMax = Math.min(Math.max(value, MINIMUM_AGE), maxAllowedAge);
-          form.setFieldValue("ageRangeMax", nextMax);
-          if (ageRangeMin > nextMax) {
-            form.setFieldValue("ageRangeMin", nextMax);
-          }
-        };
 
         return (
           <div className="flex flex-col gap-6">
@@ -1324,51 +1301,10 @@ function PreferencesStep({ form }: { form: OnboardingFormApi }) {
               text="Choose who can show up, what you are open to, and the age range Chewbuu should respect when matching."
             />
             <FieldGroup>
-              <Field>
-                <FieldLabel>Match age range</FieldLabel>
-                <FieldDescription>
-                  {isUnder21
-                    ? "For 18-20 year olds, Chewbuu limits matching to ages 18-22."
-                    : "You control who can find you and who Chewbuu should suggest."}
-                </FieldDescription>
-                <div className="rounded-2xl border bg-background p-4">
-                  <div className="mb-4 flex items-center justify-between gap-3">
-                    <Badge variant="secondary">{ageRangeMin} min</Badge>
-                    <Badge variant="secondary">{ageRangeMax} max</Badge>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="flex flex-col gap-2 text-sm font-medium">
-                      Minimum age
-                      <input
-                        aria-label="Minimum match age"
-                        className="accent-primary"
-                        max={maxAllowedAge}
-                        min={MINIMUM_AGE}
-                        onChange={(event) =>
-                          setAgeRangeMin(Number(event.target.value))
-                        }
-                        type="range"
-                        value={ageRangeMin}
-                      />
-                    </label>
-                    <label className="flex flex-col gap-2 text-sm font-medium">
-                      Maximum age
-                      <input
-                        aria-label="Maximum match age"
-                        className="accent-primary"
-                        disabled={isUnder21}
-                        max={maxAllowedAge}
-                        min={MINIMUM_AGE}
-                        onChange={(event) =>
-                          setAgeRangeMax(Number(event.target.value))
-                        }
-                        type="range"
-                        value={ageRangeMax}
-                      />
-                    </label>
-                  </div>
-                </div>
-              </Field>
+              <AgeRangeField
+                birthday={(birthdayValue as string) || ""}
+                form={form}
+              />
 
               <form.Field name="interestedIn">
                 {(field) => (
@@ -1408,6 +1344,114 @@ function PreferencesStep({ form }: { form: OnboardingFormApi }) {
         );
       }}
     </form.Subscribe>
+  );
+}
+
+function AgeRangeField({
+  birthday,
+  form,
+}: {
+  birthday: string;
+  form: OnboardingFormApi;
+}) {
+  return (
+    <form.Subscribe
+      selector={(state) => [state.values.ageRangeMin, state.values.ageRangeMax]}
+    >
+      {([ageRangeMinValue, ageRangeMaxValue]) => (
+        <AgeRangeSlider
+          ageRangeMax={Number(ageRangeMaxValue)}
+          ageRangeMin={Number(ageRangeMinValue)}
+          birthday={birthday}
+          form={form}
+        />
+      )}
+    </form.Subscribe>
+  );
+}
+
+function AgeRangeSlider({
+  ageRangeMax,
+  ageRangeMin,
+  birthday,
+  form,
+}: {
+  ageRangeMax: number;
+  ageRangeMin: number;
+  birthday: string;
+  form: OnboardingFormApi;
+}) {
+  const age = getAge(birthday);
+  const isUnder21 = age !== null && age < 21;
+  const isAdult = age !== null && age >= 21;
+  const sliderMin = isAdult ? ADULT_MATCH_MIN_AGE : MINIMUM_AGE;
+  const sliderMax = isUnder21 ? UNDER_21_MATCH_MAX_AGE : MAXIMUM_MATCH_AGE;
+
+  // Snap out-of-band values whenever the age rules change the allowed band
+  // (for example, when the birthday shows the member is 21+).
+  useEffect(() => {
+    if (
+      Number.isNaN(ageRangeMin) ||
+      ageRangeMin < sliderMin ||
+      ageRangeMin > sliderMax
+    ) {
+      form.setFieldValue("ageRangeMin", sliderMin);
+    }
+    if (
+      Number.isNaN(ageRangeMax) ||
+      ageRangeMax > sliderMax ||
+      ageRangeMax < sliderMin
+    ) {
+      form.setFieldValue("ageRangeMax", sliderMax);
+    }
+  }, [form, ageRangeMin, ageRangeMax, sliderMin, sliderMax]);
+
+  const clampedMin = Math.min(
+    Math.max(Number.isNaN(ageRangeMin) ? sliderMin : ageRangeMin, sliderMin),
+    sliderMax
+  );
+  const clampedMax = Math.max(
+    Math.min(Number.isNaN(ageRangeMax) ? sliderMax : ageRangeMax, sliderMax),
+    sliderMin
+  );
+
+  const handleRangeChange = (value: number | readonly number[]) => {
+    if (!Array.isArray(value) || value.length < 2) {
+      return;
+    }
+    const [nextMin, nextMax] = value;
+    form.setFieldValue(
+      "ageRangeMin",
+      Math.min(Math.max(nextMin, sliderMin), sliderMax)
+    );
+    form.setFieldValue(
+      "ageRangeMax",
+      Math.max(Math.min(nextMax, sliderMax), sliderMin)
+    );
+  };
+
+  return (
+    <Field>
+      <FieldLabel>Match age range</FieldLabel>
+      <FieldDescription>
+        {isUnder21
+          ? "For 18-20 year olds, Chewbuu limits matching to ages 18-22."
+          : "Match options start at 23 and go up from there. Drag both ends to set your lane."}
+      </FieldDescription>
+      <div className="rounded-2xl border bg-background p-4">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <Badge variant="secondary">{clampedMin} min</Badge>
+          <Badge variant="secondary">{clampedMax} max</Badge>
+        </div>
+        <Slider
+          aria-label="Match age range"
+          max={sliderMax}
+          min={sliderMin}
+          onValueChange={handleRangeChange}
+          value={[clampedMin, clampedMax]}
+        />
+      </div>
+    </Field>
   );
 }
 
@@ -2040,7 +2084,9 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                   </h3>
                   <p className="text-muted-foreground text-sm">
                     Mingle and Sugar members can start circles and invite up to
-                    three friends into group dates.
+                    three friends into group dates. Friends join your circle
+                    once they create their account and finish onboarding — until
+                    then their invite stays pending.
                   </p>
                 </div>
               </div>

@@ -4,9 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - 2026-07-14
+## [0.6.0] - 2026-07-17
 
 ### Added
+
+- Reworked the Date Wizard into a streamlined 3-step form (Plan, Places, Matches).
+- Grouped activity toggles, date/time pickers, guest counts, and Dutch payment checkbox into the initial date booking form step.
+- Hidden the "Drink" activity option from onboarding and date planning for users under 21.
+- Updated onboarding age selection to a single dual-thumb range slider, enforcing match limits: locked to 18-22 for under-21s, and starting at 23 for users 21 and older.
+- Redesigned the authenticated dashboard shell to be fully responsive and mobile-friendly.
+- Integrated a Stream-powered Chat screen/tab into the mobile-friendly dashboard.
+- Normalized Google Places results to include latitude and longitude coordinates, enabling location chaining to recommend subsequent spots nearby.
+- Integrated automatic invite processing to auto-join a user to pending friend/spouse invites when their onboarding completes.
+- Added comprehensive unit tests for the updated date wizard constraints, onboarding age sliders, Places coordinates, and invite join rules.
+
+### Fixed
+
+- Fixed linting and formatting issues including modernizing sorting with `toSorted` and removing dynamic property deletions.
+- Fixed Testing Library assertions for custom Base UI checkbox and hidden slider range inputs.
+
+## [0.5.0] - 2026-07-14
 
 - Added launch-draft Privacy Policy and Terms of Service pages linked from the homepage footer.
 - Added AI overview and acknowledgement controls for Privacy and Terms pages, plus required policy acceptance during signup.
