@@ -1157,36 +1157,36 @@ function RouteComponent() {
         {/* RIGHT SIDEBAR WIDGETS */}
         <aside className="lg:col-span-3 p-5 hidden lg:flex flex-col gap-6 sticky top-0 h-sticky overflow-y-auto">
           {/* Geolocation & Verification Checklist */}
-          <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold flex items-center gap-1.5">
-                <ShieldCheck className="size-4 text-primary" />
-                Dating Readiness
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground font-medium">
-                  Status:
-                </span>
-                <Badge
-                  className={`rounded-full text-[10px] font-bold ${readinessReady ? "bg-emerald-500/10 text-emerald-600" : "bg-yellow-500/10 text-yellow-600"}`}
-                >
-                  {readinessReady ? "Ready to Date" : "Action Required"}
-                </Badge>
-              </div>
+          {!readinessReady && (
+            <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="size-4 text-primary" />
+                  Dating Readiness
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-xs flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground font-medium">
+                    Status:
+                  </span>
+                  <Badge className="rounded-full bg-red-500/10 text-[10px] font-bold text-red-500">
+                    Action Required
+                  </Badge>
+                </div>
 
-              <div className="flex flex-col gap-1.5 border-t border-border/40 pt-2">
-                {readinessItems.map((item) => (
-                  <ChecklistItem
-                    checked={item.checked}
-                    key={item.label}
-                    label={item.label}
-                  />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                <div className="flex flex-col gap-1.5 border-t border-border/40 pt-2">
+                  {readinessItems.map((item) => (
+                    <ChecklistItem
+                      checked={item.checked}
+                      key={item.label}
+                      label={item.label}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Daily Limit Progress */}
           <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
@@ -1279,11 +1279,12 @@ function ChecklistItem({
       <span className={checked ? "text-foreground" : "text-muted-foreground"}>
         {label}
       </span>
-      {checked ? (
-        <Check className="size-3 text-primary" />
-      ) : (
-        <span className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
-      )}
+      <span
+        aria-label={checked ? "Complete" : "Incomplete"}
+        className={`h-2.5 w-2.5 rounded-full ${
+          checked ? "bg-emerald-500" : "bg-red-500"
+        }`}
+      />
     </div>
   );
 }

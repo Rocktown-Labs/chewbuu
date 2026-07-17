@@ -26,10 +26,6 @@ import {
   SelectValue,
 } from "@chewbuu/ui/components/select";
 import { Textarea } from "@chewbuu/ui/components/textarea";
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@chewbuu/ui/components/toggle-group";
 import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -336,7 +332,7 @@ const fileUrlFromUpload = (result: Awaited<ReturnType<typeof uploadFile>>) => {
       : "";
   const { key } = result.file.objectInfo;
 
-  return baseUrl ? `${baseUrl}/${key}` : `r2://${key}`;
+  return baseUrl ? `${baseUrl}/${key}` : `https://storage.chewbuu.local/${key}`;
 };
 
 const createEmptyPhoto = (sortOrder: number): DatingMedia => ({
@@ -1185,9 +1181,13 @@ function InterestsStepContent({
     interestCategories[0].label
   );
   const [customInterest, setCustomInterest] = useState("");
-  const [places, setPlaces] = useState<DatePlace[]>([]);
+  const [placesByQuery, setPlacesByQuery] = useState<
+    Record<string, DatePlace[]>
+  >({});
+  const [activePlaceQuery, setActivePlaceQuery] = useState("");
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [placeSearch, setPlaceSearch] = useState("");
+  const [placePage, setPlacePage] = useState(1);
 
   const active = useMemo(
     () =>
@@ -1198,7 +1198,16 @@ function InterestsStepContent({
   );
 
   const selected = interestDetails[active.label] ?? [];
-  const selectedString = selected.join(",");
+  const canSuggestPlaces = ["Eat", "Drink", "Play", "Move"].includes(
+    active.label
+  );
+  const placeCacheKey = (query: string) =>
+    `${active.label}:${area}:${query.trim().toLowerCase()}`;
+  const activePlaceResults = activePlaceQuery
+    ? (placesByQuery[placeCacheKey(activePlaceQuery)] ?? [])
+    : [];
+  const visiblePlaces = activePlaceResults.slice(0, placePage * 5);
+  const hasMorePlaces = visiblePlaces.length < activePlaceResults.length;
 
   const toggleValue = (value: string) => {
     const nextValues = selected.includes(value)
@@ -1215,42 +1224,40 @@ function InterestsStepContent({
     );
   };
 
-  useEffect(() => {
-    if (!["Eat", "Drink", "Play", "Move"].includes(active.label)) {
-      setPlaces([]);
+  const fetchPlacesForQuery = async (query: string) => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery || !canSuggestPlaces) {
       return;
     }
 
-    const fetchPlaces = async () => {
-      setIsLoadingPlaces(true);
-      try {
-        const filters = placeSearch.trim()
-          ? [placeSearch.trim()]
-          : selected.length > 0
-            ? selected
-            : [active.label];
-        const res = await datingApi.suggestPlaces({
-          area,
-          filters,
-          latitude: (form.state.values.latitude as string) || undefined,
-          longitude: (form.state.values.longitude as string) || undefined,
-          what: [active.label.toLowerCase() as DateWhat],
-        });
-        setPlaces(res.places || []);
-      } catch (error) {
-        console.error("Failed to suggest places:", error);
-      } finally {
-        setIsLoadingPlaces(false);
-      }
-    };
+    setActivePlaceQuery(trimmedQuery);
+    setPlacePage(1);
 
-    const timer = setTimeout(() => {
-      void fetchPlaces();
-    }, 600);
+    const cacheKey = placeCacheKey(trimmedQuery);
+    if (placesByQuery[cacheKey]) {
+      return;
+    }
 
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active.label, selectedString, placeSearch, area]);
+    setIsLoadingPlaces(true);
+    try {
+      const res = await datingApi.suggestPlaces({
+        area,
+        filters: [trimmedQuery],
+        latitude: (form.state.values.latitude as string) || undefined,
+        longitude: (form.state.values.longitude as string) || undefined,
+        what: [active.label.toLowerCase() as DateWhat],
+      });
+      setPlacesByQuery((current) => ({
+        ...current,
+        [cacheKey]: res.places || [],
+      }));
+    } catch (error) {
+      console.error("Failed to suggest places:", error);
+      toast.error("Could not find local spots for that interest.");
+    } finally {
+      setIsLoadingPlaces(false);
+    }
+  };
 
   const selectedPlacesKey = `${active.label}_places`;
   const activeFavoritePlaces = interestDetails[selectedPlacesKey] || [];
@@ -1282,6 +1289,8 @@ function InterestsStepContent({
               onClick={() => {
                 setActiveCategory(category.label);
                 setPlaceSearch("");
+                setActivePlaceQuery("");
+                setPlacePage(1);
               }}
               className={`rounded-full px-4 py-2 border text-sm font-semibold transition-all duration-200 ${
                 isActive
@@ -1349,60 +1358,119 @@ function InterestsStepContent({
         </div>
 
         {/* Show Local Place Suggestions for Eat, Drink, Play, Move */}
-        {["Eat", "Drink", "Play", "Move"].includes(active.label) && (
+        {canSuggestPlaces && (
           <div className="mt-4 border-t border-border pt-4">
             <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
               <MapPin className="size-4 text-primary" />
-              Select your favorite local {active.label.toLowerCase()} spots in{" "}
-              {area}:
+              Find favorite local {active.label.toLowerCase()} spots in {area}
             </h4>
-            <div className="flex gap-2 mb-3">
+            <p className="mb-3 text-muted-foreground text-xs/relaxed">
+              Pick or add the foods, drinks, activities, or movement styles you
+              like first. Then search one signal at a time so we do not burn
+              through Places calls while you are still deciding.
+            </p>
+            {selected.length > 0 ? (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {selected.map((item) => (
+                  <Button
+                    className="rounded-full"
+                    disabled={isLoadingPlaces}
+                    key={item}
+                    onClick={() => void fetchPlacesForQuery(item)}
+                    size="sm"
+                    type="button"
+                    variant={activePlaceQuery === item ? "default" : "outline"}
+                  >
+                    {placesByQuery[placeCacheKey(item)] ? "Show" : "Find"}{" "}
+                    {item}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <p className="mb-3 rounded-2xl border border-dashed border-border bg-muted/20 p-3 text-muted-foreground text-xs">
+                No local spot search yet. Select a chip above or add a custom
+                interest, then search for places that match it.
+              </p>
+            )}
+            <div className="flex flex-col gap-2 mb-3 sm:flex-row">
               <Input
-                placeholder={`Search local ${active.label.toLowerCase()} spots (e.g. Starbucks, KJ's Market)...`}
-                value={placeSearch}
+                className="h-10 rounded-full border border-border bg-background px-4 text-sm"
                 onChange={(e) => setPlaceSearch(e.target.value)}
-                className="rounded-full h-10 px-4 bg-background border border-border text-sm"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void fetchPlacesForQuery(placeSearch);
+                  }
+                }}
+                placeholder={`Search a specific local ${active.label.toLowerCase()} idea...`}
+                value={placeSearch}
               />
+              <Button
+                className="rounded-full"
+                disabled={isLoadingPlaces || !placeSearch.trim()}
+                onClick={() => void fetchPlacesForQuery(placeSearch)}
+                type="button"
+                variant="outline"
+              >
+                Find spots
+              </Button>
             </div>
             {isLoadingPlaces ? (
               <p className="text-xs text-muted-foreground animate-pulse">
                 Searching near you...
               </p>
-            ) : places.length === 0 ? (
+            ) : !activePlaceQuery ? (
               <p className="text-xs text-muted-foreground italic">
-                No spots found. Try searching above!
+                Choose an interest above to load local places.
+              </p>
+            ) : activePlaceResults.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                No spots found for {activePlaceQuery}. Try a different signal.
               </p>
             ) : (
-              <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
-                {places.map((place) => {
-                  const isFav = activeFavoritePlaces.includes(place.name);
-                  return (
-                    <button
-                      key={place.placeId}
-                      type="button"
-                      onClick={() => togglePlaceFavorite(place.name)}
-                      className={`flex items-center justify-between p-3 rounded-xl border text-left text-xs transition duration-250 ${
-                        isFav
-                          ? "border-primary bg-primary/5 text-primary-foreground font-medium"
-                          : "border-border bg-card text-foreground hover:border-border-hover"
-                      }`}
-                    >
-                      <div>
-                        <p className="font-bold text-foreground">
-                          {place.name}
-                        </p>
-                        {place.address && (
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {place.address}
+              <div className="flex flex-col gap-3">
+                <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
+                  {visiblePlaces.map((place) => {
+                    const isFav = activeFavoritePlaces.includes(place.name);
+                    return (
+                      <button
+                        className={`flex items-center justify-between p-3 rounded-xl border text-left text-xs transition duration-250 ${
+                          isFav
+                            ? "border-primary bg-primary/5 text-primary-foreground font-medium"
+                            : "border-border bg-card text-foreground hover:border-border-hover"
+                        }`}
+                        key={place.placeId}
+                        onClick={() => togglePlaceFavorite(place.name)}
+                        type="button"
+                      >
+                        <div>
+                          <p className="font-bold text-foreground">
+                            {place.name}
                           </p>
-                        )}
-                      </div>
-                      <Heart
-                        className={`size-4 ml-2 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
-                      />
-                    </button>
-                  );
-                })}
+                          {place.address && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {place.address}
+                            </p>
+                          )}
+                        </div>
+                        <Heart
+                          className={`size-4 ml-2 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+                {hasMorePlaces && (
+                  <Button
+                    className="w-fit rounded-full"
+                    onClick={() => setPlacePage((current) => current + 1)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    Show next 5
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -1458,23 +1526,24 @@ function InterestsStepContent({
             <FieldDescription>
               Select the people and social setups you want Chewbuu to consider.
             </FieldDescription>
-            <ToggleGroup
-              className="flex flex-wrap justify-start gap-2"
-              onValueChange={(value) => field.handleChange(value)}
-              type="multiple"
-              value={interestedIn}
-            >
+            <div className="flex flex-wrap justify-start gap-2">
               {["women", "men", "couples", "friends", "groups"].map((value) => (
-                <ToggleGroupItem
-                  className="rounded-full px-4 py-2 border border-border text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground transition-all duration-200"
+                <Button
+                  className="rounded-full px-4 py-2 text-sm"
                   key={value}
-                  value={value}
+                  onClick={() => {
+                    const next = interestedIn.includes(value)
+                      ? interestedIn.filter((item) => item !== value)
+                      : [...interestedIn, value];
+                    field.handleChange(next);
+                  }}
                   type="button"
+                  variant={interestedIn.includes(value) ? "default" : "outline"}
                 >
                   {formatValue(value)}
-                </ToggleGroupItem>
+                </Button>
               ))}
-            </ToggleGroup>
+            </div>
           </Field>
         )}
       </form.Field>
@@ -1612,23 +1681,26 @@ function ValuesStep({ form }: { form: OnboardingFormApi }) {
                     <FieldDescription>
                       Pick every mode that feels true right now.
                     </FieldDescription>
-                    <ToggleGroup
-                      className="flex flex-wrap justify-start gap-2"
-                      onValueChange={(value) => field.handleChange(value)}
-                      type="multiple"
-                      value={lookingFor}
-                    >
+                    <div className="flex flex-wrap justify-start gap-2">
                       {lookingForOptions.map((value) => (
-                        <ToggleGroupItem
-                          className="rounded-full px-4 py-2 border border-border text-sm data-[state=on]:bg-primary data-[state=on]:text-primary-foreground transition-all duration-200"
+                        <Button
+                          className="rounded-full px-4 py-2 text-sm"
                           key={value}
-                          value={value}
+                          onClick={() => {
+                            const next = lookingFor.includes(value)
+                              ? lookingFor.filter((item) => item !== value)
+                              : [...lookingFor, value];
+                            field.handleChange(next);
+                          }}
                           type="button"
+                          variant={
+                            lookingFor.includes(value) ? "default" : "outline"
+                          }
                         >
                           {value}
-                        </ToggleGroupItem>
+                        </Button>
                       ))}
-                    </ToggleGroup>
+                    </div>
                   </Field>
                 )}
               </form.Field>
@@ -1646,10 +1718,11 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
       selector={(state) => [
         state.values.friendInvites,
         state.values.maritalStatus,
+        state.values.membershipTier,
         state.values.trustedContacts,
       ]}
     >
-      {([friendInvites, maritalStatus, trustedContacts]) => {
+      {([friendInvites, maritalStatus, membershipTier, trustedContacts]) => {
         const invites = (friendInvites || []) as {
           email?: string;
           name?: string;
@@ -1668,6 +1741,8 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
           name: string;
           phone?: string;
         }[];
+        const canStartCircle =
+          membershipTier === "mingle" || membershipTier === "sugar";
 
         return (
           <div className="flex flex-col gap-6">
@@ -1715,19 +1790,27 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                     Invite friends for circles and group dates
                   </h3>
                   <p className="text-muted-foreground text-sm">
-                    Mingle and Sugar members can go on dates with up to three
-                    friends. Invite them now.
+                    Mingle and Sugar members can start circles and invite up to
+                    three friends into group dates.
                   </p>
                 </div>
               </div>
-              <DynamicPeopleList
-                addLabel="Add friend"
-                form={form}
-                items={friends}
-                path="friendInvites"
-                relationship="friend"
-                showName={false}
-              />
+              {canStartCircle ? (
+                <DynamicPeopleList
+                  addLabel="Add friend"
+                  form={form}
+                  items={friends}
+                  path="friendInvites"
+                  relationship="friend"
+                  showName={false}
+                />
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border bg-muted/25 p-4 text-muted-foreground text-sm">
+                  You can join someone else's circle on Social. Choose Mingle or
+                  Sugar on the upgrade step when you are ready to start your own
+                  circle and send friend invites.
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl border bg-background p-5 shadow-sm">

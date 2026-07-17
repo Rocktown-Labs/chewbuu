@@ -9,7 +9,6 @@ import {
   MessagesSquare,
   Receipt,
   ShieldCheck,
-  Sparkles,
   Users,
   Video,
 } from "lucide-react";
@@ -190,10 +189,6 @@ const HomeComponent = () => {
 
         {/* Hero Content */}
         <div className="relative z-10 max-w-4xl space-y-6 flex flex-col items-center mt-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 font-bold text-primary text-xs uppercase tracking-wider shadow-inner">
-            <Sparkles aria-hidden="true" className="size-3.5" />
-            Video-first dating with real plans
-          </div>
           <h1 className="text-balance font-extrabold text-4xl md:text-7xl leading-[1.05] tracking-tight text-foreground">
             Meet for real dates, not endless swipes.
           </h1>

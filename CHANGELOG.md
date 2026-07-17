@@ -26,9 +26,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Expanded Google Places category support to include eat, drink, play, move, watch, and talk with category-specific search keywords.
 - Added locationBias and includedType parameters to Google Places Text Search for more relevant results.
 - Added tests for move-category place suggestions and updated text query assertions.
+- Added explicit per-interest local spot searches in onboarding so Places results load only after a selected signal or manual query.
 
 ### Fixed
 
+- Fixed onboarding media uploads saving invalid fallback URLs when the upload provider does not return a public base URL.
+- Fixed onboarding multi-select pills for interested-in and looking-for fields.
+- Fixed circle friend invites so Social users can join circles by invite but cannot start one during onboarding.
+- Changed dashboard readiness indicators to red/green status dots and hide the readiness widget after the profile is date-ready.
 - Fixed authenticated header navigation to center app menu items and remove duplicate sign-in actions.
 - Fixed public navigation so logged-out users see marketing/auth routes and logged-in users no longer see app/admin routes on the homepage.
 - Replaced fake homepage trending couples, dashboard recaps, ratings, and compatibility placeholders with real profile/request/recap data or clear empty states.
