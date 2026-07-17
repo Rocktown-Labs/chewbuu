@@ -24,6 +24,26 @@ import { sendInviteNotifications } from "../lib/notifications";
 
 const requiredString = z.string().trim().min(1);
 const stringArray = z.array(z.string().trim().min(1)).default([]);
+const minimumProfileAge = 18;
+const under21MatchMaxAge = 22;
+const maximumMatchAge = 99;
+
+const getAge = (birthdayString: string) => {
+  const birthday = new Date(birthdayString);
+  if (Number.isNaN(birthday.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthday.getFullYear();
+  const monthOffset = today.getMonth() - birthday.getMonth();
+  if (
+    monthOffset < 0 ||
+    (monthOffset === 0 && today.getDate() < birthday.getDate())
+  ) {
+    age -= 1;
+  }
+
+  return age;
+};
 
 const trustedContactSchema = z.object({
   email: z.email().optional().or(z.literal("")),
@@ -45,38 +65,92 @@ const mediaSchema = z.object({
   url: z.url(),
 });
 
-const profilePayloadSchema = z.object({
-  ageRangeMax: z.number().int().min(18).max(99).optional(),
-  ageRangeMin: z.number().int().min(18).max(99).optional(),
-  area: requiredString,
-  bio: z.string().optional(),
-  birthday: requiredString,
-  datingModes: stringArray,
-  distanceMiles: z.number().int().min(1).max(250).default(25),
-  favoriteThings: stringArray,
-  friendInvites: z.array(friendInviteSchema).max(12).default([]),
-  height: z.string().optional(),
-  interestDetails: z.record(z.string(), z.array(z.string())).default({}),
-  interestedIn: stringArray,
-  interests: stringArray,
-  kids: z.string().optional(),
-  latitude: z.string().optional(),
-  lookingFor: stringArray,
-  longitude: z.string().optional(),
-  maritalStatus: z.string().optional(),
-  media: z.array(mediaSchema).max(7).default([]),
-  politics: z.string().optional(),
-  religion: z.string().optional(),
-  safetyOptIn: z.boolean().default(false),
-  sex: requiredString,
-  sexuality: requiredString,
-  trustedContacts: z.array(trustedContactSchema).max(2).default([]),
-  weight: z.string().optional(),
-  wantsKids: z.string().optional(),
-  phone: z.string().optional(),
-  occupation: z.string().optional(),
-  race: z.string().optional(),
-});
+const profilePayloadSchema = z
+  .object({
+    ageRangeMax: z
+      .number()
+      .int()
+      .min(minimumProfileAge)
+      .max(maximumMatchAge)
+      .optional(),
+    ageRangeMin: z
+      .number()
+      .int()
+      .min(minimumProfileAge)
+      .max(maximumMatchAge)
+      .optional(),
+    area: requiredString,
+    bio: z.string().optional(),
+    birthday: requiredString,
+    datingModes: stringArray,
+    distanceMiles: z.number().int().min(1).max(250).default(25),
+    favoriteThings: stringArray,
+    friendInvites: z.array(friendInviteSchema).max(12).default([]),
+    height: z.string().optional(),
+    interestDetails: z.record(z.string(), z.array(z.string())).default({}),
+    interestedIn: stringArray,
+    interests: stringArray,
+    kids: z.string().optional(),
+    latitude: z.string().optional(),
+    lookingFor: stringArray,
+    longitude: z.string().optional(),
+    maritalStatus: z.string().optional(),
+    media: z.array(mediaSchema).max(7).default([]),
+    politics: z.string().optional(),
+    religion: z.string().optional(),
+    safetyOptIn: z.boolean().default(false),
+    sex: requiredString,
+    sexuality: requiredString,
+    trustedContacts: z.array(trustedContactSchema).max(2).default([]),
+    weight: z.string().optional(),
+    wantsKids: z.string().optional(),
+    phone: z.string().optional(),
+    occupation: z.string().optional(),
+    race: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const age = getAge(value.birthday);
+    if (age === null) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Birthday must be a valid date.",
+        path: ["birthday"],
+      });
+      return;
+    }
+
+    if (age < minimumProfileAge) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Chewbuu is for users 18 and older.",
+        path: ["birthday"],
+      });
+    }
+
+    if (
+      value.ageRangeMin &&
+      value.ageRangeMax &&
+      value.ageRangeMin > value.ageRangeMax
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Age range minimum cannot be greater than maximum.",
+        path: ["ageRangeMin"],
+      });
+    }
+
+    if (
+      age < 21 &&
+      value.ageRangeMax &&
+      value.ageRangeMax > under21MatchMaxAge
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Users under 21 can only match with ages 18 to 22.",
+        path: ["ageRangeMax"],
+      });
+    }
+  });
 
 const placeSchema = z.object({
   address: z.string().optional(),
@@ -894,7 +968,14 @@ const router = createRouter()
   })
   .put("/dating/profile", async (c) => {
     const sessionUser = await getSessionUser(c.req.raw.headers);
-    const body = profilePayloadSchema.parse(await c.req.json());
+    const parsed = profilePayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      throw new HTTPException(HttpStatusCodes.UNPROCESSABLE_ENTITY, {
+        message:
+          parsed.error.issues[0]?.message ?? "Profile payload is invalid.",
+      });
+    }
+    const body = parsed.data;
     const savedProfile = await saveProfile(sessionUser, body);
     const readiness = await getReadiness(sessionUser);
 

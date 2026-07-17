@@ -55,6 +55,16 @@ const profilePayload = {
   weight: "",
 };
 
+const birthdayForAge = (age: number, dayOffset = 0) => {
+  const today = new Date();
+  const birthday = new Date(
+    today.getFullYear() - age,
+    today.getMonth(),
+    today.getDate() + dayOffset
+  );
+  return birthday.toISOString().slice(0, 10);
+};
+
 const dateRequestPayload = {
   filters: ["chicken", "whiskey", "pool"],
   how: "dutch",
@@ -118,6 +128,40 @@ describe("dating routes", () => {
       readiness: {
         canDate: true,
       },
+    });
+  });
+
+  it("rejects profiles for users younger than 18", async () => {
+    const response = await app.request("/dating/profile", {
+      body: JSON.stringify({
+        ...profilePayload,
+        birthday: birthdayForAge(17, 1),
+      }),
+      headers: authHeaders(),
+      method: "PUT",
+    });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      message: "Chewbuu is for users 18 and older.",
+    });
+  });
+
+  it("caps under-21 profile match ranges at 22", async () => {
+    const response = await app.request("/dating/profile", {
+      body: JSON.stringify({
+        ...profilePayload,
+        ageRangeMax: 23,
+        ageRangeMin: 18,
+        birthday: birthdayForAge(18),
+      }),
+      headers: authHeaders(),
+      method: "PUT",
+    });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      message: "Users under 21 can only match with ages 18 to 22.",
     });
   });
 
