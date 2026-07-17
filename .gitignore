@@ -56,3 +56,7 @@ test-results
 tmp
 temp
 .env*
+.stream/
+.agents/skills/stream
+.agents/skills/stream-builder
+.agents/skills/stream-docs
