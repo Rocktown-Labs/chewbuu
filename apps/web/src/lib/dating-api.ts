@@ -107,13 +107,15 @@ export const getServerUrl = (url: string) => {
   return `http://localhost:3000${normalized}`;
 };
 
-export const apiFetch = async <T>(path: string, options: ApiOptions = {}) => {
-  const baseUrl = getServerUrl(env.VITE_SERVER_URL);
-  const cleanBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-  const cleanPath = path.startsWith("/") ? path.slice(1) : path;
-  const fullUrl = new URL(cleanPath, cleanBase);
+export const getApiUrl = (path: string, baseUrl = env.VITE_SERVER_URL) => {
+  const cleanBase = getServerUrl(baseUrl).replace(/\/$/, "");
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
 
-  const response = await fetch(fullUrl, {
+  return `${cleanBase}${cleanPath}`;
+};
+
+export const apiFetch = async <T>(path: string, options: ApiOptions = {}) => {
+  const response = await fetch(getApiUrl(path), {
     body: options.body ? JSON.stringify(options.body) : undefined,
     credentials: "include",
     headers: options.body ? { "content-type": "application/json" } : undefined,

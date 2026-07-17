@@ -15,7 +15,10 @@ describe("upload route", () => {
 
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
-      message: expect.stringContaining("Cloudflare R2 upload storage"),
+      error: {
+        message: expect.stringContaining("Cloudflare R2 upload storage"),
+        type: "storage_not_configured",
+      },
     });
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getServerUrl } from "./dating-api";
+import { getApiUrl, getServerUrl } from "./dating-api";
 
 describe("getServerUrl", () => {
   it("returns absolute URLs without a trailing slash", () => {
@@ -21,5 +21,19 @@ describe("getServerUrl", () => {
   it("prefixes same-origin paths with the current window origin", () => {
     expect(getServerUrl("/api")).toBe(`${window.location.origin}/api`);
     expect(getServerUrl("/api/")).toBe(`${window.location.origin}/api`);
+  });
+});
+
+describe("getApiUrl", () => {
+  it("preserves same-origin API base paths", () => {
+    expect(getApiUrl("/upload", "/api")).toBe(
+      `${window.location.origin}/api/upload`
+    );
+  });
+
+  it("appends endpoint paths to absolute server URLs", () => {
+    expect(getApiUrl("/upload", "https://api.example.com/v1")).toBe(
+      "https://api.example.com/v1/upload"
+    );
   });
 });

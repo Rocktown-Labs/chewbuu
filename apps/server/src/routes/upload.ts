@@ -113,8 +113,11 @@ const router = createRouter().post("/upload", async (c) => {
   if (!uploadRouter) {
     return c.json(
       {
-        message:
-          "Cloudflare R2 upload storage is not configured. Add R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME.",
+        error: {
+          message:
+            "Cloudflare R2 upload storage is not configured. Add R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME.",
+          type: "storage_not_configured",
+        },
       },
       HttpStatusCodes.SERVICE_UNAVAILABLE
     );
@@ -124,7 +127,10 @@ const router = createRouter().post("/upload", async (c) => {
     return await handleRequest(c.req.raw, uploadRouter);
   } catch (error) {
     if (error instanceof RejectUpload) {
-      return c.json({ message: error.message }, HttpStatusCodes.FORBIDDEN);
+      return c.json(
+        { error: { message: error.message, type: "rejected" } },
+        HttpStatusCodes.FORBIDDEN
+      );
     }
 
     throw error;
