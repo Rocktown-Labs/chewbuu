@@ -344,7 +344,7 @@ function RouteComponent() {
                 }`}
               >
                 <Heart className="size-5" />
-                <span>Matches</span>
+                <span>Dates</span>
               </button>
               <button
                 type="button"
@@ -612,7 +612,7 @@ function RouteComponent() {
           {activeTab === "matches" && (
             <div className="flex flex-col">
               <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
-                <h2 className="text-xl font-bold">Matches & Requests</h2>
+                <h2 className="text-xl font-bold">Dates & Requests</h2>
                 <p className="mt-1 text-muted-foreground text-xs">
                   Review date requests, save people for later, decline, or chat
                   once the match is ready.
@@ -839,15 +839,15 @@ function RouteComponent() {
                     </div>
                     <div className="flex flex-col border-x border-border/80">
                       <span className="font-extrabold text-lg md:text-xl text-foreground flex items-center justify-center gap-0.5">
-                        {pendingRequests.length}
+                        {circleMembers.length}
                       </span>
                       <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
-                        Requests
+                        Friends
                       </span>
                     </div>
                     <div className="flex flex-col">
                       <span className="font-extrabold text-lg md:text-xl text-foreground">
-                        {circleMembers.length}
+                        {circleInvites.length}
                       </span>
                       <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
                         Circle
@@ -1212,7 +1212,7 @@ function RouteComponent() {
               [
                 { icon: Home, label: "Feed", tab: "feed" },
                 { icon: MapPin, label: "Spots", tab: "spots" },
-                { icon: Heart, label: "Matches", tab: "matches" },
+                { icon: Heart, label: "Dates", tab: "matches" },
                 { icon: MessageCircle, label: "Chats", tab: "chats" },
                 { icon: User, label: "Profile", tab: "profile" },
               ] as const

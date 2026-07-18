@@ -163,7 +163,8 @@ describe("OnboardingForm", () => {
       await screen.findByText(/limits matching to ages 18-22/i)
     ).toBeVisible();
 
-    const sliders = await screen.findAllByRole("slider", { hidden: true });
+    const allSliders = await screen.findAllByRole("slider", { hidden: true });
+    const sliders = allSliders.filter((s) => s.getAttribute("max") !== "100");
     expect(sliders).toHaveLength(2);
     for (const slider of sliders) {
       expect(slider).toHaveAttribute("max", "22");
@@ -187,7 +188,8 @@ describe("OnboardingForm", () => {
 
     expect(await screen.findByText(/match options start at 23/i)).toBeVisible();
 
-    const sliders = await screen.findAllByRole("slider", { hidden: true });
+    const allSliders = await screen.findAllByRole("slider", { hidden: true });
+    const sliders = allSliders.filter((s) => s.getAttribute("max") !== "100");
     expect(sliders).toHaveLength(2);
     for (const slider of sliders) {
       expect(slider).toHaveAttribute("min", "23");

@@ -323,6 +323,7 @@ const defaultValues = {
   latitude: "",
   longitude: "",
   maritalStatus: "",
+  distanceMiles: 25,
 };
 
 type OnboardingFormApi = any;
@@ -428,6 +429,7 @@ export function OnboardingForm() {
   const [plans, setPlans] = useState<MembershipPlan[]>(defaultPlans);
   const [underageBirthday, setUnderageBirthday] = useState("");
   const { data: session } = authClient.useSession();
+  const isOnboarded = Boolean(session?.user?.hasCompletedOnboarding);
 
   const form = useForm({
     defaultValues,
@@ -509,6 +511,10 @@ export function OnboardingForm() {
         form.setFieldValue(
           "ageRangeMax",
           merged.ageRangeMax || defaultValues.ageRangeMax
+        );
+        form.setFieldValue(
+          "distanceMiles",
+          merged.distanceMiles || defaultValues.distanceMiles
         );
         form.setFieldValue("area", merged.area || "");
         form.setFieldValue("latitude", merged.latitude || "");
@@ -855,6 +861,17 @@ export function OnboardingForm() {
               Back
             </Button>
             <div className="flex flex-wrap items-center gap-3">
+              {isOnboarded && (
+                <Button
+                  className="rounded-full px-5 h-10 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-none cursor-pointer"
+                  type="button"
+                  onClick={async () => {
+                    await form.handleSubmit();
+                  }}
+                >
+                  Save & Exit
+                </Button>
+              )}
               <Button
                 className="rounded-full px-5 h-10 font-semibold"
                 onClick={handleFinishLater}
@@ -1305,6 +1322,42 @@ function PreferencesStep({ form }: { form: OnboardingFormApi }) {
                 birthday={(birthdayValue as string) || ""}
                 form={form}
               />
+
+              <form.Field name="distanceMiles">
+                {(field) => (
+                  <Field>
+                    <FieldLabel>Distance range (miles)</FieldLabel>
+                    <FieldDescription>
+                      Limit the matches and spots Chewbuu searches for you.
+                    </FieldDescription>
+                    <div className="rounded-2xl border bg-background p-4 shadow-xs">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <span className="text-xs font-semibold text-muted-foreground">
+                          Max Distance
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className="rounded-full font-bold px-2.5 py-0.5"
+                        >
+                          {field.state.value || 25} miles
+                        </Badge>
+                      </div>
+                      <Slider
+                        aria-label="Distance range"
+                        max={100}
+                        min={5}
+                        onValueChange={(value) => {
+                          const nextVal = Array.isArray(value)
+                            ? value[0]
+                            : value;
+                          field.handleChange(nextVal);
+                        }}
+                        value={[field.state.value || 25]}
+                      />
+                    </div>
+                  </Field>
+                )}
+              </form.Field>
 
               <form.Field name="interestedIn">
                 {(field) => (

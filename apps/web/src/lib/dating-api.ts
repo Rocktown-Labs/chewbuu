@@ -19,6 +19,7 @@ export interface DatingMedia {
 export interface DatingProfilePayload {
   ageRangeMax?: number;
   ageRangeMin?: number;
+  distanceMiles?: number;
   area: string;
   birthday: string;
   bio?: string;
