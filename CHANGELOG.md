@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Updated authenticated navigation and auth/onboarding redirects to use `/me`.
+- Updated profile media uploads to use Vercel Blob client uploads for longer intro videos.
 - Updated onboarding media uploads to use the Vercel Blob route in hosted previews.
 - Reframed chat copy around persistent friend DMs and date-request match rooms.
 - Reframed feed and Spots copy around friend recaps, active date requests, and future spot partners.

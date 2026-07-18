@@ -8,6 +8,7 @@ import { cloudflare } from "@better-upload/server/clients";
 import { getObjectStream } from "@better-upload/server/helpers";
 import { env } from "@chewbuu/env/server";
 import { get, put } from "@vercel/blob";
+import { handleUpload } from "@vercel/blob/client";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { z } from "zod";
 
@@ -36,6 +37,9 @@ const mediaLimits = {
     route: "profilePhoto",
   },
 } as const;
+const clientUploadPayloadSchema = z.object({
+  slot: uploadSlotSchema,
+});
 
 const missingConfig = () =>
   !env.R2_ACCOUNT_ID ||
@@ -186,6 +190,31 @@ const mediaUrlFromKey = (key: string) => {
 const mediaUrlFromBlobPathname = (pathname: string) =>
   `/upload/blob?pathname=${encodeURIComponent(pathname)}`;
 
+const getRangeResponseHeaders = (blobHeaders: Headers, contentType: string) => {
+  const headers = new Headers({
+    "cache-control": "private, no-cache",
+    "content-type": contentType,
+    "x-content-type-options": "nosniff",
+  });
+  const forwardedHeaders = [
+    "accept-ranges",
+    "content-disposition",
+    "content-length",
+    "content-range",
+    "etag",
+    "last-modified",
+  ];
+
+  for (const header of forwardedHeaders) {
+    const value = blobHeaders.get(header);
+    if (value) {
+      headers.set(header, value);
+    }
+  }
+
+  return headers;
+};
+
 const storageNotConfiguredResponse = () =>
   ({
     error: {
@@ -296,9 +325,46 @@ const router = createRouter()
       url: mediaUrlFromBlobPathname(blob.pathname),
     });
   })
+  .post("/upload/blob/client", async (c) => {
+    const body = await c.req.json();
+
+    if (body?.type === "blob.generate-client-token") {
+      await getSessionUser(c.req.raw.headers);
+    }
+
+    const result = await handleUpload({
+      body,
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        const payload = clientUploadPayloadSchema.parse(
+          clientPayload ? JSON.parse(clientPayload) : null
+        );
+        const limit = mediaLimits[payload.slot];
+        const requiredPrefix = `profiles/client/${payload.slot}/`;
+
+        if (!pathname.startsWith(requiredPrefix)) {
+          throw new Error("Upload pathname is invalid.");
+        }
+
+        return {
+          addRandomSuffix: false,
+          allowedContentTypes:
+            payload.slot === "intro_video"
+              ? ["video/mp4", "video/webm", "video/quicktime"]
+              : ["image/jpeg", "image/png", "image/webp", "image/heic"],
+          allowOverwrite: false,
+          maximumSizeInBytes: limit.maxBytes,
+        };
+      },
+      onUploadCompleted: async () => {},
+      request: c.req.raw,
+    });
+
+    return c.json(result);
+  })
   .get("/upload/blob", async (c) => {
     await getSessionUser(c.req.raw.headers);
     const pathname = c.req.query("pathname");
+    const range = c.req.header("range");
 
     if (!pathname?.startsWith("profiles/")) {
       return c.json(
@@ -314,6 +380,7 @@ const router = createRouter()
 
     const result = await get(pathname, {
       access: "private",
+      headers: range ? { range } : undefined,
       useCache: false,
     });
 
@@ -326,11 +393,8 @@ const router = createRouter()
     }
 
     return new Response(result.stream, {
-      headers: {
-        "cache-control": "private, no-cache",
-        "content-type": result.blob.contentType,
-        "x-content-type-options": "nosniff",
-      },
+      headers: getRangeResponseHeaders(result.headers, result.blob.contentType),
+      status: range && result.headers.get("content-range") ? 206 : 200,
     });
   })
   .get("/upload/media", async (c) => {

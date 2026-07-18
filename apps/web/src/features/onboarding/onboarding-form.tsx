@@ -28,6 +28,7 @@ import { Slider } from "@chewbuu/ui/components/slider";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { upload } from "@vercel/blob/client";
 import {
   Camera,
   Check,
@@ -372,26 +373,55 @@ const formatValue = (value: string) =>
 
 const formatIdentity = (value: string) => value;
 
-const uploadProfileMedia = async (file: File, kind: DatingMedia["kind"]) => {
-  const body = new FormData();
-  body.append("file", file);
-  body.append("slot", kind);
+const cleanUploadFileName = (name: string) =>
+  name
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9._-]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 80);
 
-  const response = await fetch(getApiUrl("/upload/blob"), {
-    body,
-    credentials: "include",
-    method: "POST",
-  });
-  const result = (await response.json()) as {
-    error?: { message?: string };
-    url?: string;
-  };
-
-  if (!(response.ok && result.url)) {
-    throw new Error(result.error?.message ?? "Upload failed.");
+const getUploadType = (file: File, kind: DatingMedia["kind"]) => {
+  if (kind === "intro_video") {
+    return file.type.includes("mp4") ? "video/mp4" : "video/webm";
   }
 
-  return getApiUrl(result.url);
+  return file.type || "image/jpeg";
+};
+
+const ensureUploadExtension = (fileName: string, contentType: string) => {
+  const cleanName = cleanUploadFileName(fileName) || "upload";
+
+  if (cleanName.includes(".")) {
+    return cleanName;
+  }
+
+  const extension = contentType.includes("mp4")
+    ? "mp4"
+    : contentType.includes("webm")
+      ? "webm"
+      : contentType.includes("png")
+        ? "png"
+        : contentType.includes("webp")
+          ? "webp"
+          : "jpg";
+
+  return `${cleanName}.${extension}`;
+};
+
+const uploadProfileMedia = async (file: File, kind: DatingMedia["kind"]) => {
+  const contentType = getUploadType(file, kind);
+  const pathname = `profiles/client/${kind}/${crypto.randomUUID()}-${ensureUploadExtension(file.name, contentType)}`;
+  const blob = await upload(pathname, file, {
+    access: "private",
+    clientPayload: JSON.stringify({ slot: kind }),
+    contentType,
+    handleUploadUrl: getApiUrl("/upload/blob/client"),
+    multipart: kind === "intro_video",
+  });
+
+  return getApiUrl(
+    `/upload/blob?pathname=${encodeURIComponent(blob.pathname)}`
+  );
 };
 
 const createEmptyPhoto = (sortOrder: number): DatingMedia => ({
@@ -442,7 +472,6 @@ export function OnboardingForm() {
   const [plans, setPlans] = useState<MembershipPlan[]>(defaultPlans);
   const [underageBirthday, setUnderageBirthday] = useState("");
   const { data: session } = authClient.useSession();
-  const isOnboarded = Boolean(session?.user?.hasCompletedOnboarding);
 
   const form = useForm({
     defaultValues,
@@ -779,8 +808,12 @@ export function OnboardingForm() {
         media,
       });
       toast.success("Progress saved.", { id: "finish-later" });
-    } catch {
-      toast.dismiss("finish-later");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not save progress.",
+        { id: "finish-later" }
+      );
+      return;
     }
     await navigate({ to: "/me" });
   };
@@ -885,24 +918,13 @@ export function OnboardingForm() {
               Back
             </Button>
             <div className="flex flex-wrap items-center gap-3">
-              {isOnboarded && (
-                <Button
-                  className="rounded-full px-5 h-10 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-none cursor-pointer"
-                  type="button"
-                  onClick={async () => {
-                    await form.handleSubmit();
-                  }}
-                >
-                  Save & Exit
-                </Button>
-              )}
               <Button
                 className="rounded-full px-5 h-10 font-semibold"
                 onClick={handleFinishLater}
                 type="button"
                 variant="ghost"
               >
-                Finish later
+                Save for later
               </Button>
               {step < steps.length - 1 ? (
                 <Button
