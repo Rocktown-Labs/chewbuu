@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-07-18
+
+### Added
+
+- Added an editable "Distance range (miles)" slider to onboarding step 3 (PreferencesStep) mapping to the profile's `distanceMiles`.
+- Implemented "Dutch | Me" pay-choice buttons under Payment in the Date Wizard for Sugar members.
+- Added a search filter and chip/badge selection flow to invite guests from the user's circle in the Date Wizard.
+- Added a "Save & Exit" button to the onboarding form steps if the user has already onboarded.
+
+### Fixed
+
+- Updated the server schema and validator to allow between 1 and 3 selected places, preventing combo places from blocking form submission.
+- Changed the submit button in the spots selection step to dynamically check if all active categories are satisfied by combo places.
+- Removed the unneeded "Area" text input from the Date Wizard.
+- Standardized Card components in the Date Wizard to use rounded corners (`rounded-2xl`).
+- Replaced the hardcoded `rounded-none` size variants in the Button component to support full custom rounding.
+- Renamed the Matches tab to "Dates" and the Profile sub-header "Requests" to "Friends".
+
 ## [0.6.1] - 2026-07-17
 
 ### Added

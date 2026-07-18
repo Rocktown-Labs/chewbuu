@@ -190,7 +190,7 @@ const dateRequestPayloadSchema = z.object({
   filters: stringArray,
   partyMembers: z.array(partyMemberSchema).max(3).default([]),
   paymentMode: z.enum(["dutch", "requester_covers"]),
-  places: z.array(placeSchema).length(3),
+  places: z.array(placeSchema).min(1).max(3),
   scheduledAt: z.iso.datetime(),
   searchArea: requiredString,
   what: z.array(z.enum(["eat", "drink", "play"])).min(1),
