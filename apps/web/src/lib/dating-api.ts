@@ -58,6 +58,13 @@ export interface DatingProfilePayload {
   race?: string;
 }
 
+export type DatingProfileDraftPayload = Partial<
+  Omit<DatingProfilePayload, "media" | "trustedContacts">
+> & {
+  media?: DatingMedia[];
+  trustedContacts?: { email?: string; name?: string; phone?: string }[];
+};
+
 export interface DatePlace {
   address?: string;
   attributions?: string[];
@@ -227,6 +234,11 @@ export const datingApi = {
       profile: DatingProfilePayload;
       readiness: DatingSummary["readiness"];
     }>("/dating/profile", { body, method: "PUT" }),
+  saveProfileDraft: (body: DatingProfileDraftPayload) =>
+    apiFetch<{
+      profile: DatingProfilePayload;
+      readiness: DatingSummary["readiness"];
+    }>("/dating/profile/draft", { body, method: "PUT" }),
   suggestPlaces: (body: {
     area: string;
     filters: string[];

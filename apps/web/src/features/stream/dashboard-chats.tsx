@@ -26,7 +26,11 @@ import {
 import { streamApi } from "@/lib/stream-api";
 import type { StreamTokenResponse } from "@/lib/stream-api";
 
-export function DashboardChats() {
+export function DashboardChats({
+  activeChannelId,
+}: {
+  activeChannelId?: string;
+}) {
   const [auth, setAuth] = useState<StreamTokenResponse | null>(null);
   const [error, setError] = useState<null | string>(null);
 
@@ -85,10 +89,16 @@ export function DashboardChats() {
     );
   }
 
-  return <ChatsClient auth={auth} />;
+  return <ChatsClient activeChannelId={activeChannelId} auth={auth} />;
 }
 
-function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
+function ChatsClient({
+  activeChannelId,
+  auth,
+}: {
+  activeChannelId?: string;
+  auth: StreamTokenResponse;
+}) {
   const [listVersion, setListVersion] = useState(0);
   const chatClient = useCreateChatClient({
     apiKey: auth.apiKey,
@@ -123,6 +133,7 @@ function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
 
   return (
     <Chat client={chatClient}>
+      <OpenChannelById channelId={activeChannelId} />
       <div className="grid min-h-[620px] md:grid-cols-[320px_minmax(0,1fr)]">
         <div className="border-r border-border/80">
           <div className="flex items-start gap-2 border-b border-border/80 px-4 py-3">
@@ -160,6 +171,40 @@ function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
       </div>
     </Chat>
   );
+}
+
+function OpenChannelById({ channelId }: { channelId?: string }) {
+  const { client, setActiveChannel } = useChatContext();
+
+  useEffect(() => {
+    if (!channelId) return;
+
+    let active = true;
+
+    const openChannel = async () => {
+      try {
+        const channel = client.channel("messaging", channelId);
+        await channel.watch();
+        if (active) {
+          setActiveChannel(channel);
+        }
+      } catch (caughtError) {
+        toast.error(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Could not open that chat."
+        );
+      }
+    };
+
+    void openChannel();
+
+    return () => {
+      active = false;
+    };
+  }, [channelId, client, setActiveChannel]);
+
+  return null;
 }
 
 function DemoFriendButton({ onSeed }: { onSeed: () => void }) {

@@ -803,7 +803,7 @@ export function OnboardingForm() {
 
     try {
       toast.loading("Saving progress...", { id: "finish-later" });
-      await datingApi.saveProfile({
+      await datingApi.saveProfileDraft({
         ...values,
         media,
       });
@@ -2176,32 +2176,30 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                 />
                 <div>
                   <h3 className="font-semibold text-base">
-                    Invite friends for circles and group dates
+                    Tell friends about Chewbuu
                   </h3>
                   <p className="text-muted-foreground text-sm">
-                    Mingle and Sugar members can start circles and invite up to
-                    three friends into group dates. Friends join your circle
-                    once they create their account and finish onboarding — until
-                    then their invite stays pending.
+                    Invite up to three friends while you sign up. Mingle and
+                    Sugar members can add them to a named circle for group
+                    dates; Social members still get referral credit when friends
+                    join Chewbuu.
                   </p>
                 </div>
               </div>
-              {canStartCircle ? (
-                <DynamicPeopleList
-                  addLabel="Add friend"
-                  form={form}
-                  items={friends}
-                  path="friendInvites"
-                  relationship="friend"
-                  showName={false}
-                />
-              ) : (
-                <div className="rounded-2xl border border-dashed border-border bg-muted/25 p-4 text-muted-foreground text-sm">
-                  You can join someone else's circle on Social. Choose Mingle or
-                  Sugar on the upgrade step when you are ready to start your own
-                  circle and send friend invites.
-                </div>
-              )}
+              <DynamicPeopleList
+                addLabel="Add friend"
+                form={form}
+                items={friends}
+                maxItems={3}
+                path="friendInvites"
+                relationship="friend"
+                showName={false}
+              />
+              <div className="mt-4 rounded-2xl border border-dashed border-border bg-muted/25 p-4 text-muted-foreground text-sm">
+                {canStartCircle
+                  ? "Your friend invites can become circle members after they create an account and finish onboarding."
+                  : "You can be added to someone else's circle on Social. Upgrade later to create your own circle and move referred friends into it."}
+              </div>
             </div>
 
             <div className="rounded-2xl border bg-background p-5 shadow-sm">

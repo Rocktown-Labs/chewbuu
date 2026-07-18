@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
@@ -112,10 +113,12 @@ export const trustedContact = pgTable(
 export const friendInvite = pgTable(
   "friend_invite",
   {
+    circleId: text("circle_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     email: text("email"),
     id: text("id").primaryKey(),
     inviteToken: text("invite_token").notNull().unique(),
+    invitePurpose: text("invite_purpose").default("friend_referral").notNull(),
     name: text("name"),
     phone: text("phone"),
     relationship: text("relationship").default("friend").notNull(),
@@ -124,7 +127,89 @@ export const friendInvite = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
   },
-  (table) => [index("friend_invite_userId_idx").on(table.userId)]
+  (table) => [
+    index("friend_invite_circleId_idx").on(table.circleId),
+    index("friend_invite_userId_idx").on(table.userId),
+  ]
+);
+
+export const circle = pgTable(
+  "circle",
+  {
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    id: text("id").primaryKey(),
+    logoUrl: text("logo_url"),
+    name: text("name").notNull(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [index("circle_ownerUserId_idx").on(table.ownerUserId)]
+);
+
+export const circleMember = pgTable(
+  "circle_member",
+  {
+    circleId: text("circle_id")
+      .notNull()
+      .references(() => circle.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    id: text("id").primaryKey(),
+    inviteId: text("invite_id").references(() => friendInvite.id, {
+      onDelete: "set null",
+    }),
+    role: text("role").default("member").notNull(),
+    status: text("status").default("active").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("circle_member_circleId_idx").on(table.circleId),
+    uniqueIndex("circle_member_circleId_userId_idx").on(
+      table.circleId,
+      table.userId
+    ),
+  ]
+);
+
+export const referral = pgTable(
+  "referral",
+  {
+    acceptedAt: timestamp("accepted_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    externalTargetName: text("external_target_name"),
+    friendInviteId: text("friend_invite_id").references(() => friendInvite.id, {
+      onDelete: "set null",
+    }),
+    id: text("id").primaryKey(),
+    referredEmail: text("referred_email"),
+    referredPhone: text("referred_phone"),
+    referredUserId: text("referred_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    referralType: text("referral_type").default("friend").notNull(),
+    referrerUserId: text("referrer_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    rewardAmountCents: integer("reward_amount_cents").default(0).notNull(),
+    rewardStatus: text("reward_status").default("unqualified").notNull(),
+    source: text("source").default("onboarding").notNull(),
+    status: text("status").default("invited").notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("referral_friendInviteId_idx").on(table.friendInviteId),
+    index("referral_referrerUserId_idx").on(table.referrerUserId),
+    index("referral_type_status_idx").on(table.referralType, table.status),
+  ]
 );
 
 export const membershipPlan = pgTable(

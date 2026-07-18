@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import app from "../app";
 import {
   buildGooglePlacesTextQuery,
+  invitePurposeForMembership,
   isJoinableInvite,
   mergeInviteRowsForSave,
   normalizeGooglePlaces,
@@ -98,6 +99,11 @@ const dateRequestPayload = {
   searchArea: "Nashville, TN",
   what: ["eat", "drink", "play"],
 };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  delete process.env.GOOGLE_PLACES_API_KEY;
+});
 
 describe("dating routes", () => {
   it("requires auth for dating summary", async () => {
@@ -200,13 +206,81 @@ describe("dating routes", () => {
     });
   });
 
+  it("lets Social users invite friends as referral leads during onboarding", async () => {
+    const headers = authHeaders({
+      "x-chewbuu-test-tier": "social",
+      "x-chewbuu-test-user-id": crypto.randomUUID(),
+    });
+    const saveResponse = await app.request("/dating/profile", {
+      body: JSON.stringify({
+        ...profilePayload,
+        friendInvites: [
+          {
+            email: "friend@example.com",
+            phone: "(555) 555-0199",
+            relationship: "friend",
+          },
+        ],
+      }),
+      headers,
+      method: "PUT",
+    });
+
+    expect(saveResponse.status).toBe(200);
+    expect(await saveResponse.json()).toMatchObject({
+      profile: {
+        friendInvites: [
+          {
+            email: "friend@example.com",
+            invitePurpose: "friend_referral",
+            relationship: "friend",
+          },
+        ],
+      },
+    });
+  });
+
+  it("marks premium onboarding friend invites as circle invites", async () => {
+    const headers = authHeaders({
+      "x-chewbuu-test-tier": "mingle",
+      "x-chewbuu-test-user-id": crypto.randomUUID(),
+    });
+    const saveResponse = await app.request("/dating/profile", {
+      body: JSON.stringify({
+        ...profilePayload,
+        friendInvites: [
+          {
+            email: "friend@example.com",
+            relationship: "friend",
+          },
+        ],
+      }),
+      headers,
+      method: "PUT",
+    });
+
+    expect(saveResponse.status).toBe(200);
+    expect(await saveResponse.json()).toMatchObject({
+      profile: {
+        friendInvites: [
+          {
+            invitePurpose: "circle_invite",
+            relationship: "friend",
+          },
+        ],
+      },
+    });
+  });
+
   it("keeps existing sent invites from becoming pending on later profile saves", () => {
     const [sameInvite, changedInvite] = mergeInviteRowsForSave(
       [
         {
+          circleId: null,
           email: "spouse@example.com",
           id: "invite-1",
           inviteToken: "token-1",
+          invitePurpose: "spouse_invite",
           name: "Original Name",
           phone: null,
           relationship: "spouse",
@@ -237,6 +311,7 @@ describe("dating routes", () => {
     });
     expect(changedInvite).toMatchObject({
       email: "new-spouse@example.com",
+      invitePurpose: "spouse_invite",
       name: "New Spouse",
       relationship: "spouse",
       status: "pending",
@@ -408,6 +483,82 @@ describe("dating routes", () => {
     ).toBe("food restaurant in Nashville, TN");
   });
 
+  it("keeps text filters when biasing Google Places by coordinates", async () => {
+    process.env.GOOGLE_PLACES_API_KEY = "test-places-key";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ places: [] }));
+
+    const response = await app.request("/dating/places/suggest", {
+      body: JSON.stringify({
+        area: "Searcy, AR",
+        filters: ["tacos"],
+        latitude: "35.2468",
+        longitude: "-91.7337",
+        what: ["eat"],
+      }),
+      headers: authHeaders(),
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://places.googleapis.com/v1/places:searchText",
+      expect.objectContaining({
+        body: expect.any(String),
+      })
+    );
+
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body)) as {
+      includedType?: string;
+      locationBias?: {
+        circle?: {
+          center?: { latitude?: number; longitude?: number };
+        };
+      };
+      textQuery?: string;
+    };
+    expect(body).toMatchObject({
+      includedType: "restaurant",
+      textQuery: "tacos food restaurant in Searcy, AR",
+    });
+    expect(body.locationBias?.circle?.center).toEqual({
+      latitude: 35.2468,
+      longitude: -91.7337,
+    });
+  });
+
+  it("proxies Google Places photos without exposing the API key in redirects", async () => {
+    process.env.GOOGLE_PLACES_API_KEY = "test-places-key";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("image-bytes", {
+        headers: { "content-type": "image/jpeg" },
+        status: 200,
+      })
+    );
+
+    const response = await app.request(
+      "/dating/places/photos?name=places/place-1/photos/photo-1",
+      {
+        headers: authHeaders(),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("content-type")).toBe("image/jpeg");
+    expect(await response.text()).toBe("image-bytes");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://places.googleapis.com/v1/places/place-1/photos/photo-1/media?maxWidthPx=960",
+      expect.objectContaining({
+        headers: {
+          "x-goog-api-key": "test-places-key",
+        },
+      })
+    );
+  });
+
   it("considers user onboarded but unable to date when basics are present but media is missing", async () => {
     const headers = authHeaders({
       "x-chewbuu-test-intro-video": "false",
@@ -537,6 +688,26 @@ describe("dating routes", () => {
         types: [],
       },
     ]);
+  });
+});
+
+describe("invitePurposeForMembership", () => {
+  it("tracks Social friend invites as referrals instead of circle membership", () => {
+    expect(
+      invitePurposeForMembership({ relationship: "friend" }, "social")
+    ).toBe("friend_referral");
+  });
+
+  it("tracks premium friend invites as circle invites", () => {
+    expect(
+      invitePurposeForMembership({ relationship: "friend" }, "mingle")
+    ).toBe("circle_invite");
+  });
+
+  it("keeps spouse invites distinct from friend rewards", () => {
+    expect(
+      invitePurposeForMembership({ relationship: "spouse" }, "sugar")
+    ).toBe("spouse_invite");
   });
 });
 

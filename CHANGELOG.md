@@ -17,6 +17,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added active date-request cards and unread request badges to the feed/Dates navigation.
 - Expanded Spots with photo-led sections, richer Google Places metadata, and a protected Google Places photo proxy.
 - Added an authenticated R2 media fallback route for uploaded profile media when no public R2 URL is configured.
+- Added circle and referral tracking storage so onboarding friend invites can feed future free-premium and restaurant-referral rewards.
+- Added first-class `/me` social routes for chats, date details, spots categories, calendar, notifications, and profile.
+- Added a draft profile save endpoint so onboarding progress can persist before required media is ready.
 
 ### Changed
 
@@ -25,12 +28,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Updated onboarding media uploads to use the Vercel Blob route in hosted previews.
 - Reframed chat copy around persistent friend DMs and date-request match rooms.
 - Reframed feed and Spots copy around friend recaps, active date requests, and future spot partners.
+- Updated onboarding Friends & Safety so Social users can invite friends as referrals while premium users can turn friend invites into circle members.
+- Updated Stream chat loading to run client-side from the `/me` shell so previews do not SSR-crash on the Stream bundle.
 
 ### Fixed
 
 - Fixed uploaded media fallback URLs so attachments no longer save with the dead `storage.chewbuu.local` placeholder.
 - Fixed the Chats route to let Stream own active channel selection so the full message list and composer render.
 - Fixed private Blob video uploads by stripping recorder codec parameters before storage.
+- Fixed Google Places photo loading to proxy media without exposing the server API key.
+- Fixed coordinate-biased Places suggestions so filters and spot searches still shape the results.
 - Linked dashboard readiness checklist items back to the relevant onboarding steps.
 - Removed the duplicate sidebar Chewbuu wordmark from the authenticated app shell.
 

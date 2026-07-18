@@ -15,9 +15,15 @@ import {
 import { Input } from "@chewbuu/ui/components/input";
 import { Progress } from "@chewbuu/ui/components/progress";
 import { Textarea } from "@chewbuu/ui/components/textarea";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import {
+  Link,
+  createFileRoute,
+  useNavigate,
+  useRouteContext,
+} from "@tanstack/react-router";
 import {
   ArrowLeft,
+  Bell,
   CalendarCheck,
   CalendarHeart,
   Check,
@@ -39,10 +45,10 @@ import {
   UserPlus,
   Video,
 } from "lucide-react";
+import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { DashboardChats } from "@/features/stream/dashboard-chats";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
@@ -64,7 +70,14 @@ interface DateRecap {
   createdAt: string;
 }
 
-type DashboardTab = "chats" | "feed" | "matches" | "profile" | "spots";
+type DashboardTab =
+  | "calendar"
+  | "chats"
+  | "feed"
+  | "matches"
+  | "notifications"
+  | "profile"
+  | "spots";
 type SpotCategory = "all" | "eat" | "drink" | "play";
 type DateHistoryMatchStatus =
   | "accepted"
@@ -109,6 +122,15 @@ interface DateHistoryItem {
 export const Route = createFileRoute("/_auth/me")({
   component: RouteComponent,
 });
+
+interface MePageProps {
+  initialChatId?: string;
+  initialDateId?: string;
+  initialSpotsCategory?: SpotCategory;
+  initialTab?: DashboardTab;
+}
+
+type DashboardChatsComponent = ComponentType<{ activeChannelId?: string }>;
 
 const getAge = (birthdayString: string) => {
   const birthday = new Date(birthdayString);
@@ -216,11 +238,21 @@ const demoDateHistory: DateHistoryItem = {
 };
 
 function RouteComponent() {
-  const { session } = Route.useRouteContext();
+  return <MePage />;
+}
+
+export function MePage({
+  initialChatId,
+  initialDateId,
+  initialSpotsCategory = "all",
+  initialTab = "feed",
+}: MePageProps) {
+  const { session } = useRouteContext({ from: "/_auth" });
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>("feed");
-  const [spotsCategory, setSpotsCategory] = useState<SpotCategory>("all");
+  const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
+  const [spotsCategory, setSpotsCategory] =
+    useState<SpotCategory>(initialSpotsCategory);
   const [profileSubTab, setProfileSubTab] = useState<
     "intro" | "photos" | "recaps"
   >("recaps");
@@ -233,7 +265,9 @@ function RouteComponent() {
   const [readRequestIds, setReadRequestIds] = useState<string[]>([]);
   const [selectedDateHistoryId, setSelectedDateHistoryId] = useState<
     null | string
-  >(null);
+  >(initialDateId ?? null);
+  const [dashboardChatsComponent, setDashboardChatsComponent] =
+    useState<DashboardChatsComponent | null>(null);
 
   // Local state for user's own uploaded date recaps (persisted to localStorage)
   const [userRecaps, setUserRecaps] = useState<DateRecap[]>([]);
@@ -285,6 +319,37 @@ function RouteComponent() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    setSpotsCategory(initialSpotsCategory);
+  }, [initialSpotsCategory]);
+
+  useEffect(() => {
+    setSelectedDateHistoryId(initialDateId ?? null);
+  }, [initialDateId]);
+
+  useEffect(() => {
+    if (activeTab !== "chats" || dashboardChatsComponent) return;
+
+    let active = true;
+
+    const loadChats = async () => {
+      const module = await import("@/features/stream/dashboard-chats");
+      if (active) {
+        setDashboardChatsComponent(() => module.DashboardChats);
+      }
+    };
+
+    void loadChats();
+
+    return () => {
+      active = false;
+    };
+  }, [activeTab, dashboardChatsComponent]);
 
   const allRecaps = useMemo(() => {
     return userRecaps.toSorted(
@@ -349,6 +414,10 @@ function RouteComponent() {
   const unreadRequestCount = pendingRequests.filter(
     (request) => !readRequestIds.includes(request.id)
   ).length;
+  const calendarBadgeCount = pendingRequests.length;
+  const chatBadgeCount = pendingRequests.length;
+  const notificationBadgeCount =
+    unreadRequestCount + (summary?.readiness.pendingReviews ?? 0);
   const featuredSpot = spots.find((spot) => spot.photoUrl) ?? spots[0];
   const spotsByCategory = useMemo(() => {
     const grouped: Record<Exclude<SpotCategory, "all">, DatePlace[]> = {
@@ -389,8 +458,31 @@ function RouteComponent() {
     return grouped;
   }, [spots]);
 
+  const routeForTab = (tab: DashboardTab) => {
+    if (tab === "calendar") return "/me/calendar";
+    if (tab === "chats")
+      return initialChatId ? `/me/chats/${initialChatId}` : "/me/chats";
+    if (tab === "matches") return "/me/dates";
+    if (tab === "notifications") return "/me/notifications";
+    if (tab === "profile") return "/me/profile";
+    if (tab === "spots") return `/me/spots/${spotsCategory}`;
+    return "/me";
+  };
+
+  const pushMePath = (path: string) => {
+    window.history.pushState(null, "", path);
+  };
+
+  const setSpotCategory = (category: SpotCategory) => {
+    setSpotsCategory(category);
+    if (activeTab === "spots") {
+      pushMePath(`/me/spots/${category}`);
+    }
+  };
+
   const setDashboardTab = (tab: DashboardTab) => {
     setActiveTab(tab);
+    pushMePath(routeForTab(tab));
 
     if (tab === "matches" && pendingRequests.length > 0) {
       const nextReadIds = Array.from(
@@ -402,6 +494,11 @@ function RouteComponent() {
         JSON.stringify(nextReadIds)
       );
     }
+  };
+
+  const openDateHistory = (dateId: string) => {
+    setSelectedDateHistoryId(dateId);
+    pushMePath(`/me/dates/${dateId}`);
   };
 
   const handleSignOut = async () => {
@@ -510,6 +607,8 @@ function RouteComponent() {
     spotsQuery,
   ]);
 
+  const ChatView = dashboardChatsComponent;
+
   return (
     <div className="min-h-screen bg-background text-foreground flex justify-center">
       <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12">
@@ -570,6 +669,45 @@ function RouteComponent() {
               >
                 <MessageCircle className="size-5" />
                 <span>Chats</span>
+                {chatBadgeCount > 0 && (
+                  <Badge className="ml-auto rounded-full px-2 py-0 text-[10px]">
+                    {chatBadgeCount}
+                  </Badge>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardTab("calendar")}
+                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                  activeTab === "calendar"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <CalendarCheck className="size-5" />
+                <span>Calendar</span>
+                {calendarBadgeCount > 0 && (
+                  <Badge className="ml-auto rounded-full px-2 py-0 text-[10px]">
+                    {calendarBadgeCount}
+                  </Badge>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardTab("notifications")}
+                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                  activeTab === "notifications"
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <Bell className="size-5" />
+                <span>Notifications</span>
+                {notificationBadgeCount > 0 && (
+                  <Badge className="ml-auto rounded-full px-2 py-0 text-[10px]">
+                    {notificationBadgeCount}
+                  </Badge>
+                )}
               </button>
               <button
                 type="button"
@@ -583,13 +721,14 @@ function RouteComponent() {
                 <User className="size-5" />
                 <span>My Profile</span>
               </button>
-              <Link
-                to="/onboarding"
+              <button
+                type="button"
+                onClick={() => setDashboardTab("profile")}
                 className="flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
               >
                 <ClipboardList className="size-5" />
                 <span>Edit Profile</span>
-              </Link>
+              </button>
             </nav>
 
             {/* Plan a Date Button */}
@@ -728,7 +867,11 @@ function RouteComponent() {
                     <button
                       className="flex w-full items-start gap-3 rounded-2xl border border-primary/25 bg-primary/10 p-4 text-left transition hover:border-primary/45 hover:bg-primary/15"
                       key={request.id}
-                      onClick={() => setDashboardTab("matches")}
+                      onClick={() => {
+                        setDashboardTab("matches");
+                        setSelectedDateHistoryId(request.id);
+                        pushMePath(`/me/dates/${request.id}`);
+                      }}
                       type="button"
                     >
                       <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -883,7 +1026,10 @@ function RouteComponent() {
                     <Button
                       aria-label="Back to dates"
                       className="mt-0.5 rounded-full"
-                      onClick={() => setSelectedDateHistoryId(null)}
+                      onClick={() => {
+                        setSelectedDateHistoryId(null);
+                        pushMePath("/me/dates");
+                      }}
                       size="icon-sm"
                       type="button"
                       variant="ghost"
@@ -920,9 +1066,7 @@ function RouteComponent() {
                   <>
                     <DateHistoryNotification
                       date={demoDateHistory}
-                      onOpen={() =>
-                        setSelectedDateHistoryId(demoDateHistory.id)
-                      }
+                      onOpen={() => openDateHistory(demoDateHistory.id)}
                     />
                     {pendingRequests.length === 0 ? (
                       <Card className="rounded-2xl border-border bg-card/45">
@@ -1027,7 +1171,20 @@ function RouteComponent() {
                   match rooms until you choose, friend, or decline each person.
                 </p>
               </div>
-              <DashboardChats />
+              {ChatView ? (
+                <ChatView activeChannelId={initialChatId} />
+              ) : (
+                <div className="p-5">
+                  <Card className="rounded-2xl border-border bg-card/45">
+                    <CardHeader>
+                      <CardTitle className="text-base">Opening chats</CardTitle>
+                      <CardDescription>
+                        Loading friend DMs and date-request match rooms.
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
 
@@ -1053,7 +1210,7 @@ function RouteComponent() {
                 {["all", "eat", "drink", "play"].map((cat) => (
                   <button
                     key={cat}
-                    onClick={() => setSpotsCategory(cat as SpotCategory)}
+                    onClick={() => setSpotCategory(cat as SpotCategory)}
                     className={`rounded-full px-5 py-1.5 text-xs font-bold capitalize transition shrink-0 cursor-pointer ${
                       spotsCategory === cat
                         ? "bg-primary text-primary-foreground"
@@ -1108,7 +1265,7 @@ function RouteComponent() {
                           canDate={canDate}
                           category={category}
                           key={category}
-                          onViewAll={() => setSpotsCategory(category)}
+                          onViewAll={() => setSpotCategory(category)}
                           spots={categorySpots.slice(0, 6)}
                         />
                       );
@@ -1138,22 +1295,152 @@ function RouteComponent() {
             </div>
           )}
 
+          {activeTab === "calendar" && (
+            <div className="flex flex-col">
+              <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
+                <h2 className="text-xl font-bold">Calendar</h2>
+                <p className="mt-1 text-muted-foreground text-xs">
+                  Booked date requests and confirmed plans show up here.
+                </p>
+              </div>
+              <div className="grid gap-4 p-5">
+                {[demoDateHistory, ...pendingRequests].map((request) => {
+                  const requestId =
+                    "id" in request ? request.id : demoDateHistory.id;
+                  const requestDate = new Date(request.scheduledAt);
+                  const places = request.places ?? [];
+
+                  return (
+                    <Card
+                      className="rounded-2xl border-border bg-card/45"
+                      key={requestId}
+                    >
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <CardTitle className="text-base">
+                              {request.what.map(formatLabel).join(", ")} date
+                            </CardTitle>
+                            <CardDescription>
+                              {requestDate.toLocaleDateString()} at{" "}
+                              {requestDate.toLocaleTimeString([], {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </CardDescription>
+                          </div>
+                          <Badge className="rounded-full capitalize">
+                            {request.status}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-3">
+                        <p className="text-sm text-muted-foreground">
+                          {request.searchArea}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {places.slice(0, 3).map((place) => (
+                            <Badge
+                              className="rounded-full"
+                              key={place.placeId}
+                              variant="secondary"
+                            >
+                              {place.name}
+                            </Badge>
+                          ))}
+                        </div>
+                        <Button
+                          className="w-fit rounded-full"
+                          onClick={() => openDateHistory(requestId)}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          View date
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "notifications" && (
+            <div className="flex flex-col">
+              <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
+                <h2 className="text-xl font-bold">Notifications</h2>
+                <p className="mt-1 text-muted-foreground text-xs">
+                  New date requests, match rooms, reviews, and safety updates.
+                </p>
+              </div>
+              <div className="grid gap-3 p-5">
+                {pendingRequests.map((request) => (
+                  <button
+                    className="flex items-start gap-3 rounded-2xl border border-border bg-card/45 p-4 text-left transition hover:border-primary/40"
+                    key={request.id}
+                    onClick={() => {
+                      setDashboardTab("matches");
+                      pushMePath(`/me/dates/${request.id}`);
+                    }}
+                    type="button"
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <CalendarHeart className="size-4" />
+                    </span>
+                    <span className="flex flex-col gap-1">
+                      <span className="font-bold text-sm">
+                        Date request is matching
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {request.what.map(formatLabel).join(", ")} around{" "}
+                        {request.searchArea}
+                      </span>
+                    </span>
+                    {!readRequestIds.includes(request.id) && (
+                      <span className="ml-auto mt-1 size-2 rounded-full bg-primary" />
+                    )}
+                  </button>
+                ))}
+                {(summary?.readiness.pendingReviews ?? 0) > 0 && (
+                  <Card className="rounded-2xl border-primary/30 bg-primary/10">
+                    <CardContent className="flex items-start gap-3 p-4">
+                      <Star className="mt-0.5 size-4 text-primary" />
+                      <div>
+                        <p className="font-bold text-sm">Review due</p>
+                        <p className="text-xs text-muted-foreground">
+                          Finish your date review before booking again.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                {notificationBadgeCount === 0 && (
+                  <Card className="rounded-2xl border-border bg-card/45">
+                    <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                      No new notifications.
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* PROFILE SUB-VIEW (Instagram Style) */}
           {activeTab === "profile" && (
             <div className="flex flex-col">
               <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30 flex items-center justify-between">
                 <h2 className="text-xl font-bold">My Profile</h2>
                 <div className="flex items-center gap-2">
-                  <Link
-                    to="/onboarding"
-                    className={buttonVariants({
-                      className: "rounded-full text-xs font-semibold h-8",
-                      size: "sm",
-                      variant: "outline",
-                    })}
+                  <Button
+                    className="rounded-full text-xs font-semibold h-8"
+                    onClick={() => setProfileSubTab("recaps")}
+                    size="sm"
+                    type="button"
+                    variant="outline"
                   >
                     Edit Profile
-                  </Link>
+                  </Button>
                   <Button
                     aria-label="Sign out"
                     className="rounded-full lg:hidden"
@@ -1557,13 +1844,15 @@ function RouteComponent() {
 
         {/* MOBILE BOTTOM TAB BAR */}
         <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border/80 bg-background/90 backdrop-blur-md lg:hidden">
-          <div className="grid grid-cols-5">
+          <div className="grid grid-cols-7">
             {(
               [
                 { icon: Home, label: "Feed", tab: "feed" },
                 { icon: MapPin, label: "Spots", tab: "spots" },
                 { icon: Heart, label: "Dates", tab: "matches" },
                 { icon: MessageCircle, label: "Chats", tab: "chats" },
+                { icon: CalendarCheck, label: "Calendar", tab: "calendar" },
+                { icon: Bell, label: "Alerts", tab: "notifications" },
                 { icon: User, label: "Profile", tab: "profile" },
               ] as const
             ).map((item) => (
@@ -1585,6 +1874,22 @@ function RouteComponent() {
                       {unreadRequestCount}
                     </span>
                   )}
+                  {item.tab === "chats" && chatBadgeCount > 0 && (
+                    <span className="-right-2 -top-1 absolute flex size-4 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground">
+                      {chatBadgeCount}
+                    </span>
+                  )}
+                  {item.tab === "calendar" && calendarBadgeCount > 0 && (
+                    <span className="-right-2 -top-1 absolute flex size-4 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground">
+                      {calendarBadgeCount}
+                    </span>
+                  )}
+                  {item.tab === "notifications" &&
+                    notificationBadgeCount > 0 && (
+                      <span className="-right-2 -top-1 absolute flex size-4 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground">
+                        {notificationBadgeCount}
+                      </span>
+                    )}
                 </span>
                 {item.label}
               </button>
