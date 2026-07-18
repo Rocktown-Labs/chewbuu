@@ -20,6 +20,7 @@ export const profile = pgTable(
     bio: text("bio"),
     birthday: text("birthday"),
     canDate: boolean("can_date").default(false).notNull(),
+    canceledDateCount: integer("canceled_date_count").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     datingModes: jsonb("dating_modes").$type<string[]>().default([]).notNull(),
     distanceMiles: integer("distance_miles").default(25).notNull(),
@@ -27,6 +28,7 @@ export const profile = pgTable(
       .$type<string[]>()
       .default([])
       .notNull(),
+    flakeCount: integer("flake_count").default(0).notNull(),
     height: text("height"),
     id: text("id").primaryKey(),
     interestDetails: jsonb("interest_details")
@@ -48,7 +50,11 @@ export const profile = pgTable(
     onboardingCompletedAt: timestamp("onboarding_completed_at"),
     politics: text("politics"),
     profilePhotoUrl: text("profile_photo_url"),
+    reliabilityScore: integer("reliability_score").default(100).notNull(),
     religion: text("religion"),
+    rescheduledDateCount: integer("rescheduled_date_count")
+      .default(0)
+      .notNull(),
     safetyOptIn: boolean("safety_opt_in").default(false).notNull(),
     sex: text("sex"),
     sexuality: text("sexuality"),
@@ -238,7 +244,17 @@ export const dateReview = pgTable(
       .notNull()
       .references(() => dateRequest.id, { onDelete: "cascade" }),
     id: text("id").primaryKey(),
+    personComment: text("person_comment"),
+    personCriteria: jsonb("person_criteria")
+      .$type<Record<string, number>>()
+      .default({})
+      .notNull(),
     personRating: integer("person_rating"),
+    placeComment: text("place_comment"),
+    placeCriteria: jsonb("place_criteria")
+      .$type<Record<string, number>>()
+      .default({})
+      .notNull(),
     placeRating: integer("place_rating"),
     required: boolean("required").default(true).notNull(),
     userId: text("user_id")

@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added a two-step end-of-date review flow with person/place criteria, comments, and a dedicated reviews API.
+- Added a mock Dates detail view showing date request history, match decisions, date-room history, review entry, and recap content.
+- Added review storage fields and reliability scoring counters for future match ranking penalties on cancels, reschedules, and flakes.
 - Added real Stream friend DM bootstrapping from the Chats route for preview testing live messages between users.
 - Added authenticated private Vercel Blob profile media upload and streaming routes.
 - Added `/me` as the primary authenticated social app route, with `/dashboard` kept as a compatibility redirect.

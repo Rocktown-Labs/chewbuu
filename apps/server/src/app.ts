@@ -15,6 +15,7 @@ import aiRoute from "./routes/ai";
 import authRoute from "./routes/auth";
 import datingRoute from "./routes/dating";
 import pricingRoute from "./routes/pricing";
+import reviewsRoute from "./routes/reviews";
 import streamRoute from "./routes/stream";
 import uploadRoute from "./routes/upload";
 
@@ -69,6 +70,7 @@ const routes = app
   .route("/", aiRoute)
   .route("/", datingRoute)
   .route("/", pricingRoute)
+  .route("/", reviewsRoute)
   .route("/", streamRoute)
   .route("/", uploadRoute);
 

@@ -17,6 +17,7 @@ import { Progress } from "@chewbuu/ui/components/progress";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
+  ArrowLeft,
   CalendarCheck,
   CalendarHeart,
   Check,
@@ -36,6 +37,7 @@ import {
   Star,
   User,
   UserPlus,
+  Video,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -64,6 +66,45 @@ interface DateRecap {
 
 type DashboardTab = "chats" | "feed" | "matches" | "profile" | "spots";
 type SpotCategory = "all" | "eat" | "drink" | "play";
+type DateHistoryMatchStatus =
+  | "accepted"
+  | "declined"
+  | "friended"
+  | "saved"
+  | "suggested";
+
+interface DateHistoryMatch {
+  compatibility: number;
+  displayName: string;
+  id: string;
+  note: string;
+  photoUrl?: string;
+  status: DateHistoryMatchStatus;
+  tags: string[];
+}
+
+interface DateHistoryItem {
+  acceptedMatchId: string;
+  chatSummary: string[];
+  content: {
+    label: string;
+    status: string;
+  }[];
+  id: string;
+  matches: DateHistoryMatch[];
+  places: DatePlace[];
+  requesterView: boolean;
+  scheduledAt: string;
+  searchArea: string;
+  status: string;
+  timeline: {
+    label: string;
+    tone: "done" | "live" | "muted";
+    value: string;
+  }[];
+  title: string;
+  what: string[];
+}
 
 export const Route = createFileRoute("/_auth/me")({
   component: RouteComponent,
@@ -92,6 +133,88 @@ const formatLabel = (value: string) =>
     .join(" ")
     .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
 
+const demoDateHistory: DateHistoryItem = {
+  acceptedMatchId: "demo-match-maya",
+  chatSummary: [
+    "Maya sent an intro and picked the booth by the window.",
+    "You confirmed 7:30 PM and shared the second spot.",
+    "After the date, Maya was added to Friends, so future messages move to Chats.",
+  ],
+  content: [
+    { label: "Food photo", status: "Saved to recap draft" },
+    { label: "Outfit check", status: "Private" },
+    { label: "Recap video", status: "Waiting for review" },
+  ],
+  id: "demo-date-123456",
+  matches: [
+    {
+      compatibility: 94,
+      displayName: "Maya",
+      id: "demo-match-maya",
+      note: "Accepted the plan, exchanged videos, and became a friend after the date.",
+      photoUrl:
+        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=70",
+      status: "friended",
+      tags: ["Live music", "Tacos", "Low-pressure"],
+    },
+    {
+      compatibility: 88,
+      displayName: "Jordan",
+      id: "demo-match-jordan",
+      note: "Saved for later. Date-room history stays attached to this request.",
+      photoUrl:
+        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=70",
+      status: "saved",
+      tags: ["Pool", "Sports", "Coffee"],
+    },
+    {
+      compatibility: 83,
+      displayName: "Riley",
+      id: "demo-match-riley",
+      note: "Declined by requester. This person does not move to friend chat.",
+      photoUrl:
+        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=70",
+      status: "declined",
+      tags: ["Comedy", "Dessert", "Group hangs"],
+    },
+  ],
+  places: [
+    {
+      address: "East Nashville",
+      name: "The Golden Booth",
+      placeId: "demo-place-golden-booth",
+      rating: "4.7",
+      types: ["restaurant", "bar", "date_fit"],
+    },
+    {
+      address: "Main Street",
+      name: "Cue & Co.",
+      placeId: "demo-place-cue",
+      rating: "4.6",
+      types: ["pool", "play", "combo"],
+    },
+    {
+      address: "Downtown",
+      name: "Third Place Coffee",
+      placeId: "demo-place-third",
+      rating: "4.8",
+      types: ["cafe", "talk", "quiet"],
+    },
+  ],
+  requesterView: true,
+  scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
+  searchArea: "Nashville, TN",
+  status: "Review due",
+  timeline: [
+    { label: "Request", tone: "done", value: "3 spots selected" },
+    { label: "Matcher", tone: "done", value: "40 candidates reviewed" },
+    { label: "Choice", tone: "done", value: "Maya accepted" },
+    { label: "Date", tone: "live", value: "Review + recap open" },
+  ],
+  title: "Eat, Play, Talk date",
+  what: ["eat", "play", "talk"],
+};
+
 function RouteComponent() {
   const { session } = Route.useRouteContext();
   const navigate = useNavigate();
@@ -108,6 +231,9 @@ function RouteComponent() {
   const [spotsQuery, setSpotsQuery] = useState("");
   const [isLoadingSpots, setIsLoadingSpots] = useState(false);
   const [readRequestIds, setReadRequestIds] = useState<string[]>([]);
+  const [selectedDateHistoryId, setSelectedDateHistoryId] = useState<
+    null | string
+  >(null);
 
   // Local state for user's own uploaded date recaps (persisted to localStorage)
   const [userRecaps, setUserRecaps] = useState<DateRecap[]>([]);
@@ -218,6 +344,8 @@ function RouteComponent() {
   const readinessReady =
     canDate && readinessItems.every((item) => item.checked);
   const pendingRequests = summary?.requests ?? [];
+  const selectedDateHistory =
+    selectedDateHistoryId === demoDateHistory.id ? demoDateHistory : null;
   const unreadRequestCount = pendingRequests.filter(
     (request) => !readRequestIds.includes(request.id)
   ).length;
@@ -750,92 +878,140 @@ function RouteComponent() {
           {activeTab === "matches" && (
             <div className="flex flex-col">
               <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
-                <h2 className="text-xl font-bold">Dates & Requests</h2>
-                <p className="mt-1 text-muted-foreground text-xs">
-                  Review date requests, save people for later, decline, or chat
-                  once the match is ready.
-                </p>
+                {selectedDateHistory ? (
+                  <div className="flex items-start gap-3">
+                    <Button
+                      aria-label="Back to dates"
+                      className="mt-0.5 rounded-full"
+                      onClick={() => setSelectedDateHistoryId(null)}
+                      size="icon-sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <ArrowLeft className="size-4" />
+                    </Button>
+                    <div>
+                      <h2 className="text-xl font-bold">
+                        {selectedDateHistory.title}
+                      </h2>
+                      <p className="mt-1 text-muted-foreground text-xs">
+                        Date request #
+                        {selectedDateHistory.id.replace("demo-date-", "")}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <h2 className="text-xl font-bold">Dates & Requests</h2>
+                    <p className="mt-1 text-muted-foreground text-xs">
+                      Request history, match options, date rooms, reviews, and
+                      recap content live here.
+                    </p>
+                  </>
+                )}
               </div>
               <div className="grid gap-4 p-5">
-                {pendingRequests.length === 0 ? (
-                  <Card className="rounded-2xl border-border bg-card/45">
-                    <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
-                      <Heart className="size-8 text-primary" />
-                      <CardTitle className="text-base">
-                        No active date requests yet
-                      </CardTitle>
-                      <CardDescription className="max-w-sm">
-                        Start with a date request. Chewbuu will create a match
-                        room for each person found, then move the request
-                        forward once you choose, friend, or decline them.
-                      </CardDescription>
-                      <Link
-                        to={canDate ? "/date/new" : "/onboarding"}
-                        className={buttonVariants({
-                          className: "mt-2 rounded-full text-xs font-semibold",
-                          size: "sm",
-                        })}
-                      >
-                        {canDate ? "Request a Date" : "Finish Profile"}
-                      </Link>
-                    </CardContent>
-                  </Card>
+                {selectedDateHistory ? (
+                  <DateHistoryDetail
+                    date={selectedDateHistory}
+                    onShowChats={() => setDashboardTab("chats")}
+                  />
                 ) : (
-                  pendingRequests.map((request) => (
-                    <Card
-                      className="rounded-2xl border-border bg-card/45"
-                      key={request.id}
-                    >
-                      <CardHeader>
-                        <CardTitle className="text-base">
-                          {request.what.map(formatLabel).join(", ")} date
-                        </CardTitle>
-                        <CardDescription>
-                          {new Date(request.scheduledAt).toLocaleString()} in{" "}
-                          {request.searchArea}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="flex flex-col gap-3">
-                        <div className="flex flex-wrap gap-2">
-                          {request.places?.length ? (
-                            request.places.map((place) => (
-                              <Badge key={place.placeId} variant="secondary">
-                                {place.name}
-                              </Badge>
-                            ))
-                          ) : (
-                            <Badge variant="secondary">Places pending</Badge>
-                          )}
-                        </div>
-                        <div className="grid gap-2 sm:grid-cols-3">
-                          <Button
-                            className="rounded-full"
-                            onClick={() => setDashboardTab("chats")}
-                            size="sm"
+                  <>
+                    <DateHistoryNotification
+                      date={demoDateHistory}
+                      onOpen={() =>
+                        setSelectedDateHistoryId(demoDateHistory.id)
+                      }
+                    />
+                    {pendingRequests.length === 0 ? (
+                      <Card className="rounded-2xl border-border bg-card/45">
+                        <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
+                          <Heart className="size-8 text-primary" />
+                          <CardTitle className="text-base">
+                            No active date requests yet
+                          </CardTitle>
+                          <CardDescription className="max-w-sm">
+                            Start with a date request. Chewbuu will create a
+                            match room for each person found, then move the
+                            request forward once you choose, friend, or decline
+                            them.
+                          </CardDescription>
+                          <Link
+                            to={canDate ? "/date/new" : "/onboarding"}
+                            className={buttonVariants({
+                              className:
+                                "mt-2 rounded-full text-xs font-semibold",
+                              size: "sm",
+                            })}
                           >
-                            <MessageSquare className="mr-1.5 size-4" />
-                            Match Rooms
-                          </Button>
-                          <Button
-                            className="rounded-full"
-                            disabled
-                            size="sm"
-                            variant="outline"
-                          >
-                            Save Soon
-                          </Button>
-                          <Button
-                            className="rounded-full"
-                            disabled
-                            size="sm"
-                            variant="ghost"
-                          >
-                            Decline Soon
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
+                            {canDate ? "Request a Date" : "Finish Profile"}
+                          </Link>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      pendingRequests.map((request) => (
+                        <Card
+                          className="rounded-2xl border-border bg-card/45"
+                          key={request.id}
+                        >
+                          <CardHeader>
+                            <CardTitle className="text-base">
+                              {request.what.map(formatLabel).join(", ")} date
+                            </CardTitle>
+                            <CardDescription>
+                              {new Date(request.scheduledAt).toLocaleString()}{" "}
+                              in {request.searchArea}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="flex flex-col gap-3">
+                            <div className="flex flex-wrap gap-2">
+                              {request.places?.length ? (
+                                request.places.map((place) => (
+                                  <Badge
+                                    key={place.placeId}
+                                    variant="secondary"
+                                  >
+                                    {place.name}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <Badge variant="secondary">
+                                  Places pending
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              <Button
+                                className="rounded-full"
+                                onClick={() => setDashboardTab("chats")}
+                                size="sm"
+                              >
+                                <MessageSquare className="mr-1.5 size-4" />
+                                Match Rooms
+                              </Button>
+                              <Button
+                                className="rounded-full"
+                                disabled
+                                size="sm"
+                                variant="outline"
+                              >
+                                Save Soon
+                              </Button>
+                              <Button
+                                className="rounded-full"
+                                disabled
+                                size="sm"
+                                variant="ghost"
+                              >
+                                Decline Soon
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -1607,6 +1783,371 @@ function ChecklistItem({
         }`}
       />
     </Link>
+  );
+}
+
+function DateHistoryNotification({
+  date,
+  onOpen,
+}: {
+  date: DateHistoryItem;
+  onOpen: () => void;
+}) {
+  const acceptedMatch = date.matches.find(
+    (match) => match.id === date.acceptedMatchId
+  );
+
+  return (
+    <button
+      className="flex w-full items-start gap-3 rounded-lg border border-primary/25 bg-primary/10 p-4 text-left transition hover:border-primary/50 hover:bg-primary/15"
+      onClick={onOpen}
+      type="button"
+    >
+      <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+        <CalendarHeart className="size-5" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-2">
+        <span className="flex flex-wrap items-center gap-2">
+          <span className="font-bold text-sm">{date.title}</span>
+          <Badge className="rounded-full bg-background/80 text-[10px] text-foreground">
+            {date.status}
+          </Badge>
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {date.searchArea} · {new Date(date.scheduledAt).toLocaleString()}
+        </span>
+        <span className="flex flex-wrap gap-1.5">
+          {date.what.map((item) => (
+            <Badge className="rounded-full text-[10px]" key={item}>
+              {formatLabel(item)}
+            </Badge>
+          ))}
+          {acceptedMatch ? (
+            <Badge className="rounded-full text-[10px]" variant="secondary">
+              Kept {acceptedMatch.displayName}
+            </Badge>
+          ) : null}
+        </span>
+      </span>
+      <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
+    </button>
+  );
+}
+
+function DateHistoryDetail({
+  date,
+  onShowChats,
+}: {
+  date: DateHistoryItem;
+  onShowChats: () => void;
+}) {
+  const acceptedMatch = date.matches.find(
+    (match) => match.id === date.acceptedMatchId
+  );
+  const availableMatches = date.matches.filter(
+    (match) => match.status !== "declined"
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="rounded-lg border-border bg-card/45">
+        <CardHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">{date.title}</CardTitle>
+              <CardDescription>
+                {date.searchArea} ·{" "}
+                {new Date(date.scheduledAt).toLocaleString()}
+              </CardDescription>
+            </div>
+            <Badge className="rounded-full bg-amber-500/10 text-amber-600">
+              {date.status}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-4">
+          {date.timeline.map((item) => (
+            <div
+              className="flex flex-col gap-1 rounded-lg border border-border bg-background/50 p-3"
+              key={item.label}
+            >
+              <span
+                className={`size-2 rounded-full ${
+                  item.tone === "done"
+                    ? "bg-emerald-500"
+                    : item.tone === "live"
+                      ? "bg-amber-500"
+                      : "bg-muted-foreground"
+                }`}
+              />
+              <span className="text-xs font-bold">{item.label}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {item.value}
+              </span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-lg border-border bg-card/45">
+        <CardHeader>
+          <CardTitle className="text-base">Match options</CardTitle>
+          <CardDescription>
+            Requesters can come back to every option that was not rejected.
+            Friended matches move future conversation into Chats.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {date.matches.map((match) => (
+            <DateHistoryMatchRow
+              isAccepted={match.id === date.acceptedMatchId}
+              key={match.id}
+              match={match}
+              onShowChats={onShowChats}
+            />
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="rounded-lg border-border bg-card/45">
+          <CardHeader>
+            <CardTitle className="text-base">Actual date</CardTitle>
+            <CardDescription>
+              Places, reviews, content, and the accepted match stay attached to
+              this date.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {acceptedMatch ? (
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-background/50 p-3">
+                <Avatar className="size-12 border border-border">
+                  {acceptedMatch.photoUrl && (
+                    <AvatarImage src={acceptedMatch.photoUrl} />
+                  )}
+                  <AvatarFallback>
+                    {acceptedMatch.displayName.slice(0, 2)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0">
+                  <p className="font-bold text-sm">
+                    Date with {acceptedMatch.displayName}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically friended after the completed date.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-2">
+              {date.places.map((place) => (
+                <div
+                  className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background/50 p-3"
+                  key={place.placeId}
+                >
+                  <div className="flex items-start gap-2">
+                    <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <div>
+                      <p className="font-bold text-xs">{place.name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {place.address}
+                      </p>
+                    </div>
+                  </div>
+                  {place.rating ? (
+                    <Badge className="rounded-full text-[10px]">
+                      <Star className="size-3 fill-yellow-500 text-yellow-500" />
+                      {place.rating}
+                    </Badge>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Link
+                className={buttonVariants({
+                  className: "rounded-full text-xs font-semibold",
+                  size: "sm",
+                })}
+                params={{ requestid: date.id }}
+                to="/reviews/$requestid"
+              >
+                <Star className="size-4" />
+                Open review UI
+              </Link>
+              <Button
+                className="rounded-full text-xs"
+                size="sm"
+                variant="outline"
+              >
+                <Plus className="size-4" />
+                Add recap
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-lg border-border bg-card/45">
+          <CardHeader>
+            <CardTitle className="text-base">Date-room history</CardTitle>
+            <CardDescription>
+              Match-room messages stay with the date unless someone becomes a
+              friend.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              {date.chatSummary.map((item) => (
+                <div
+                  className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground"
+                  key={item}
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+            <Button
+              className="rounded-full text-xs"
+              onClick={onShowChats}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              <MessageCircle className="size-4" />
+              Open friend chats
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="rounded-lg border-border bg-card/45">
+        <CardHeader>
+          <CardTitle className="text-base">Content & recap</CardTitle>
+          <CardDescription>
+            Optional date content can become private memories, public recaps, or
+            reward signals.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2 sm:grid-cols-3">
+          {date.content.map((item) => (
+            <div
+              className="rounded-lg border border-border bg-background/50 p-3"
+              key={item.label}
+            >
+              <p className="text-xs font-bold">{item.label}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {item.status}
+              </p>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {availableMatches.length > 1 ? (
+        <p className="text-xs text-muted-foreground">
+          {availableMatches.length} non-rejected match room
+          {availableMatches.length === 1 ? "" : "s"} remain attached to this
+          date for sender history.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function DateHistoryMatchRow({
+  isAccepted,
+  match,
+  onShowChats,
+}: {
+  isAccepted: boolean;
+  match: DateHistoryMatch;
+  onShowChats: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-background/50 p-3 sm:flex-row sm:items-center">
+      <Avatar className="size-12 border border-border">
+        {match.photoUrl && <AvatarImage src={match.photoUrl} />}
+        <AvatarFallback>{match.displayName.slice(0, 2)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-bold text-sm">{match.displayName}</p>
+          <Badge className="rounded-full text-[10px]" variant="secondary">
+            {match.compatibility}% match
+          </Badge>
+          <MatchStatusBadge status={match.status} />
+          {isAccepted ? (
+            <Badge className="rounded-full bg-primary/10 text-[10px] text-primary">
+              Chosen
+            </Badge>
+          ) : null}
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">{match.note}</p>
+        <div className="mt-2 flex flex-wrap gap-1">
+          {match.tags.map((tag) => (
+            <Badge className="rounded-full text-[9px]" key={tag}>
+              {tag}
+            </Badge>
+          ))}
+        </div>
+      </div>
+      {match.status === "friended" ? (
+        <Button
+          className="rounded-full text-xs"
+          onClick={onShowChats}
+          size="sm"
+          type="button"
+        >
+          <MessageCircle className="size-4" />
+          Chat
+        </Button>
+      ) : match.status === "declined" ? (
+        <Button
+          className="rounded-full text-xs"
+          disabled
+          size="sm"
+          variant="ghost"
+        >
+          Declined
+        </Button>
+      ) : (
+        <Button
+          className="rounded-full text-xs"
+          disabled
+          size="sm"
+          variant="outline"
+        >
+          Date room
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function MatchStatusBadge({ status }: { status: DateHistoryMatchStatus }) {
+  const label = {
+    accepted: "Accepted",
+    declined: "Rejected",
+    friended: "Friend",
+    saved: "Saved",
+    suggested: "Suggested",
+  }[status];
+  const className =
+    status === "declined"
+      ? "bg-muted text-muted-foreground"
+      : status === "friended" || status === "accepted"
+        ? "bg-emerald-500/10 text-emerald-600"
+        : "bg-amber-500/10 text-amber-600";
+
+  return (
+    <Badge
+      className={`rounded-full text-[10px] ${className}`}
+      variant="secondary"
+    >
+      {label}
+    </Badge>
   );
 }
 

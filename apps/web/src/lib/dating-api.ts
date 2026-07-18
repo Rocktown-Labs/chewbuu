@@ -28,8 +28,10 @@ export interface DatingProfilePayload {
   longitude?: string;
   favoriteThings: string[];
   friendInvites: {
+    circleId?: string;
     email?: string;
     inviteToken?: string;
+    invitePurpose?: "circle_invite" | "friend_referral" | "spouse_invite";
     name?: string;
     phone?: string;
     relationship?: "friend" | "spouse";
@@ -112,6 +114,42 @@ export interface DatingSummary {
     partySize: number;
     status: string;
   })[];
+}
+
+export interface ReviewCriterion {
+  key: string;
+  label: string;
+}
+
+export interface DateReviewPayload {
+  personComment?: string;
+  personCriteria: Record<string, number>;
+  personRating: number;
+  placeComment?: string;
+  placeCriteria: Record<string, number>;
+  placeRating: number;
+}
+
+export interface DateReview extends DateReviewPayload {
+  completedAt?: string;
+  dateRequestId: string;
+  id: string;
+  required: boolean;
+  userId: string;
+}
+
+export interface ReviewPrompt {
+  criteria: {
+    person: ReviewCriterion[];
+    place: ReviewCriterion[];
+  };
+  existingReview: DateReview | null;
+  places: DatePlace[];
+  request: {
+    id: string;
+    searchArea: string;
+    status: string;
+  };
 }
 
 export const getServerUrl = (url: string) => {
@@ -218,5 +256,15 @@ export const pricingApi = {
     apiFetch<{ plans: MembershipPlan[] }>("/admin/pricing/plans", {
       body: { plans },
       method: "PUT",
+    }),
+};
+
+export const reviewsApi = {
+  getPrompt: (requestId: string) =>
+    apiFetch<ReviewPrompt>(`/reviews/date-requests/${requestId}`),
+  submit: (requestId: string, body: DateReviewPayload) =>
+    apiFetch<{ review: DateReview }>(`/reviews/date-requests/${requestId}`, {
+      body,
+      method: "POST",
     }),
 };
