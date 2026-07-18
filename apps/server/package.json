@@ -22,6 +22,7 @@
     "@hono/zod-openapi": "^1.4.0",
     "@scalar/hono-api-reference": "^0.11.9",
     "@stream-io/node-sdk": "^0.7.62",
+    "@vercel/blob": "^2.6.1",
     "ai": "catalog:",
     "better-auth": "catalog:",
     "dotenv": "catalog:",

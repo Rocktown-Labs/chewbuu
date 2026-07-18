@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added real Stream friend DM bootstrapping from the Chats route for preview testing live messages between users.
+- Added authenticated private Vercel Blob profile media upload and streaming routes.
 - Added `/me` as the primary authenticated social app route, with `/dashboard` kept as a compatibility redirect.
 - Added active date-request cards and unread request badges to the feed/Dates navigation.
 - Expanded Spots with photo-led sections, richer Google Places metadata, and a protected Google Places photo proxy.
@@ -16,12 +18,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - Updated authenticated navigation and auth/onboarding redirects to use `/me`.
+- Updated onboarding media uploads to use the Vercel Blob route in hosted previews.
 - Reframed chat copy around persistent friend DMs and date-request match rooms.
 - Reframed feed and Spots copy around friend recaps, active date requests, and future spot partners.
 
 ### Fixed
 
 - Fixed uploaded media fallback URLs so attachments no longer save with the dead `storage.chewbuu.local` placeholder.
+- Fixed the Chats route to let Stream own active channel selection so the full message list and composer render.
 - Linked dashboard readiness checklist items back to the relevant onboarding steps.
 - Removed the duplicate sidebar Chewbuu wordmark from the authenticated app shell.
 

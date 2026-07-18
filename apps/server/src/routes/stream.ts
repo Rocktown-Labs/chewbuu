@@ -15,6 +15,23 @@ import {
 
 const streamRoute = createRouter();
 
+const demoFriends = [
+  {
+    id: "demo-avery-price",
+    image:
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=256&q=80",
+    name: "Avery Price",
+    text: "Hey, I saw your recap from The Root. Want to try that new taco spot this week?",
+  },
+  {
+    id: "demo-maya-ellis",
+    image:
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=256&q=80",
+    name: "Maya Ellis",
+    text: "I am down for coffee, karaoke, or both. Your move.",
+  },
+] as const;
+
 const assertStreamClients = () => {
   const clients = getStreamClients();
 
@@ -112,6 +129,48 @@ streamRoute.post("/stream/matches/:matchId/conversation", async (c) => {
     matchedUserId: matchedUser.id,
     requesterId: requester.id,
   });
+});
+
+streamRoute.post("/stream/chats/demo-friends", async (c) => {
+  const sessionUser = await getSessionUser(c.req.raw.headers);
+  const clients = assertStreamClients();
+  const requester = await upsertStreamUser(clients, sessionUser);
+  const channels = [];
+
+  for (const friend of demoFriends) {
+    const demoUser = await upsertSyntheticStreamUser(clients, {
+      displayName: friend.name,
+      id: friend.id,
+      image: friend.image,
+    });
+    const channelId = toStreamId(`friend_${requester.id}_${demoUser.id}`);
+    const channel = clients.chatClient.channel("messaging", channelId, {
+      chewbuuKind: "friend_dm",
+      created_by_id: requester.id,
+      members: [requester.id, demoUser.id],
+      name: friend.name,
+    } as never);
+
+    const state = await channel.watch();
+
+    if ((state.messages?.length ?? 0) === 0) {
+      await channel.sendMessage(
+        {
+          text: friend.text,
+          user_id: demoUser.id,
+        },
+        { skip_push: true }
+      );
+    }
+
+    channels.push({
+      cid: channel.cid,
+      friendName: friend.name,
+      id: channelId,
+    });
+  }
+
+  return c.json({ channels });
 });
 
 export default streamRoute;

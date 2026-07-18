@@ -21,7 +21,19 @@ export interface StreamMatchConversation {
   requesterId: string;
 }
 
+export interface StreamDemoFriendsResponse {
+  channels: {
+    cid: string;
+    friendName: string;
+    id: string;
+  }[];
+}
+
 export const streamApi = {
+  createDemoFriends: () =>
+    apiFetch<StreamDemoFriendsResponse>("/stream/chats/demo-friends", {
+      method: "POST",
+    }),
   getMatchConversation: (matchId: string) =>
     apiFetch<StreamMatchConversation>(
       `/stream/matches/${matchId}/conversation`,

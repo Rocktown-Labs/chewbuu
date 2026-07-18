@@ -7,6 +7,7 @@ import {
 import { cloudflare } from "@better-upload/server/clients";
 import { getObjectStream } from "@better-upload/server/helpers";
 import { env } from "@chewbuu/env/server";
+import { get, put } from "@vercel/blob";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { z } from "zod";
 
@@ -16,6 +17,25 @@ import { createRouter } from "../lib/create-app";
 const clientMetadataSchema = z.object({
   slot: z.enum(["profile_photo", "intro_video", "photo"]).default("photo"),
 });
+const uploadSlotSchema = clientMetadataSchema.shape.slot;
+
+const mediaLimits = {
+  intro_video: {
+    accept: "video/",
+    maxBytes: 1024 * 1024 * 250,
+    route: "introVideo",
+  },
+  photo: {
+    accept: "image/",
+    maxBytes: 1024 * 1024 * 12,
+    route: "photo",
+  },
+  profile_photo: {
+    accept: "image/",
+    maxBytes: 1024 * 1024 * 12,
+    route: "profilePhoto",
+  },
+} as const;
 
 const missingConfig = () =>
   !env.R2_ACCOUNT_ID ||
@@ -129,6 +149,9 @@ const mediaUrlFromKey = (key: string) => {
   return `/upload/media?key=${encodeURIComponent(key)}`;
 };
 
+const mediaUrlFromBlobPathname = (pathname: string) =>
+  `/upload/blob?pathname=${encodeURIComponent(pathname)}`;
+
 const storageNotConfiguredResponse = () =>
   ({
     error: {
@@ -161,6 +184,119 @@ const router = createRouter()
 
       throw error;
     }
+  })
+  .post("/upload/blob", async (c) => {
+    const sessionUser = await getSessionUser(c.req.raw.headers);
+    const body = await c.req.formData();
+    const file = body.get("file");
+    const slotResult = uploadSlotSchema.safeParse(body.get("slot") ?? "photo");
+
+    if (!slotResult.success) {
+      return c.json(
+        {
+          error: {
+            message: "Upload media slot is invalid.",
+            type: "invalid_media_slot",
+          },
+        },
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    if (!(file instanceof File)) {
+      return c.json(
+        {
+          error: {
+            message: "Upload file is required.",
+            type: "missing_file",
+          },
+        },
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    const slot = slotResult.data;
+    const limit = mediaLimits[slot];
+
+    if (!file.type.startsWith(limit.accept)) {
+      return c.json(
+        {
+          error: {
+            message: `Expected a ${limit.accept.replace("/", "")} upload.`,
+            type: "invalid_file_type",
+          },
+        },
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    if (file.size > limit.maxBytes) {
+      return c.json(
+        {
+          error: {
+            message: "Upload file is too large.",
+            type: "file_too_large",
+          },
+        },
+        413
+      );
+    }
+
+    const fileName = cleanFileName(file.name) || "upload";
+    const pathname = `profiles/${sessionUser.id}/${slot}/${crypto.randomUUID()}-${fileName}`;
+    const blob = await put(pathname, file, {
+      access: "private",
+      contentType: file.type || "application/octet-stream",
+      multipart: slot === "intro_video",
+    });
+
+    return c.json({
+      file: {
+        name: file.name,
+        pathname: blob.pathname,
+        route: limit.route,
+        size: file.size,
+        type: file.type,
+      },
+      url: mediaUrlFromBlobPathname(blob.pathname),
+    });
+  })
+  .get("/upload/blob", async (c) => {
+    await getSessionUser(c.req.raw.headers);
+    const pathname = c.req.query("pathname");
+
+    if (!pathname?.startsWith("profiles/")) {
+      return c.json(
+        {
+          error: {
+            message: "Upload media pathname is invalid.",
+            type: "invalid_media_pathname",
+          },
+        },
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    const result = await get(pathname, {
+      access: "private",
+      useCache: false,
+    });
+
+    if (!result) {
+      return new Response("Not found", { status: HttpStatusCodes.NOT_FOUND });
+    }
+
+    if (result.statusCode === 304) {
+      return new Response(null, { status: HttpStatusCodes.NOT_MODIFIED });
+    }
+
+    return new Response(result.stream, {
+      headers: {
+        "cache-control": "private, no-cache",
+        "content-type": result.blob.contentType,
+        "x-content-type-options": "nosniff",
+      },
+    });
   })
   .get("/upload/media", async (c) => {
     await getSessionUser(c.req.raw.headers);
@@ -202,4 +338,4 @@ const router = createRouter()
   });
 
 export default router;
-export { mediaUrlFromKey };
+export { mediaUrlFromBlobPathname, mediaUrlFromKey };

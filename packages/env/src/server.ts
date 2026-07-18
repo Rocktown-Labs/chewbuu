@@ -32,6 +32,7 @@ export const env = createEnv({
     BETTER_AUTH_ADMIN_EMAILS: z.string().default("cg@rocktownlabs.com"),
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
+    BLOB_READ_WRITE_TOKEN: z.string().optional(),
     CORS_ORIGIN: z.url(),
     DATABASE_URL: z.string().min(1),
     GOOGLE_PLACES_API_KEY: z.string().optional(),

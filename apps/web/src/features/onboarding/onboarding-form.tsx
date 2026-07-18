@@ -1,4 +1,3 @@
-import { uploadFile } from "@better-upload/client";
 import { Avatar, AvatarFallback } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button } from "@chewbuu/ui/components/button";
@@ -330,7 +329,6 @@ const defaultValues = {
 };
 
 type OnboardingFormApi = any;
-type UploadRoute = "introVideo" | "photo" | "profilePhoto";
 
 const getAge = (birthdayString: string) => {
   const today = new Date();
@@ -374,16 +372,26 @@ const formatValue = (value: string) =>
 
 const formatIdentity = (value: string) => value;
 
-const fileUrlFromUpload = (result: Awaited<ReturnType<typeof uploadFile>>) => {
-  const baseUrl =
-    typeof result.metadata.publicBaseUrl === "string"
-      ? result.metadata.publicBaseUrl.replace(/\/$/, "")
-      : "";
-  const { key } = result.file.objectInfo;
+const uploadProfileMedia = async (file: File, kind: DatingMedia["kind"]) => {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("slot", kind);
 
-  return baseUrl
-    ? `${baseUrl}/${key}`
-    : getApiUrl(`/upload/media?key=${encodeURIComponent(key)}`);
+  const response = await fetch(getApiUrl("/upload/blob"), {
+    body,
+    credentials: "include",
+    method: "POST",
+  });
+  const result = (await response.json()) as {
+    error?: { message?: string };
+    url?: string;
+  };
+
+  if (!(response.ok && result.url)) {
+    throw new Error(result.error?.message ?? "Upload failed.");
+  }
+
+  return getApiUrl(result.url);
 };
 
 const createEmptyPhoto = (sortOrder: number): DatingMedia => ({
@@ -1204,7 +1212,6 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
                 index={0}
                 kind="profile_photo"
                 label="Profile photo"
-                route="profilePhoto"
               />
               <MediaSlot
                 accept="video/*"
@@ -1213,7 +1220,6 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
                 index={1}
                 kind="intro_video"
                 label="Intro video"
-                route="introVideo"
               />
             </div>
 
@@ -1264,7 +1270,6 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
                       key={index}
                       kind="photo"
                       label={`Extra Photo ${index - 1}`}
-                      route="photo"
                     />
                   ))}
               </div>
@@ -2522,7 +2527,6 @@ function MediaSlot({
   index,
   kind,
   label,
-  route,
 }: {
   accept: string;
   form: OnboardingFormApi;
@@ -2530,7 +2534,6 @@ function MediaSlot({
   index: number;
   kind: DatingMedia["kind"];
   label: string;
-  route: UploadRoute;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -2547,14 +2550,7 @@ function MediaSlot({
 
     setIsUploading(true);
     try {
-      const result = await uploadFile({
-        api: getApiUrl("/upload"),
-        credentials: "include",
-        file,
-        metadata: { slot: kind },
-        route,
-      });
-      const url = fileUrlFromUpload(result);
+      const url = await uploadProfileMedia(file, kind);
 
       form.setFieldValue(`media[${index}]`, {
         isPrimary: kind === "profile_photo",

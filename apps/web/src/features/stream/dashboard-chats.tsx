@@ -1,12 +1,13 @@
+import { Button } from "@chewbuu/ui/components/button";
 import {
   Card,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@chewbuu/ui/components/card";
-import { ArrowLeft, MessageCircle, Video } from "lucide-react";
+import { Loader2, MessageCircle, UserPlus, Video } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Channel as StreamChannel } from "stream-chat";
+import { toast } from "sonner";
 
 import "stream-chat-react/css/index.css";
 import {
@@ -17,6 +18,7 @@ import {
   MessageComposer,
   MessageList,
   Thread,
+  useChatContext,
   Window,
   useCreateChatClient,
 } from "stream-chat-react";
@@ -87,6 +89,7 @@ export function DashboardChats() {
 }
 
 function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
+  const [listVersion, setListVersion] = useState(0);
   const chatClient = useCreateChatClient({
     apiKey: auth.apiKey,
     tokenOrProvider: async () => {
@@ -98,9 +101,6 @@ function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
       name: auth.name,
     },
   });
-  const [activeChannel, setActiveChannel] = useState<StreamChannel | null>(
-    null
-  );
 
   if (!chatClient) {
     return (
@@ -118,14 +118,13 @@ function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
   }
 
   const filters = { members: { $in: [auth.userId] }, type: "messaging" };
+  const options = { limit: 20, presence: true, state: true };
   const sort = { last_message_at: -1 as const };
 
   return (
     <Chat client={chatClient}>
-      <div className="grid md:grid-cols-[300px_minmax(0,1fr)]">
-        <div
-          className={`${activeChannel ? "hidden md:block" : "block"} border-r border-border/80`}
-        >
+      <div className="grid min-h-[620px] md:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="border-r border-border/80">
           <div className="flex items-start gap-2 border-b border-border/80 px-4 py-3">
             <Video className="mt-0.5 size-4 shrink-0 text-primary" />
             <p className="text-xs text-muted-foreground">
@@ -134,48 +133,101 @@ function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
               friend, or decline.
             </p>
           </div>
+          <DemoFriendButton
+            onSeed={() => setListVersion((value) => value + 1)}
+          />
           <ChannelList
+            EmptyStateIndicator={EmptyChatListState}
             filters={filters}
-            onSelect={(channel) => setActiveChannel(channel)}
-            setActiveChannelOnMount={false}
+            key={listVersion}
+            options={options}
+            setActiveChannelOnMount
             sort={sort}
           />
         </div>
-        <div className={activeChannel ? "block" : "hidden md:block"}>
-          {activeChannel ? (
-            <Channel channel={activeChannel}>
-              <Window>
-                <div className="flex items-center gap-1 border-b border-border/80 px-2 py-1 md:hidden">
-                  <button
-                    aria-label="Back to chats"
-                    className="rounded-full p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    onClick={() => setActiveChannel(null)}
-                    type="button"
-                  >
-                    <ArrowLeft className="size-4" />
-                  </button>
-                </div>
-                <ChannelHeader />
-                <div className="flex h-[calc(100dvh-320px)] min-h-[380px] flex-col">
-                  <MessageList />
-                  <MessageComposer />
-                </div>
-              </Window>
-              <Thread />
-            </Channel>
-          ) : (
-            <div className="flex h-[420px] flex-col items-center justify-center gap-3 p-8 text-center">
-              <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <MessageCircle className="size-6" />
+        <div className="min-w-0">
+          <Channel EmptyPlaceholder={<EmptyChatState />}>
+            <Window>
+              <ChannelHeader />
+              <div className="flex h-[calc(100dvh-300px)] min-h-[430px] flex-col">
+                <MessageList />
+                <MessageComposer />
               </div>
-              <p className="font-semibold">Pick a room</p>
-              <p className="max-w-xs text-sm text-muted-foreground">
-                Choose a friend DM, or open a match room from a date request.
-              </p>
-            </div>
-          )}
+            </Window>
+            <Thread />
+          </Channel>
         </div>
       </div>
     </Chat>
+  );
+}
+
+function DemoFriendButton({ onSeed }: { onSeed: () => void }) {
+  const { client, setActiveChannel } = useChatContext();
+  const [isSeeding, setIsSeeding] = useState(false);
+
+  const createDemoFriends = async () => {
+    setIsSeeding(true);
+    try {
+      const result = await streamApi.createDemoFriends();
+      const [firstChannel] = result.channels;
+
+      if (firstChannel) {
+        const channel = client.channel("messaging", firstChannel.id);
+        await channel.watch();
+        setActiveChannel(channel);
+      }
+
+      onSeed();
+      toast.success("Friend chats are ready.");
+    } catch (caughtError) {
+      toast.error(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Could not create friend chats."
+      );
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  return (
+    <div className="border-b border-border/80 p-3">
+      <Button
+        className="w-full rounded-full"
+        disabled={isSeeding}
+        onClick={createDemoFriends}
+        type="button"
+      >
+        {isSeeding ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <UserPlus className="size-4" />
+        )}
+        Add test friends
+      </Button>
+    </div>
+  );
+}
+
+function EmptyChatState() {
+  return (
+    <div className="flex h-[420px] flex-col items-center justify-center gap-3 p-8 text-center">
+      <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <MessageCircle className="size-6" />
+      </div>
+      <p className="font-semibold">Pick a room</p>
+      <p className="max-w-xs text-sm text-muted-foreground">
+        Choose a friend DM, or open a match room from a date request.
+      </p>
+    </div>
+  );
+}
+
+function EmptyChatListState() {
+  return (
+    <div className="px-4 py-8 text-sm text-muted-foreground">
+      No chats yet. Add test friends or open a match from a date request.
+    </div>
   );
 }
