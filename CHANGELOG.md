@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Fixed uploaded media fallback URLs so attachments no longer save with the dead `storage.chewbuu.local` placeholder.
 - Fixed the Chats route to let Stream own active channel selection so the full message list and composer render.
+- Fixed private Blob video uploads by stripping recorder codec parameters before storage.
 - Linked dashboard readiness checklist items back to the relevant onboarding steps.
 - Removed the duplicate sidebar Chewbuu wordmark from the authenticated app shell.
 

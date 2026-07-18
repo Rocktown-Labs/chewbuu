@@ -3052,11 +3052,12 @@ function LiveCaptureDialog({
       }
 
       const mimeType = mediaRecorder.mimeType || "video/webm";
-      const blob = new Blob(chunks, { type: mimeType });
+      const uploadType = mimeType.includes("mp4") ? "video/mp4" : "video/webm";
+      const blob = new Blob(chunks, { type: uploadType });
       const url = URL.createObjectURL(blob);
-      const extension = mimeType.includes("mp4") ? "mp4" : "webm";
+      const extension = uploadType.includes("mp4") ? "mp4" : "webm";
       const file = new File([blob], `intro-video.${extension}`, {
-        type: mimeType,
+        type: uploadType,
       });
       setRecordedUrl(url);
       setCapturedFile(file);

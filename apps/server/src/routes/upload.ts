@@ -50,6 +50,40 @@ const cleanFileName = (name: string) =>
     .replaceAll(/^-+|-+$/g, "")
     .slice(0, 80);
 
+const getUploadContentType = (file: File, slot: keyof typeof mediaLimits) => {
+  if (slot === "intro_video") {
+    if (file.type.includes("mp4")) {
+      return "video/mp4";
+    }
+
+    return "video/webm";
+  }
+
+  return file.type || "application/octet-stream";
+};
+
+const ensureFileExtension = (
+  fileName: string,
+  contentType: string,
+  fallbackName: string
+) => {
+  const cleanName = cleanFileName(fileName) || fallbackName;
+
+  if (cleanName.includes(".")) {
+    return cleanName;
+  }
+
+  const extension = contentType.includes("mp4")
+    ? "mp4"
+    : contentType.includes("webm")
+      ? "webm"
+      : contentType.includes("png")
+        ? "png"
+        : "jpg";
+
+  return `${cleanName}.${extension}`;
+};
+
 const publicBaseUrl = () => env.R2_PUBLIC_URL?.replace(/\/$/, "");
 
 const getUploadStorage = () => {
@@ -242,11 +276,12 @@ const router = createRouter()
       );
     }
 
-    const fileName = cleanFileName(file.name) || "upload";
+    const contentType = getUploadContentType(file, slot);
+    const fileName = ensureFileExtension(file.name, contentType, "upload");
     const pathname = `profiles/${sessionUser.id}/${slot}/${crypto.randomUUID()}-${fileName}`;
     const blob = await put(pathname, file, {
       access: "private",
-      contentType: file.type || "application/octet-stream",
+      contentType,
       multipart: slot === "intro_video",
     });
 
@@ -256,7 +291,7 @@ const router = createRouter()
         pathname: blob.pathname,
         route: limit.route,
         size: file.size,
-        type: file.type,
+        type: contentType,
       },
       url: mediaUrlFromBlobPathname(blob.pathname),
     });
