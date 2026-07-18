@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - 2026-07-18
+
+### Added
+
+- Added `/me` as the primary authenticated social app route, with `/dashboard` kept as a compatibility redirect.
+- Added active date-request cards and unread request badges to the feed/Dates navigation.
+- Expanded Spots with photo-led sections, richer Google Places metadata, and a protected Google Places photo proxy.
+- Added an authenticated R2 media fallback route for uploaded profile media when no public R2 URL is configured.
+
+### Changed
+
+- Updated authenticated navigation and auth/onboarding redirects to use `/me`.
+- Reframed chat copy around persistent friend DMs and date-request match rooms.
+- Reframed feed and Spots copy around friend recaps, active date requests, and future spot partners.
+
+### Fixed
+
+- Fixed uploaded media fallback URLs so attachments no longer save with the dead `storage.chewbuu.local` placeholder.
+- Linked dashboard readiness checklist items back to the relevant onboarding steps.
+- Removed the duplicate sidebar Chewbuu wordmark from the authenticated app shell.
+
 ## [0.6.2] - 2026-07-18
 
 ### Added

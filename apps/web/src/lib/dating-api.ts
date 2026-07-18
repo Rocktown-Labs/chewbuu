@@ -58,11 +58,18 @@ export interface DatingProfilePayload {
 
 export interface DatePlace {
   address?: string;
+  attributions?: string[];
+  googleMapsUri?: string;
   latitude?: number;
   longitude?: number;
   name: string;
+  openNow?: boolean;
+  photoUrl?: string;
   placeId: string;
+  priceLevel?: string;
   rating?: string;
+  userRatingCount?: number;
+  websiteUri?: string;
   types: string[];
 }
 

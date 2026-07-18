@@ -2,11 +2,10 @@ import { Link } from "@tanstack/react-router";
 import {
   CalendarHeart,
   HeartHandshake,
-  LayoutDashboard,
   Monitor,
   Moon,
-  UserRound,
   Sun,
+  UserRound,
 } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
@@ -18,16 +17,16 @@ export default function Header() {
   const { data: session } = authClient.useSession();
   const { theme, setTheme } = useThemeStore();
 
-  const primaryHref = session ? "/dashboard" : "/auth/sign-up";
-  const primaryLabel = session ? "Dashboard" : "Create Profile";
-  const PrimaryIcon = session ? LayoutDashboard : HeartHandshake;
+  const primaryHref = session ? "/me" : "/auth/sign-up";
+  const primaryLabel = session ? "Feed" : "Create Profile";
+  const PrimaryIcon = session ? UserRound : HeartHandshake;
   const publicLinks = [
     { label: "How it works", hash: "how-it-works" },
     { label: "Pricing", hash: "pricing" },
     { label: "FAQ", hash: "faq" },
   ] as const;
   const appLinks = [
-    { label: "Feed", to: "/dashboard" },
+    { label: "Feed", to: "/me" },
     { label: "Plan a Date", to: "/date/new" },
   ] as const;
 
@@ -116,7 +115,7 @@ export default function Header() {
             <Link
               aria-label="My profile"
               className="hidden size-9 items-center justify-center rounded-full border border-border bg-card text-foreground transition hover:bg-muted md:flex"
-              to="/dashboard"
+              to="/me"
             >
               <UserRound aria-hidden="true" className="size-4" />
             </Link>

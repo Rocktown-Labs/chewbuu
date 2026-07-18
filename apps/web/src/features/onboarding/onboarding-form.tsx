@@ -73,6 +73,9 @@ const steps = [
   "Friends",
   "Premium",
 ] as const;
+const onboardingStepByHash = new Map(
+  steps.map((label, index) => [label.toLowerCase(), index])
+);
 const areaPattern = /^[a-zA-Z .'-]+,\s?[A-Z]{2}$/;
 const sexOptions = [
   "Female",
@@ -378,7 +381,9 @@ const fileUrlFromUpload = (result: Awaited<ReturnType<typeof uploadFile>>) => {
       : "";
   const { key } = result.file.objectInfo;
 
-  return baseUrl ? `${baseUrl}/${key}` : `https://storage.chewbuu.local/${key}`;
+  return baseUrl
+    ? `${baseUrl}/${key}`
+    : getApiUrl(`/upload/media?key=${encodeURIComponent(key)}`);
 };
 
 const createEmptyPhoto = (sortOrder: number): DatingMedia => ({
@@ -465,7 +470,7 @@ export function OnboardingForm() {
       });
       clearPersistedOnboarding();
       toast.success("Profile ready. Go find a real date.");
-      await navigate({ to: "/dashboard" });
+      await navigate({ to: "/me" });
     },
   });
 
@@ -558,10 +563,21 @@ export function OnboardingForm() {
     void loadPlans();
   }, []);
 
-  const updateStep = (newStep: number) => {
-    setStep(newStep);
-    setPersistedStep(newStep);
-  };
+  const updateStep = useCallback(
+    (newStep: number) => {
+      setStep(newStep);
+      setPersistedStep(newStep);
+    },
+    [setPersistedStep]
+  );
+
+  useEffect(() => {
+    const hash = window.location.hash.replace("#", "").toLowerCase();
+    const hashStep = onboardingStepByHash.get(hash);
+    if (typeof hashStep === "number") {
+      updateStep(hashStep);
+    }
+  }, [updateStep]);
 
   const progress = ((step + 1) / steps.length) * 100;
 
@@ -758,7 +774,7 @@ export function OnboardingForm() {
     } catch {
       toast.dismiss("finish-later");
     }
-    await navigate({ to: "/dashboard" });
+    await navigate({ to: "/me" });
   };
 
   if (underageBirthday) {
@@ -2276,7 +2292,7 @@ function PremiumStep({
       toast.loading("Redirecting to checkout...", { id: "checkout" });
       const res = await authClient.stripe.upgrade({
         priceId,
-        callbackURL: `${window.location.origin}/dashboard`,
+        callbackURL: `${window.location.origin}/me`,
       });
       if (res.error) {
         toast.error(res.error.message, { id: "checkout" });

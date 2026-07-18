@@ -154,11 +154,18 @@ const profilePayloadSchema = z
 
 const placeSchema = z.object({
   address: z.string().optional(),
+  attributions: z.array(z.string()).optional(),
+  googleMapsUri: z.string().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   name: requiredString,
+  openNow: z.boolean().optional(),
+  photoUrl: z.string().optional(),
   placeId: requiredString,
+  priceLevel: z.string().optional(),
   rating: z.string().optional(),
+  userRatingCount: z.number().optional(),
+  websiteUri: z.string().optional(),
   types: stringArray,
 });
 
@@ -202,19 +209,33 @@ type RequestInput = z.infer<typeof dateRequestPayloadSchema>;
 type PlaceSuggestionInput = z.infer<typeof placeSuggestSchema>;
 type PlaceSuggestion = z.infer<typeof placeSchema>;
 type GooglePlace = {
+  currentOpeningHours?: {
+    openNow?: boolean;
+  };
   displayName?: {
     text?: string;
   };
   formattedAddress?: string;
+  googleMapsUri?: string;
   id?: string;
   location?: {
     latitude?: number;
     longitude?: number;
   };
   name?: string;
+  photos?: {
+    authorAttributions?: {
+      displayName?: string;
+      uri?: string;
+    }[];
+    name?: string;
+  }[];
+  priceLevel?: string;
   primaryType?: string;
   rating?: number;
   types?: string[];
+  userRatingCount?: number;
+  websiteUri?: string;
 };
 type GooglePlacesTextSearchResponse = {
   places?: GooglePlace[];
@@ -782,22 +803,31 @@ const fallbackPlaceSuggestions = (
     {
       address: `${input.area} dining district`,
       name: primaryName,
+      openNow: true,
       placeId: `mock-${baseTypes.join("-")}-1`,
+      priceLevel: "PRICE_LEVEL_MODERATE",
       rating: "4.7",
+      userRatingCount: 128,
       types: [...baseTypes, joined || "date spot"],
     },
     {
       address: `${input.area} main street`,
       name: "Good Company Social",
+      openNow: true,
       placeId: `mock-${baseTypes.join("-")}-2`,
+      priceLevel: "PRICE_LEVEL_INEXPENSIVE",
       rating: "4.5",
+      userRatingCount: 94,
       types: [...baseTypes, "good for groups"],
     },
     {
       address: `${input.area} near you`,
       name: "The Third Place",
+      openNow: false,
       placeId: `mock-${baseTypes.join("-")}-3`,
+      priceLevel: "PRICE_LEVEL_MODERATE",
       rating: "4.6",
+      userRatingCount: 76,
       types: [...baseTypes, "easy first date"],
     },
   ];
@@ -826,6 +856,27 @@ const CATEGORY_INCLUDED_TYPE: Record<string, string | undefined> = {
   watch: undefined,
 };
 
+const GOOGLE_PLACES_FIELD_MASK = [
+  "places.id",
+  "places.name",
+  "places.displayName",
+  "places.formattedAddress",
+  "places.shortFormattedAddress",
+  "places.rating",
+  "places.userRatingCount",
+  "places.types",
+  "places.primaryType",
+  "places.location",
+  "places.photos",
+  "places.currentOpeningHours",
+  "places.priceLevel",
+  "places.googleMapsUri",
+  "places.websiteUri",
+].join(",");
+
+const toPlacePhotoProxyUrl = (photoName: string) =>
+  `/dating/places/photos?name=${encodeURIComponent(photoName)}`;
+
 export const buildGooglePlacesTextQuery = (input: PlaceSuggestionInput) => {
   const filters = input.filters.join(" ");
   const categoryIntent = input.what
@@ -837,11 +888,13 @@ export const buildGooglePlacesTextQuery = (input: PlaceSuggestionInput) => {
 };
 
 export const normalizeGooglePlaces = (
-  places: GooglePlace[] | undefined
+  places: GooglePlace[] | undefined,
+  googlePlacesApiKey = ""
 ): PlaceSuggestion[] =>
   (places ?? []).flatMap((place) => {
     const placeId = place.id ?? place.name?.replace("places/", "");
     const name = place.displayName?.text;
+    const [primaryPhoto] = place.photos ?? [];
 
     if (!placeId || !name) {
       return [];
@@ -862,17 +915,37 @@ export const normalizeGooglePlaces = (
               longitude: place.location.longitude,
             }
           : {}),
+        ...(place.googleMapsUri ? { googleMapsUri: place.googleMapsUri } : {}),
         name,
+        ...(typeof place.currentOpeningHours?.openNow === "boolean"
+          ? { openNow: place.currentOpeningHours.openNow }
+          : {}),
+        ...(primaryPhoto?.authorAttributions?.length
+          ? {
+              attributions: primaryPhoto.authorAttributions.flatMap(
+                (attribution) =>
+                  attribution.displayName ? [attribution.displayName] : []
+              ),
+            }
+          : {}),
+        ...(primaryPhoto?.name && googlePlacesApiKey
+          ? { photoUrl: toPlacePhotoProxyUrl(primaryPhoto.name) }
+          : {}),
         placeId,
+        ...(place.priceLevel ? { priceLevel: place.priceLevel } : {}),
         ...(typeof place.rating === "number"
           ? { rating: place.rating.toFixed(1) }
           : {}),
+        ...(typeof place.userRatingCount === "number"
+          ? { userRatingCount: place.userRatingCount }
+          : {}),
+        ...(place.websiteUri ? { websiteUri: place.websiteUri } : {}),
         types: Array.from(new Set(types)).slice(0, 6),
       },
     ];
   });
 
-const googlePlacesTextSearch = async (
+const googlePlacesSearch = async (
   input: PlaceSuggestionInput
 ): Promise<PlaceSuggestion[]> => {
   const googlePlacesApiKey = getGooglePlacesApiKey();
@@ -884,37 +957,50 @@ const googlePlacesTextSearch = async (
   const includedType = input.what
     .map((item) => CATEGORY_INCLUDED_TYPE[item])
     .find(Boolean);
+  const lat = input.latitude ? Number(input.latitude) : undefined;
+  const lng = input.longitude ? Number(input.longitude) : undefined;
+  const hasCoordinates =
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    !Number.isNaN(lat) &&
+    !Number.isNaN(lng);
 
-  const body: Record<string, unknown> = {
-    pageSize: 8,
-    textQuery: buildGooglePlacesTextQuery(input),
-  };
+  const body: Record<string, unknown> = hasCoordinates
+    ? {
+        includedTypes: includedType ? [includedType] : undefined,
+        maxResultCount: 12,
+        rankPreference: "POPULARITY",
+        locationRestriction: {
+          circle: {
+            center: { latitude: lat, longitude: lng },
+            radius: 40_000,
+          },
+        },
+      }
+    : {
+        pageSize: 12,
+        textQuery: buildGooglePlacesTextQuery(input),
+      };
 
-  if (includedType) {
+  if (includedType && !hasCoordinates) {
     body.includedType = includedType;
   }
 
-  const lat = input.latitude ? Number(input.latitude) : undefined;
-  const lng = input.longitude ? Number(input.longitude) : undefined;
-  if (lat && lng && !Number.isNaN(lat) && !Number.isNaN(lng)) {
-    body.locationBias = {
-      circle: {
-        center: { latitude: lat, longitude: lng },
-        radius: 40_000,
-      },
-    };
+  if (hasCoordinates && !includedType) {
+    delete body.includedTypes;
   }
 
   try {
     const response = await fetch(
-      "https://places.googleapis.com/v1/places:searchText",
+      hasCoordinates
+        ? "https://places.googleapis.com/v1/places:searchNearby"
+        : "https://places.googleapis.com/v1/places:searchText",
       {
         body: JSON.stringify(body),
         headers: {
           "content-type": "application/json",
           "x-goog-api-key": googlePlacesApiKey,
-          "x-goog-fieldmask":
-            "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.primaryType,places.location",
+          "x-goog-fieldmask": GOOGLE_PLACES_FIELD_MASK,
         },
         method: "POST",
       }
@@ -932,7 +1018,7 @@ const googlePlacesTextSearch = async (
       return fallbackPlaceSuggestions(input);
     }
 
-    const places = normalizeGooglePlaces(data.places);
+    const places = normalizeGooglePlaces(data.places, googlePlacesApiKey);
     return places.length > 0 ? places : fallbackPlaceSuggestions(input);
   } catch (error) {
     console.error("Google Places request failed:", error);
@@ -1077,7 +1163,22 @@ const router = createRouter()
     await getSessionUser(c.req.raw.headers);
     const body = placeSuggestSchema.parse(await c.req.json());
 
-    return c.json({ places: await googlePlacesTextSearch(body) });
+    return c.json({ places: await googlePlacesSearch(body) });
+  })
+  .get("/dating/places/photos", async (c) => {
+    await getSessionUser(c.req.raw.headers);
+    const googlePlacesApiKey = getGooglePlacesApiKey();
+    const photoName = c.req.query("name");
+
+    if (!googlePlacesApiKey || !photoName?.startsWith("places/")) {
+      throw new HTTPException(HttpStatusCodes.NOT_FOUND, {
+        message: "Place photo is unavailable.",
+      });
+    }
+
+    return c.redirect(
+      `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=960&key=${googlePlacesApiKey}`
+    );
   })
   .get("/dating/requests", async (c) => {
     const sessionUser = await getSessionUser(c.req.raw.headers);

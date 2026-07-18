@@ -413,7 +413,7 @@ function IndexComponent() {
 
   useEffect(() => {
     if (session?.data?.user) {
-      void navigate({ to: "/dashboard" });
+      void navigate({ to: "/me" });
     }
   }, [session, navigate]);
 

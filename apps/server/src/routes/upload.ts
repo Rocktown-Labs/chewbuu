@@ -5,6 +5,7 @@ import {
   type Router,
 } from "@better-upload/server";
 import { cloudflare } from "@better-upload/server/clients";
+import { getObjectStream } from "@better-upload/server/helpers";
 import { env } from "@chewbuu/env/server";
 import * as HttpStatusCodes from "stoker/http-status-codes";
 import { z } from "zod";
@@ -31,7 +32,7 @@ const cleanFileName = (name: string) =>
 
 const publicBaseUrl = () => env.R2_PUBLIC_URL?.replace(/\/$/, "");
 
-const createUploadRouter = (): Router | null => {
+const getUploadStorage = () => {
   if (missingConfig()) {
     return null;
   }
@@ -44,11 +45,22 @@ const createUploadRouter = (): Router | null => {
     return null;
   }
 
-  const client = cloudflare({
-    accessKeyId,
-    accountId,
-    secretAccessKey,
-  });
+  return {
+    bucketName,
+    client: cloudflare({
+      accessKeyId,
+      accountId,
+      secretAccessKey,
+    }),
+  };
+};
+
+const createUploadRouter = (): Router | null => {
+  const storage = getUploadStorage();
+
+  if (!storage) {
+    return null;
+  }
 
   const beforeUpload = async ({
     clientMetadata,
@@ -76,8 +88,8 @@ const createUploadRouter = (): Router | null => {
   });
 
   return {
-    bucketName,
-    client,
+    bucketName: storage.bucketName,
+    client: storage.client,
     routes: {
       introVideo: route({
         clientMetadataSchema,
@@ -107,34 +119,87 @@ const createUploadRouter = (): Router | null => {
   };
 };
 
-const router = createRouter().post("/upload", async (c) => {
-  const uploadRouter = createUploadRouter();
+const mediaUrlFromKey = (key: string) => {
+  const baseUrl = publicBaseUrl();
 
-  if (!uploadRouter) {
-    return c.json(
-      {
-        error: {
-          message:
-            "Cloudflare R2 upload storage is not configured. Add R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME.",
-          type: "storage_not_configured",
-        },
-      },
-      HttpStatusCodes.SERVICE_UNAVAILABLE
-    );
+  if (baseUrl) {
+    return `${baseUrl}/${key}`;
   }
 
-  try {
-    return await handleRequest(c.req.raw, uploadRouter);
-  } catch (error) {
-    if (error instanceof RejectUpload) {
+  return `/upload/media?key=${encodeURIComponent(key)}`;
+};
+
+const storageNotConfiguredResponse = () =>
+  ({
+    error: {
+      message:
+        "Cloudflare R2 upload storage is not configured. Add R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME.",
+      type: "storage_not_configured",
+    },
+  }) as const;
+
+const router = createRouter()
+  .post("/upload", async (c) => {
+    const uploadRouter = createUploadRouter();
+
+    if (!uploadRouter) {
       return c.json(
-        { error: { message: error.message, type: "rejected" } },
-        HttpStatusCodes.FORBIDDEN
+        storageNotConfiguredResponse(),
+        HttpStatusCodes.SERVICE_UNAVAILABLE
       );
     }
 
-    throw error;
-  }
-});
+    try {
+      return await handleRequest(c.req.raw, uploadRouter);
+    } catch (error) {
+      if (error instanceof RejectUpload) {
+        return c.json(
+          { error: { message: error.message, type: "rejected" } },
+          HttpStatusCodes.FORBIDDEN
+        );
+      }
+
+      throw error;
+    }
+  })
+  .get("/upload/media", async (c) => {
+    await getSessionUser(c.req.raw.headers);
+    const storage = getUploadStorage();
+    const key = c.req.query("key");
+
+    if (!storage) {
+      return c.json(
+        storageNotConfiguredResponse(),
+        HttpStatusCodes.SERVICE_UNAVAILABLE
+      );
+    }
+
+    if (!key?.startsWith("profiles/")) {
+      return c.json(
+        {
+          error: {
+            message: "Upload media key is invalid.",
+            type: "invalid_media_key",
+          },
+        },
+        HttpStatusCodes.BAD_REQUEST
+      );
+    }
+
+    const object = await getObjectStream(storage.client, {
+      bucket: storage.bucketName,
+      key,
+    });
+
+    return new Response(object.stream, {
+      headers: {
+        "cache-control": "private, max-age=300",
+        "content-length": object.contentLength.toString(),
+        "content-type": object.contentType,
+        etag: object.eTag,
+      },
+    });
+  });
 
 export default router;
+export { mediaUrlFromKey };

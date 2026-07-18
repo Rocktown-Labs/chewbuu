@@ -63,7 +63,7 @@ const RootDocument = () => {
           }}
           Link={AuthLink}
           navigate={({ to, replace }) => navigate({ replace, to })}
-          redirectTo="/dashboard"
+          redirectTo="/me"
         >
           <div className="grid min-h-svh grid-rows-[auto_1fr]">
             <Header />

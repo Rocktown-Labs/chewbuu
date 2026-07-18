@@ -1,6 +1,5 @@
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -75,7 +74,9 @@ export function DashboardChats() {
         <Card className="rounded-2xl border-border bg-card/45">
           <CardHeader>
             <CardTitle className="text-base">Opening chats</CardTitle>
-            <CardDescription>Connecting your secure rooms.</CardDescription>
+            <CardDescription>
+              Loading friend DMs and date-request match rooms.
+            </CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -106,8 +107,10 @@ function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
       <div className="p-5">
         <Card className="rounded-2xl border-border bg-card/45">
           <CardHeader>
-            <CardTitle className="text-base">Connecting Stream</CardTitle>
-            <CardDescription>Joining your chat rooms.</CardDescription>
+            <CardTitle className="text-base">Connecting chats</CardTitle>
+            <CardDescription>
+              Joining friend DMs and date-request match rooms.
+            </CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -126,8 +129,9 @@ function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
           <div className="flex items-start gap-2 border-b border-border/80 px-4 py-3">
             <Video className="mt-0.5 size-4 shrink-0 text-primary" />
             <p className="text-xs text-muted-foreground">
-              Rooms appear after you open them from a match. Three video replies
-              unlock text chat.
+              Friend DMs are always available. Date-request rooms start with two
+              intro videos and wait for your first message before you choose,
+              friend, or decline.
             </p>
           </div>
           <ChannelList
@@ -166,8 +170,7 @@ function ChatsClient({ auth }: { auth: StreamTokenResponse }) {
               </div>
               <p className="font-semibold">Pick a room</p>
               <p className="max-w-xs text-sm text-muted-foreground">
-                Choose a conversation on the left, or open a room from one of
-                your matches first.
+                Choose a friend DM, or open a match room from a date request.
               </p>
             </div>
           )}
