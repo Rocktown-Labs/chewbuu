@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { Auth } from "@/components/auth/auth";
+import { authClient } from "@/lib/auth-client";
 
 const AuthPage = ({ view }: { view: "signIn" }) => (
   <main className="grid min-h-full place-items-center px-4 py-10">
@@ -36,5 +37,13 @@ const AuthPage = ({ view }: { view: "signIn" }) => (
 const RouteComponent = () => <AuthPage view="signIn" />;
 
 export const Route = createFileRoute("/auth/sign-in")({
+  beforeLoad: async () => {
+    const session = await authClient.getSession();
+    if (session.data?.user) {
+      throw redirect({
+        to: "/me",
+      });
+    }
+  },
   component: RouteComponent,
 });

@@ -30,7 +30,7 @@ export default function Header() {
         <div className="flex min-w-0 items-center">
           <Link
             className="flex items-center gap-2 font-semibold text-foreground"
-            to="/"
+            to={session ? "/me" : "/"}
           >
             <img
               src="/brand/chewbuu-logo-500.png"

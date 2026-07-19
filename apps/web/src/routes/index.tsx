@@ -1,5 +1,9 @@
-import { Badge } from "@chewbuu/ui/components/badge";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import {
+  Link,
+  createFileRoute,
+  useNavigate,
+  redirect,
+} from "@tanstack/react-router";
 import {
   CalendarHeart,
   Check,
@@ -14,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { authClient } from "@/lib/auth-client";
 import { pricingApi, type MembershipPlan } from "@/lib/dating-api";
 
 const HERO_IMAGES = [
@@ -425,5 +430,15 @@ function IndexComponent() {
 }
 
 export const Route = createFileRoute("/")({
+  beforeLoad: async () => {
+    const session = await authClient.getSession();
+    if (session.data?.user) {
+      throw redirect({
+        to: "/me",
+      });
+    }
+    return { session };
+  },
   component: IndexComponent,
+  ssr: false,
 });
