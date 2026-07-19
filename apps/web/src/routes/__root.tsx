@@ -7,12 +7,11 @@ import {
   createRootRouteWithContext,
   useNavigate,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createMiddleware } from "@tanstack/react-start";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { evlogErrorHandler } from "evlog/nitro/v3";
-import { useEffect } from "react";
+import { Suspense, lazy } from "react";
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 
 import { AuthProvider } from "@/components/auth/auth-provider";
@@ -22,6 +21,10 @@ import { authClient } from "@/lib/auth-client";
 import Header from "../components/header";
 
 import appCss from "../index.css?url";
+
+const AppDevtools = import.meta.env.DEV
+  ? lazy(() => import("@/components/app-devtools"))
+  : () => null;
 
 interface RouterAppContext {
   auth?: never;
@@ -67,7 +70,11 @@ const RootDocument = () => {
             </div>
           </AuthProvider>
           <Toaster richColors />
-          <TanStackRouterDevtools position="bottom-left" />
+          {import.meta.env.DEV && (
+            <Suspense fallback={null}>
+              <AppDevtools />
+            </Suspense>
+          )}
           <Analytics />
           <SpeedInsights />
           <Scripts />
