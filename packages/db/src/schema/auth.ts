@@ -14,6 +14,7 @@ export const user = pgTable("user", {
   banned: boolean("banned").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   dailyDateLimit: integer("daily_date_limit").default(2).notNull(),
+  displayUsername: text("display_username"),
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   hasCompletedOnboarding: boolean("has_completed_onboarding")
@@ -31,7 +32,27 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => new Date())
     .notNull(),
+  username: text("username").unique(),
 });
+
+export const passkey = pgTable(
+  "passkey",
+  {
+    backedUp: boolean("backed_up").default(false).notNull(),
+    counter: integer("counter").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    credentialID: text("credential_id").notNull(),
+    deviceType: text("device_type").notNull(),
+    id: text("id").primaryKey(),
+    name: text("name"),
+    publicKey: text("public_key").notNull(),
+    transports: text("transports"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [index("passkey_userId_idx").on(table.userId)]
+);
 
 export const session = pgTable(
   "session",

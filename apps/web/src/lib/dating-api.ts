@@ -23,6 +23,7 @@ export interface DatingProfilePayload {
   area: string;
   birthday: string;
   bio?: string;
+  username?: string;
   datingModes: string[];
   latitude?: string;
   longitude?: string;

@@ -1,6 +1,10 @@
 import { stripeClient } from "@better-auth/stripe/client";
 import { env } from "@chewbuu/env/web";
-import { adminClient, inferAdditionalFields } from "better-auth/client/plugins";
+import {
+  adminClient,
+  inferAdditionalFields,
+  usernameClient,
+} from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
 const getServerUrl = (url: string) => {
@@ -69,8 +73,14 @@ export const authClient = createAuthClient({
           required: false,
           type: "string",
         },
+        username: {
+          input: true,
+          required: true,
+          type: "string",
+        },
       },
     }),
+    usernameClient(),
     adminClient(),
     stripeClient({
       subscription: true,

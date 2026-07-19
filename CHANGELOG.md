@@ -8,10 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Integrated client-side probabilistic `BloomFilter` data structure and `@tanstack/react-pacer`'s `useDebouncedValue` hook for instant username availability validation during onboarding.
+- Added `username` and `displayUsername` columns to `user` database schema and configured Better Auth `username()` server and client plugins.
 - Added date request scheduling overlap validation to block booking dates within 2 hours of existing ones.
 
 ### Changed
 
+- Configured Better Auth session cookie caching (`session.cookieCache`), rate limiting (`rateLimit`), and Google OAuth social provider setup.
+- Added synchronous `beforeLoad` redirects from `/`, `/auth/sign-in`, and `/auth/sign-up` to `/me` for authenticated users.
 - Redesigned the Calendar view to a full-width Month Grid calendar with navigation controls, view selector, today action, and meal-type banner coloring (breakfast, lunch, dinner).
 - Filtered calendar events and date cards list to only show confirmed, review-due, and completed dates.
 - Redesigned date cards below the calendar to simple, flat row dividers featuring large partner avatars, calendar and map pin icons, and badges for location spots.

@@ -5,7 +5,8 @@ import * as schema from "@chewbuu/db/schema/auth";
 import { env } from "@chewbuu/env/server";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin } from "better-auth/plugins";
+import { admin } from "better-auth/plugins/admin";
+import { username } from "better-auth/plugins/username";
 import { eq } from "drizzle-orm";
 import Stripe from "stripe";
 
@@ -97,6 +98,7 @@ export const createAuth = () => {
     },
     plugins: [
       expo(),
+      username(),
       admin({
         adminRoles: ["admin"],
         defaultRole: "user",
@@ -115,6 +117,27 @@ export const createAuth = () => {
           ]
         : []),
     ],
+    rateLimit: {
+      enabled: true,
+      max: 100,
+      window: 60,
+    },
+    session: {
+      cookieCache: {
+        enabled: true,
+        maxAge: 5 * 60,
+      },
+      expiresIn: 7 * 24 * 60 * 60,
+      updateAge: 24 * 60 * 60,
+    },
+    socialProviders: {
+      google: {
+        clientId: process.env.GOOGLE_CLIENT_ID || "demo-google-client-id",
+        clientSecret:
+          process.env.GOOGLE_CLIENT_SECRET || "demo-google-client-secret",
+        enabled: true,
+      },
+    },
     secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: [
       env.CORS_ORIGIN,

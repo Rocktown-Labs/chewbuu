@@ -24,6 +24,7 @@ import { Label } from "@chewbuu/ui/components/label";
 import { Spinner } from "@chewbuu/ui/components/spinner";
 import { cn } from "@chewbuu/ui/lib/utils";
 import { useIsMutating } from "@tanstack/react-query";
+import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 

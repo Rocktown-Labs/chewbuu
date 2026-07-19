@@ -61,6 +61,7 @@ import {
   type DatingProfilePayload,
   type MembershipPlan,
 } from "@/lib/dating-api";
+import { useUsernameChecker } from "@/lib/use-username-checker";
 
 import { useOnboardingStore } from "./onboarding-store";
 
@@ -293,6 +294,7 @@ const defaultPlans: MembershipPlan[] = [
 
 const defaultValues = {
   name: "",
+  username: "",
   email: "",
   phone: "",
   occupation: "",
@@ -959,6 +961,43 @@ export function OnboardingForm() {
   );
 }
 
+function UsernameInput({ field }: { field: any }) {
+  const { status, isInstantBloom } = useUsernameChecker(
+    field.state.value || ""
+  );
+  return (
+    <Field>
+      <FieldLabel htmlFor={field.name}>Username</FieldLabel>
+      <div className="relative">
+        <Input
+          className="rounded-full h-10 px-4 text-sm pr-32"
+          id={field.name}
+          onBlur={field.handleBlur}
+          onChange={(event) => field.handleChange(event.target.value)}
+          placeholder="e.g. alex_vibe"
+          value={field.state.value || ""}
+        />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] font-bold">
+          {status === "checking" && (
+            <span className="text-amber-500 animate-pulse">Checking...</span>
+          )}
+          {status === "available" && (
+            <Badge className="bg-emerald-500/10 text-emerald-600 border-0 px-2 py-0.5 rounded-full text-[10px]">
+              {isInstantBloom ? "✓ Bloom Available" : "✓ Available"}
+            </Badge>
+          )}
+          {status === "taken" && (
+            <span className="text-destructive font-bold">✕ Taken</span>
+          )}
+        </div>
+      </div>
+      <FieldDescription className="text-[10px]">
+        Validated with Bloom Filter + TanStack Pacer
+      </FieldDescription>
+    </Field>
+  );
+}
+
 function BasicsStep({ form }: { form: OnboardingFormApi }) {
   const [area, setArea] = useState(form.state.values.area);
   const areaIsInvalid = area.length > 0 && !areaPattern.test(area.trim());
@@ -1055,6 +1094,9 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
                 />
               </Field>
             )}
+          </form.Field>
+          <form.Field name="username">
+            {(field) => <UsernameInput field={field} />}
           </form.Field>
           <form.Field name="email">
             {(field) => (
