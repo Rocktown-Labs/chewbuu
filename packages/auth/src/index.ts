@@ -1,6 +1,6 @@
 import { expo } from "@better-auth/expo";
 import { stripe } from "@better-auth/stripe";
-import { createDb } from "@chewbuu/db";
+import { createDb, ensureSchemaMigrated } from "@chewbuu/db";
 import * as schema from "@chewbuu/db/schema/auth";
 import { env } from "@chewbuu/env/server";
 import { betterAuth } from "better-auth";
@@ -51,6 +51,7 @@ export const getRedisClient = () => {
 };
 
 export const createAuth = () => {
+  void ensureSchemaMigrated();
   const db = createDb();
   const adminEmails = parseAdminEmails(env.BETTER_AUTH_ADMIN_EMAILS);
   const stripeEnabled = Boolean(
