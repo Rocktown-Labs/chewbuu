@@ -1,5 +1,5 @@
 import { db } from "@chewbuu/db";
-import { and, eq, ilike, or, sql } from "@chewbuu/db/orm";
+import { and, eq, ilike, inArray, or, sql } from "@chewbuu/db/orm";
 import { user } from "@chewbuu/db/schema/auth";
 import {
   circle,
@@ -1557,10 +1557,29 @@ const listRequests = async (sessionUser: SessionUser) => {
     return memory.requests.get(sessionUser.id) ?? [];
   }
 
-  return db
+  const requests = await db
     .select()
     .from(dateRequest)
     .where(eq(dateRequest.userId, sessionUser.id));
+
+  if (requests.length === 0) {
+    return [];
+  }
+
+  const places = await db
+    .select()
+    .from(dateRequestPlace)
+    .where(
+      inArray(
+        dateRequestPlace.requestId,
+        requests.map((request) => request.id)
+      )
+    );
+
+  return requests.map((request) => ({
+    ...request,
+    places: places.filter((place) => place.requestId === request.id),
+  }));
 };
 
 const listMatches = async (requestId: string) => {

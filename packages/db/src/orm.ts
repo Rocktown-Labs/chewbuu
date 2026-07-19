@@ -1,1 +1,1 @@
-export { and, eq, ilike, or, sql } from "drizzle-orm";
+export { and, eq, ilike, inArray, or, sql } from "drizzle-orm";

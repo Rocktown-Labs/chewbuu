@@ -38,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed private Blob video uploads by stripping recorder codec parameters before storage.
 - Fixed Google Places photo loading to proxy media without exposing the server API key.
 - Fixed coordinate-biased Places suggestions so filters and spot searches still shape the results.
+- Fixed the dating summary API to include each request's selected places so the feed's upcoming dates widget no longer crashes on `places.slice`.
 - Linked dashboard readiness checklist items back to the relevant onboarding steps.
 - Removed the duplicate sidebar Chewbuu wordmark from the authenticated app shell.
 

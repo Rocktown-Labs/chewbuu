@@ -910,7 +910,7 @@ export function MePage({
                 <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
                   {upcomingDates.map((date) => {
                     const scheduledAt = new Date(date.scheduledAt);
-                    const placeNames = date.places
+                    const placeNames = (date.places ?? [])
                       .slice(0, 2)
                       .map((place) => place.name)
                       .join(" · ");
