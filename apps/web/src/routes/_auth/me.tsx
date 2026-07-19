@@ -472,6 +472,30 @@ export function MePage({
   const chatBadgeCount = pendingRequests.length;
   const notificationBadgeCount =
     unreadRequestCount + (summary?.readiness.pendingReviews ?? 0);
+  const upcomingDates = [
+    ...pendingRequests.map((request) => ({
+      area: request.searchArea,
+      id: request.id,
+      places: request.places,
+      scheduledAt: request.scheduledAt,
+      status: request.status,
+      title: `${request.what.map(formatLabel).join(", ")} request`,
+    })),
+    {
+      area: demoDateHistory.searchArea,
+      id: demoDateHistory.id,
+      places: demoDateHistory.places,
+      scheduledAt: demoDateHistory.scheduledAt,
+      status: demoDateHistory.status,
+      title: demoDateHistory.title,
+    },
+  ]
+    .toSorted(
+      (dateA, dateB) =>
+        new Date(dateA.scheduledAt).getTime() -
+        new Date(dateB.scheduledAt).getTime()
+    )
+    .slice(0, 3);
   const featuredSpot = spots.find((spot) => spot.photoUrl) ?? spots[0];
   const spotsByCategory = useMemo(() => {
     const grouped: Record<Exclude<SpotCategory, "all">, DatePlace[]> = {
@@ -568,6 +592,7 @@ export function MePage({
   };
 
   const openDateHistory = (dateId: string) => {
+    setActiveTab("matches");
     setSelectedDateHistoryId(dateId);
     pushMePath(`/me/dates/${dateId}`);
   };
@@ -863,7 +888,7 @@ export function MePage({
                 </Badge>
               </div>
 
-              {/* Status Update Widget / Quick Date CTA */}
+              {/* Upcoming Date Widget */}
               <div className="p-5 border-b border-border/80 bg-card/30 flex flex-col gap-4">
                 <div className="flex items-start gap-4">
                   <Avatar className="size-10 border">
@@ -877,28 +902,53 @@ export function MePage({
                       Going out today, {displayName}?
                     </span>
                     <p className="text-xs text-muted-foreground">
-                      Set up your date details in 2 minutes. Pick places and let
-                      Chewbuu find a verified partner.
+                      Your calendar and active date requests live here first, so
+                      the feed stays focused on what is coming up.
                     </p>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    onClick={() => setDashboardTab("profile")}
-                    variant="outline"
-                    className="rounded-full text-xs font-semibold h-8"
-                  >
-                    Post Date Recap
-                  </Button>
-                  <Link
-                    to={canDate ? "/date/new" : "/onboarding"}
-                    className={buttonVariants({
-                      className: "rounded-full text-xs font-semibold h-8",
-                      size: "sm",
-                    })}
-                  >
-                    Start Date Wizard
-                  </Link>
+                <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+                  {upcomingDates.map((date) => {
+                    const scheduledAt = new Date(date.scheduledAt);
+                    const placeNames = date.places
+                      .slice(0, 2)
+                      .map((place) => place.name)
+                      .join(" · ");
+
+                    return (
+                      <button
+                        className="min-w-[14rem] flex-1 rounded-2xl border border-primary/25 bg-background/60 p-3 text-left transition hover:border-primary/45 hover:bg-primary/10"
+                        key={date.id}
+                        onClick={() => openDateHistory(date.id)}
+                        type="button"
+                      >
+                        <span className="flex items-start justify-between gap-3">
+                          <span className="flex min-w-0 flex-col gap-1">
+                            <span className="truncate font-bold text-sm">
+                              {date.title}
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              {scheduledAt.toLocaleDateString([], {
+                                month: "short",
+                                day: "numeric",
+                              })}{" "}
+                              at{" "}
+                              {scheduledAt.toLocaleTimeString([], {
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </span>
+                          <Badge className="rounded-full text-[10px] capitalize">
+                            {date.status}
+                          </Badge>
+                        </span>
+                        <span className="mt-2 block truncate text-muted-foreground text-xs">
+                          {placeNames || date.area}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

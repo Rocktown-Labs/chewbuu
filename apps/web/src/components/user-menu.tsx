@@ -15,12 +15,43 @@ import {
 } from "@chewbuu/ui/components/dropdown-menu";
 import { Skeleton } from "@chewbuu/ui/components/skeleton";
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { datingApi, type DatingProfilePayload } from "@/lib/dating-api";
 
 export default function UserMenu() {
   const navigate = useNavigate();
   const { data: session, isPending } = authClient.useSession();
+  const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
+
+  useEffect(() => {
+    if (!session) {
+      setProfile(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadProfile = async () => {
+      try {
+        const response = await datingApi.getProfile();
+        if (isMounted) {
+          setProfile(response.profile);
+        }
+      } catch {
+        if (isMounted) {
+          setProfile(null);
+        }
+      }
+    };
+
+    void loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session]);
 
   if (isPending) {
     return <Skeleton className="h-9 w-24 rounded-full" />;
@@ -29,6 +60,10 @@ export default function UserMenu() {
   if (!session) {
     return null;
   }
+
+  const profilePhoto =
+    profile?.media.find((item) => item.kind === "profile_photo")?.url ??
+    session.user.image;
 
   return (
     <DropdownMenu>
@@ -42,9 +77,7 @@ export default function UserMenu() {
         }
       >
         <Avatar className="size-8">
-          {session.user.image ? (
-            <AvatarImage alt="" src={session.user.image} />
-          ) : null}
+          {profilePhoto ? <AvatarImage alt="" src={profilePhoto} /> : null}
           <AvatarFallback className="text-[10px] font-bold uppercase">
             {session.user.name?.slice(0, 2) ?? "ME"}
           </AvatarFallback>
