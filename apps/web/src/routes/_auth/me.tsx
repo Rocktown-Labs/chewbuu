@@ -66,6 +66,7 @@ import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { DateRoomChat } from "@/features/date-wizard/date-room-chat";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
@@ -3142,7 +3143,6 @@ function DateHistoryNotification({
     </button>
   );
 }
-
 function DateHistoryDetail({
   date,
   onShowChats,
@@ -3150,217 +3150,364 @@ function DateHistoryDetail({
   date: DateHistoryItem;
   onShowChats: () => void;
 }) {
-  const acceptedMatch = date.matches.find(
-    (match) => match.id === date.acceptedMatchId
+  const [currentDate, setCurrentDate] = useState<DateHistoryItem>(date);
+
+  useEffect(() => {
+    setCurrentDate(date);
+  }, [date]);
+
+  const acceptedMatch = currentDate.matches.find(
+    (match) => match.id === currentDate.acceptedMatchId
   );
-  const availableMatches = date.matches.filter(
+  const availableMatches = currentDate.matches.filter(
     (match) => match.status !== "declined"
   );
 
+  const [activeStepTab, setActiveStepTab] = useState<
+    "setup" | "matchers" | "chat" | "places"
+  >(() => {
+    return currentDate.acceptedMatchId ? "places" : "matchers";
+  });
+
+  const [activeChatMatchId, setActiveChatMatchId] = useState<string | null>(
+    null
+  );
+
+  const activeChatCandidate = currentDate.matches.find(
+    (m) => m.id === activeChatMatchId
+  );
+
+  const handleChoosePartner = (matchId: string) => {
+    setCurrentDate((prev) => {
+      const updatedMatches = prev.matches.map((m) => {
+        if (m.id === matchId) {
+          return { ...m, status: "accepted" as const };
+        }
+        return m;
+      });
+      return {
+        ...prev,
+        acceptedMatchId: matchId,
+        status: "accepted" as const,
+        matches: updatedMatches,
+      };
+    });
+    setActiveStepTab("places");
+    toast.success("Date partner chosen successfully!");
+  };
+
+  const handleDeclinePartner = (matchId: string) => {
+    setCurrentDate((prev) => {
+      const updatedMatches = prev.matches.map((m) => {
+        if (m.id === matchId) {
+          return { ...m, status: "declined" as const };
+        }
+        return m;
+      });
+      return {
+        ...prev,
+        matches: updatedMatches,
+      };
+    });
+    setActiveStepTab("matchers");
+    toast.success("Match candidate declined.");
+  };
+
   return (
-    <div className="flex flex-col gap-4">
-      <Card className="rounded-lg border-border bg-card/45">
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">{date.title}</CardTitle>
-              <CardDescription>
-                {date.searchArea} ·{" "}
-                {new Date(date.scheduledAt).toLocaleString()}
-              </CardDescription>
-            </div>
-            <Badge className="rounded-full bg-amber-500/10 text-amber-600">
-              {date.status}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-4">
-          {date.timeline.map((item) => (
-            <div
-              className="flex flex-col gap-1 rounded-lg border border-border bg-background/50 p-3"
-              key={item.label}
-            >
-              <span
-                className={`size-2 rounded-full ${
-                  item.tone === "done"
-                    ? "bg-emerald-500"
-                    : item.tone === "live"
-                      ? "bg-amber-500"
-                      : "bg-muted-foreground"
-                }`}
-              />
-              <span className="text-xs font-bold">{item.label}</span>
-              <span className="text-[10px] text-muted-foreground">
-                {item.value}
-              </span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+    <div className="flex flex-col gap-5">
+      {/* Horizontal Steps Sub-Navigation bar */}
+      <div className="flex border-b border-border/80">
+        <button
+          type="button"
+          onClick={() => setActiveStepTab("setup")}
+          className={cn(
+            "px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition cursor-pointer bg-transparent",
+            activeStepTab === "setup"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          1. Setup Details
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveStepTab("matchers");
+            setActiveChatMatchId(null);
+          }}
+          className={cn(
+            "px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition cursor-pointer bg-transparent",
+            activeStepTab === "matchers" || activeStepTab === "chat"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          2. Match Candidates
+        </button>
+        {currentDate.acceptedMatchId && (
+          <button
+            type="button"
+            onClick={() => setActiveStepTab("places")}
+            className={cn(
+              "px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition cursor-pointer bg-transparent",
+              activeStepTab === "places"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            3. Places & Recap
+          </button>
+        )}
+      </div>
 
-      <Card className="rounded-lg border-border bg-card/45">
-        <CardHeader>
-          <CardTitle className="text-base">Match options</CardTitle>
-          <CardDescription>
-            Requesters can come back to every option that was not rejected.
-            Friended matches move future conversation into Chats.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {date.matches.map((match) => (
-            <DateHistoryMatchRow
-              isAccepted={match.id === date.acceptedMatchId}
-              key={match.id}
-              match={match}
-              onShowChats={onShowChats}
-            />
-          ))}
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="rounded-lg border-border bg-card/45">
+      {/* Tab Contents */}
+      {activeStepTab === "setup" && (
+        <Card className="rounded-xl border-border bg-card/45">
           <CardHeader>
-            <CardTitle className="text-base">Actual date</CardTitle>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">{currentDate.title}</CardTitle>
+                <CardDescription>
+                  {currentDate.searchArea} ·{" "}
+                  {new Date(currentDate.scheduledAt).toLocaleString()}
+                </CardDescription>
+              </div>
+              <Badge className="rounded-full bg-amber-500/10 text-amber-600 border-0">
+                {currentDate.status}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-4">
+            {currentDate.timeline.map((item) => (
+              <div
+                className="flex flex-col gap-1 rounded-lg border border-border bg-background/50 p-3"
+                key={item.label}
+              >
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    item.tone === "done" && "bg-emerald-500",
+                    item.tone === "live" && "bg-amber-500",
+                    item.tone !== "done" &&
+                      item.tone !== "live" &&
+                      "bg-muted-foreground"
+                  )}
+                />
+                <span className="text-xs font-bold">{item.label}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {item.value}
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {activeStepTab === "matchers" && (
+        <Card className="rounded-xl border-border bg-card/45">
+          <CardHeader>
+            <CardTitle className="text-base">Match options</CardTitle>
             <CardDescription>
-              Places, reviews, content, and the accepted match stay attached to
-              this date.
+              Requesters can come back to every option that was not rejected.
+              Friended matches move future conversation into Chats.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            {acceptedMatch ? (
-              <div className="flex items-center gap-3 rounded-lg border border-border bg-background/50 p-3">
-                <Avatar className="size-12 border border-border">
-                  {acceptedMatch.photoUrl && (
-                    <AvatarImage src={acceptedMatch.photoUrl} />
-                  )}
-                  <AvatarFallback>
-                    {acceptedMatch.displayName.slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="font-bold text-sm">
-                    Date with {acceptedMatch.displayName}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Automatically friended after the completed date.
-                  </p>
-                </div>
-              </div>
-            ) : null}
+            {currentDate.matches.map((match) => (
+              <DateHistoryMatchRow
+                isAccepted={match.id === currentDate.acceptedMatchId}
+                key={match.id}
+                match={match}
+                onShowChats={onShowChats}
+                onOpenChat={(id) => {
+                  setActiveChatMatchId(id);
+                  setActiveStepTab("chat");
+                }}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
-            <div className="flex flex-col gap-2">
-              {date.places.map((place) => (
-                <div
-                  className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background/50 p-3"
-                  key={place.placeId}
-                >
-                  <div className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
-                    <div>
-                      <p className="font-bold text-xs">{place.name}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {place.address}
+      {activeStepTab === "chat" && activeChatCandidate && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setActiveStepTab("matchers");
+                setActiveChatMatchId(null);
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground h-8 rounded-full px-3 flex items-center gap-1 hover:bg-muted"
+            >
+              <ArrowLeft className="size-3.5" />
+              Back to Candidates
+            </Button>
+          </div>
+          <DateRoomChat
+            candidate={activeChatCandidate}
+            allCandidates={currentDate.matches.filter(
+              (m) => m.status !== "declined"
+            )}
+            onBack={() => {
+              setActiveStepTab("matchers");
+              setActiveChatMatchId(null);
+            }}
+            onChoosePartner={handleChoosePartner}
+            onDeclinePartner={handleDeclinePartner}
+            onSwitchCandidate={(id) => setActiveChatMatchId(id)}
+          />
+        </div>
+      )}
+
+      {activeStepTab === "places" && (
+        <div className="flex flex-col gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="rounded-xl border-border bg-card/45">
+              <CardHeader>
+                <CardTitle className="text-base">Actual date</CardTitle>
+                <CardDescription>
+                  Places, reviews, content, and the accepted match stay attached
+                  to this date.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {acceptedMatch ? (
+                  <div className="flex items-center gap-3 rounded-lg border border-border bg-background/50 p-3">
+                    <Avatar className="size-12 border border-border">
+                      {acceptedMatch.photoUrl && (
+                        <AvatarImage src={acceptedMatch.photoUrl} />
+                      )}
+                      <AvatarFallback>
+                        {acceptedMatch.displayName.slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm">
+                        Date with {acceptedMatch.displayName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically friended after the completed date.
                       </p>
                     </div>
                   </div>
-                  {place.rating ? (
-                    <Badge className="rounded-full text-[10px]">
-                      <Star className="size-3 fill-yellow-500 text-yellow-500" />
-                      {place.rating}
-                    </Badge>
-                  ) : null}
+                ) : null}
+
+                <div className="flex flex-col gap-2">
+                  {currentDate.places.map((place) => (
+                    <div
+                      className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background/50 p-3"
+                      key={place.placeId}
+                    >
+                      <div className="flex items-start gap-2">
+                        <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
+                        <div>
+                          <p className="font-bold text-xs">{place.name}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {place.address}
+                          </p>
+                        </div>
+                      </div>
+                      {place.rating ? (
+                        <Badge className="rounded-full text-[10px] border-0">
+                          <Star className="size-3 fill-yellow-500 text-yellow-500 mr-1" />
+                          {place.rating}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Link
-                className={buttonVariants({
-                  className: "rounded-full text-xs font-semibold",
-                  size: "sm",
-                })}
-                params={{ requestid: date.id }}
-                to="/reviews/$requestid"
-              >
-                <Star className="size-4" />
-                Open review UI
-              </Link>
-              <Button
-                className="rounded-full text-xs"
-                size="sm"
-                variant="outline"
-              >
-                <Plus className="size-4" />
-                Add recap
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Link
+                    className={buttonVariants({
+                      className: "rounded-full text-xs font-semibold",
+                      size: "sm",
+                    })}
+                    params={{ requestid: currentDate.id }}
+                    to="/reviews/$requestid"
+                  >
+                    <Star className="size-4" />
+                    Open review UI
+                  </Link>
+                  <Button
+                    className="rounded-full text-xs"
+                    size="sm"
+                    variant="outline"
+                  >
+                    <Plus className="size-4" />
+                    Add recap
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card className="rounded-lg border-border bg-card/45">
-          <CardHeader>
-            <CardTitle className="text-base">Date-room history</CardTitle>
-            <CardDescription>
-              Match-room messages stay with the date unless someone becomes a
-              friend.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex flex-col gap-2">
-              {date.chatSummary.map((item) => (
-                <div
-                  className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground"
-                  key={item}
+            <Card className="rounded-xl border-border bg-card/45">
+              <CardHeader>
+                <CardTitle className="text-base">Date-room history</CardTitle>
+                <CardDescription>
+                  Match-room messages stay with the date unless someone becomes
+                  a friend.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
+                  {currentDate.chatSummary.map((item) => (
+                    <div
+                      className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground"
+                      key={item}
+                    >
+                      {item}
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  className="rounded-full text-xs"
+                  onClick={onShowChats}
+                  size="sm"
+                  type="button"
+                  variant="outline"
                 >
-                  {item}
+                  <MessageCircle className="size-4" />
+                  Open friend chats
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="rounded-xl border-border bg-card/45">
+            <CardHeader>
+              <CardTitle className="text-base">Content & recap</CardTitle>
+              <CardDescription>
+                Optional date content can become private memories, public
+                recaps, or reward signals.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2 sm:grid-cols-3">
+              {currentDate.content.map((item) => (
+                <div
+                  className="rounded-lg border border-border bg-background/50 p-3"
+                  key={item.label}
+                >
+                  <p className="text-xs font-bold">{item.label}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {item.status}
+                  </p>
                 </div>
               ))}
-            </div>
-            <Button
-              className="rounded-full text-xs"
-              onClick={onShowChats}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <MessageCircle className="size-4" />
-              Open friend chats
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      <Card className="rounded-lg border-border bg-card/45">
-        <CardHeader>
-          <CardTitle className="text-base">Content & recap</CardTitle>
-          <CardDescription>
-            Optional date content can become private memories, public recaps, or
-            reward signals.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-2 sm:grid-cols-3">
-          {date.content.map((item) => (
-            <div
-              className="rounded-lg border border-border bg-background/50 p-3"
-              key={item.label}
-            >
-              <p className="text-xs font-bold">{item.label}</p>
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                {item.status}
-              </p>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {availableMatches.length > 1 ? (
+      {availableMatches.length > 1 && activeStepTab !== "chat" && (
         <p className="text-xs text-muted-foreground">
           {availableMatches.length} non-rejected match room
           {availableMatches.length === 1 ? "" : "s"} remain attached to this
           date for sender history.
         </p>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -3369,26 +3516,31 @@ function DateHistoryMatchRow({
   isAccepted,
   match,
   onShowChats,
+  onOpenChat,
 }: {
   isAccepted: boolean;
   match: DateHistoryMatch;
   onShowChats: () => void;
+  onOpenChat: (id: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-background/50 p-3 sm:flex-row sm:items-center">
-      <Avatar className="size-12 border border-border">
+      <Avatar className="size-12 border border-border animate-none shrink-0">
         {match.photoUrl && <AvatarImage src={match.photoUrl} />}
         <AvatarFallback>{match.displayName.slice(0, 2)}</AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="font-bold text-sm">{match.displayName}</p>
-          <Badge className="rounded-full text-[10px]" variant="secondary">
+          <Badge
+            className="rounded-full text-[10px] border-0"
+            variant="secondary"
+          >
             {match.compatibility}% match
           </Badge>
           <MatchStatusBadge status={match.status} />
           {isAccepted ? (
-            <Badge className="rounded-full bg-primary/10 text-[10px] text-primary">
+            <Badge className="rounded-full bg-primary/10 text-[10px] text-primary border-0">
               Chosen
             </Badge>
           ) : null}
@@ -3396,7 +3548,7 @@ function DateHistoryMatchRow({
         <p className="mt-1 text-xs text-muted-foreground">{match.note}</p>
         <div className="mt-2 flex flex-wrap gap-1">
           {match.tags.map((tag) => (
-            <Badge className="rounded-full text-[9px]" key={tag}>
+            <Badge className="rounded-full text-[9px] border-0" key={tag}>
               {tag}
             </Badge>
           ))}
@@ -3404,7 +3556,7 @@ function DateHistoryMatchRow({
       </div>
       {match.status === "friended" ? (
         <Button
-          className="rounded-full text-xs"
+          className="rounded-full text-xs animate-none"
           onClick={onShowChats}
           size="sm"
           type="button"
@@ -3414,7 +3566,7 @@ function DateHistoryMatchRow({
         </Button>
       ) : match.status === "declined" ? (
         <Button
-          className="rounded-full text-xs"
+          className="rounded-full text-xs animate-none"
           disabled
           size="sm"
           variant="ghost"
@@ -3423,8 +3575,8 @@ function DateHistoryMatchRow({
         </Button>
       ) : (
         <Button
-          className="rounded-full text-xs"
-          disabled
+          className="rounded-full text-xs animate-none"
+          onClick={() => onOpenChat(match.id)}
           size="sm"
           variant="outline"
         >

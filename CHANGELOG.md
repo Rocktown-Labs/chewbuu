@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Filtered calendar events and date cards list to only show confirmed, review-due, and completed dates.
 - Redesigned date cards below the calendar to simple, flat row dividers featuring large partner avatars, calendar and map pin icons, and badges for location spots.
 - Aligned sidebar navigation links to place the Feed option next to the Calendar title.
+- Restructured the date history detail view into a clean step-by-step navigation tab bar (Setup Details, Match Candidates, Places & Recap) to simplify dating state progression.
+- Implemented a premium custom Video-DM Chat Room component featuring a nested active conversations sidebar, side-by-side intro video mockups, simulated 2-minute video response recorder with timer and pulsing recording indicator, and structured choose/decline CTA prompts.
 
 ## [0.6.3] - 2026-07-18
 
