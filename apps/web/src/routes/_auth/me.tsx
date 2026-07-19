@@ -52,6 +52,7 @@ import {
   MessageCircle,
   MessageSquare,
   MoreHorizontal,
+  PanelLeft,
   Play,
   Plus,
   Search,
@@ -403,6 +404,8 @@ export function MePage({
   );
   const [dashboardChatsComponent, setDashboardChatsComponent] =
     useState<DashboardChatsComponent | null>(null);
+  const [userCollapsedSidebar, setUserCollapsedSidebar] = useState(false);
+  const isSidebarCollapsed = activeTab === "chats" || userCollapsedSidebar;
 
   // Local state for user's own uploaded date recaps (persisted to localStorage)
   const [userRecaps, setUserRecaps] = useState<DateRecap[]>([]);
@@ -881,46 +884,87 @@ export function MePage({
     <div className="min-h-screen bg-background text-foreground flex justify-center">
       <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12">
         {/* LEFT SIDEBAR NAVIGATION */}
-        <aside className="lg:col-span-3 border-r border-border/80 p-5 hidden lg:flex flex-col justify-between sticky top-0 h-screen overflow-y-auto">
-          <div className="flex flex-col gap-8 pt-2">
+        <aside
+          className={cn(
+            "border-r border-border/80 p-4 hidden lg:flex flex-col justify-between sticky top-0 h-screen overflow-y-auto transition-all duration-200 shrink-0",
+            isSidebarCollapsed
+              ? "lg:col-span-1 w-20 items-center"
+              : "lg:col-span-3"
+          )}
+        >
+          <div className="flex flex-col gap-6 pt-2 w-full">
+            {/* Header / Collapse Toggle */}
+            <div
+              className={cn(
+                "flex items-center justify-between px-2",
+                isSidebarCollapsed && "justify-center"
+              )}
+            >
+              {!isSidebarCollapsed && (
+                <span className="font-extrabold text-lg text-primary tracking-tight">
+                  Chewbuu
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setUserCollapsedSidebar((prev) => !prev)}
+                className="rounded-full text-muted-foreground hover:text-foreground"
+                title={
+                  isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"
+                }
+              >
+                <PanelLeft className="size-4" />
+              </Button>
+            </div>
+
             {/* Menu Links */}
-            <nav className="flex flex-col gap-2">
+            <nav className="flex flex-col gap-1.5 w-full">
               <button
                 type="button"
                 onClick={() => setDashboardTab("feed")}
-                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                className={cn(
+                  "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer w-full select-none",
+                  isSidebarCollapsed && "justify-center px-0",
                   activeTab === "feed"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
+                )}
+                title="Feed"
               >
-                <Home className="size-5" />
-                <span>Feed</span>
+                <Home className="size-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Feed</span>}
               </button>
               <button
                 type="button"
                 onClick={() => setDashboardTab("spots")}
-                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                className={cn(
+                  "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer w-full select-none",
+                  isSidebarCollapsed && "justify-center px-0",
                   activeTab === "spots"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
+                )}
+                title="Spots"
               >
-                <MapPin className="size-5" />
-                <span>Spots</span>
+                <MapPin className="size-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Spots</span>}
               </button>
               <button
                 type="button"
                 onClick={() => setDashboardTab("matches")}
-                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                className={cn(
+                  "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer w-full select-none",
+                  isSidebarCollapsed && "justify-center px-0",
                   activeTab === "matches"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
+                )}
+                title="Dates"
               >
-                <Heart className="size-5" />
-                <span>Dates</span>
-                {unreadRequestCount > 0 && (
+                <Heart className="size-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Dates</span>}
+                {!isSidebarCollapsed && unreadRequestCount > 0 && (
                   <Badge className="ml-auto rounded-full px-2 py-0 text-[10px]">
                     {unreadRequestCount}
                   </Badge>
@@ -929,15 +973,18 @@ export function MePage({
               <button
                 type="button"
                 onClick={() => setDashboardTab("chats")}
-                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                className={cn(
+                  "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer w-full select-none",
+                  isSidebarCollapsed && "justify-center px-0",
                   activeTab === "chats"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
+                )}
+                title="Chats"
               >
-                <MessageCircle className="size-5" />
-                <span>Chats</span>
-                {chatBadgeCount > 0 && (
+                <MessageCircle className="size-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Chats</span>}
+                {!isSidebarCollapsed && chatBadgeCount > 0 && (
                   <Badge className="ml-auto rounded-full px-2 py-0 text-[10px]">
                     {chatBadgeCount}
                   </Badge>
@@ -946,15 +993,18 @@ export function MePage({
               <button
                 type="button"
                 onClick={() => setDashboardTab("calendar")}
-                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                className={cn(
+                  "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer w-full select-none",
+                  isSidebarCollapsed && "justify-center px-0",
                   activeTab === "calendar"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
+                )}
+                title="Calendar"
               >
-                <CalendarCheck className="size-5" />
-                <span>Calendar</span>
-                {calendarBadgeCount > 0 && (
+                <CalendarCheck className="size-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Calendar</span>}
+                {!isSidebarCollapsed && calendarBadgeCount > 0 && (
                   <Badge className="ml-auto rounded-full px-2 py-0 text-[10px]">
                     {calendarBadgeCount}
                   </Badge>
@@ -963,15 +1013,18 @@ export function MePage({
               <button
                 type="button"
                 onClick={() => setDashboardTab("notifications")}
-                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                className={cn(
+                  "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer w-full select-none",
+                  isSidebarCollapsed && "justify-center px-0",
                   activeTab === "notifications"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
+                )}
+                title="Notifications"
               >
-                <Bell className="size-5" />
-                <span>Notifications</span>
-                {notificationBadgeCount > 0 && (
+                <Bell className="size-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Notifications</span>}
+                {!isSidebarCollapsed && notificationBadgeCount > 0 && (
                   <Badge className="ml-auto rounded-full px-2 py-0 text-[10px]">
                     {notificationBadgeCount}
                   </Badge>
@@ -980,68 +1033,88 @@ export function MePage({
               <button
                 type="button"
                 onClick={() => openProfileMode("profile")}
-                className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
+                className={cn(
+                  "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer w-full select-none",
+                  isSidebarCollapsed && "justify-center px-0",
                   activeTab === "profile"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
+                )}
+                title="My Profile"
               >
-                <User className="size-5" />
-                <span>My Profile</span>
+                <User className="size-5 shrink-0" />
+                {!isSidebarCollapsed && <span>My Profile</span>}
               </button>
               <button
                 type="button"
                 onClick={() => openProfileMode("edit")}
-                className="flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
+                className={cn(
+                  "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 cursor-pointer w-full select-none",
+                  isSidebarCollapsed && "justify-center px-0"
+                )}
+                title="Edit Profile"
               >
-                <ClipboardList className="size-5" />
-                <span>Edit Profile</span>
+                <ClipboardList className="size-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Edit Profile</span>}
               </button>
             </nav>
 
             {/* Plan a Date Button */}
             <Link
               to={canDate ? "/date/new" : "/onboarding"}
-              className={`w-full py-3.5 rounded-full font-bold flex items-center justify-center gap-2 shadow-lg hover:opacity-90 transition duration-200 ${
+              className={cn(
+                "w-full py-3 rounded-full font-bold flex items-center justify-center gap-2 shadow-lg hover:opacity-90 transition duration-200",
+                isSidebarCollapsed ? "px-0" : "px-4",
                 canDate
                   ? "bg-primary text-primary-foreground shadow-primary/15"
                   : "bg-secondary text-secondary-foreground"
-              }`}
+              )}
+              title="Plan a Date"
             >
-              <CalendarHeart className="size-5" />
-              <span>Plan a Date</span>
+              <CalendarHeart className="size-5 shrink-0" />
+              {!isSidebarCollapsed && <span>Plan a Date</span>}
             </Link>
           </div>
 
           {/* User Account Card */}
-          <div className="flex items-center justify-between p-3 rounded-2xl border bg-card/60">
-            <div className="flex items-center gap-3">
-              <Avatar className="size-10 border border-border">
+          <div
+            className={cn(
+              "flex items-center justify-between p-2.5 rounded-2xl border bg-card/60 w-full",
+              isSidebarCollapsed && "justify-center"
+            )}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Avatar className="size-9 border border-border shrink-0">
                 {profilePhoto && <AvatarImage src={profilePhoto} />}
                 <AvatarFallback className="font-bold text-xs uppercase bg-primary/10 text-primary">
                   {displayName.slice(0, 2)}
                 </AvatarFallback>
               </Avatar>
-              <div className="flex flex-col text-left">
-                <span className="font-bold text-sm truncate max-w-28">
-                  {displayName}
-                </span>
-                <Badge
-                  className="w-fit text-[10px] py-0 px-1.5 font-bold uppercase mt-0.5"
-                  variant="secondary"
-                >
-                  {tier}
-                </Badge>
-              </div>
+              {!isSidebarCollapsed && (
+                <div className="flex flex-col text-left min-w-0">
+                  <span className="font-bold text-xs truncate max-w-24">
+                    {displayName}
+                  </span>
+                  <Badge
+                    className="w-fit text-[9px] py-0 px-1 font-bold uppercase mt-0.5"
+                    variant="secondary"
+                  >
+                    {membershipTier}
+                  </Badge>
+                </div>
+              )}
             </div>
-            <button
-              onClick={handleSignOut}
-              className="p-2 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition cursor-pointer"
-              title="Sign Out"
-              type="button"
-            >
-              <LogOut className="size-4" />
-            </button>
+            {!isSidebarCollapsed && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => authClient.signOut()}
+                title="Sign out"
+                className="rounded-full text-muted-foreground hover:text-foreground"
+              >
+                <LogOut className="size-4" />
+              </Button>
+            )}
           </div>
         </aside>
 
@@ -3150,7 +3223,13 @@ function DateHistoryDetail({
   date: DateHistoryItem;
   onShowChats: () => void;
 }) {
+  const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState<DateHistoryItem>(date);
+  const [isLocationsConfirmed, setIsLocationsConfirmed] = useState(false);
+  const [isGeofenceScanned, setIsGeofenceScanned] = useState(false);
+  const [mediaList, setMediaList] = useState<
+    { id: string; name: string; url: string }[]
+  >([]);
 
   useEffect(() => {
     setCurrentDate(date);
@@ -3163,10 +3242,10 @@ function DateHistoryDetail({
     (match) => match.status !== "declined"
   );
 
-  const [activeStepTab, setActiveStepTab] = useState<
-    "setup" | "matchers" | "chat" | "places"
+  const [activeCardStep, setActiveCardStep] = useState<
+    "request" | "matcher" | "chat" | "choice" | "date"
   >(() => {
-    return currentDate.acceptedMatchId ? "places" : "matchers";
+    return currentDate.acceptedMatchId ? "choice" : "matcher";
   });
 
   const [activeChatMatchId, setActiveChatMatchId] = useState<string | null>(
@@ -3192,8 +3271,8 @@ function DateHistoryDetail({
         matches: updatedMatches,
       };
     });
-    setActiveStepTab("places");
-    toast.success("Date partner chosen successfully!");
+    setActiveCardStep("choice");
+    toast.success("Date partner chosen! Location details revealed.");
   };
 
   const handleDeclinePartner = (matchId: string) => {
@@ -3209,59 +3288,117 @@ function DateHistoryDetail({
         matches: updatedMatches,
       };
     });
-    setActiveStepTab("matchers");
+    setActiveCardStep("matcher");
     toast.success("Match candidate declined.");
+  };
+
+  const handleSimulateQRScan = () => {
+    setIsGeofenceScanned(true);
+    setActiveCardStep("date");
+    toast.success(
+      "Geofence verified! QR Code scanned. Welcome to your live date!"
+    );
+  };
+
+  const handleAddDemoMedia = () => {
+    const newMedia = {
+      id: Date.now().toString(),
+      name: `date_photo_${mediaList.length + 1}.jpg`,
+      url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80",
+    };
+    setMediaList((prev) => [...prev, newMedia]);
+    toast.success("Photo attached to date memories!");
   };
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Horizontal Steps Sub-Navigation bar */}
-      <div className="flex border-b border-border/80">
+      {/* 4 Interactive Status Cards Header matching screenshot_1784489419.png */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Card 1: Request */}
         <button
           type="button"
-          onClick={() => setActiveStepTab("setup")}
+          onClick={() => setActiveCardStep("request")}
           className={cn(
-            "px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition cursor-pointer bg-transparent",
-            activeStepTab === "setup"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+            "flex flex-col gap-1 p-3.5 rounded-xl border text-left transition select-none cursor-pointer",
+            activeCardStep === "request"
+              ? "border-emerald-500/50 bg-emerald-500/10 shadow-sm"
+              : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
           )}
         >
-          1. Setup Details
+          <div className="flex items-center gap-1.5 text-emerald-500 font-bold text-xs">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            <span>Request</span>
+          </div>
+          <span className="text-[11px] text-muted-foreground mt-0.5 truncate">
+            {currentDate.places.length || 3} spots selected
+          </span>
         </button>
+
+        {/* Card 2: Matcher */}
         <button
           type="button"
-          onClick={() => {
-            setActiveStepTab("matchers");
-            setActiveChatMatchId(null);
-          }}
+          onClick={() => setActiveCardStep("matcher")}
           className={cn(
-            "px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition cursor-pointer bg-transparent",
-            activeStepTab === "matchers" || activeStepTab === "chat"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
+            "flex flex-col gap-1 p-3.5 rounded-xl border text-left transition select-none cursor-pointer",
+            activeCardStep === "matcher" || activeCardStep === "chat"
+              ? "border-emerald-500/50 bg-emerald-500/10 shadow-sm"
+              : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
           )}
         >
-          2. Match Candidates
+          <div className="flex items-center gap-1.5 text-emerald-500 font-bold text-xs">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            <span>Matcher</span>
+          </div>
+          <span className="text-[11px] text-muted-foreground mt-0.5 truncate">
+            {currentDate.matches.length} candidates reviewed
+          </span>
         </button>
-        {currentDate.acceptedMatchId && (
-          <button
-            type="button"
-            onClick={() => setActiveStepTab("places")}
-            className={cn(
-              "px-4 py-2.5 text-xs font-bold border-b-2 -mb-px transition cursor-pointer bg-transparent",
-              activeStepTab === "places"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            3. Places & Recap
-          </button>
-        )}
+
+        {/* Card 3: Choice */}
+        <button
+          type="button"
+          onClick={() => setActiveCardStep("choice")}
+          className={cn(
+            "flex flex-col gap-1 p-3.5 rounded-xl border text-left transition select-none cursor-pointer",
+            activeCardStep === "choice"
+              ? "border-emerald-500/50 bg-emerald-500/10 shadow-sm"
+              : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
+          )}
+        >
+          <div className="flex items-center gap-1.5 text-emerald-500 font-bold text-xs">
+            <span className="size-2 rounded-full bg-emerald-500" />
+            <span>Choice</span>
+          </div>
+          <span className="text-[11px] text-muted-foreground mt-0.5 truncate">
+            {acceptedMatch
+              ? `${acceptedMatch.displayName} accepted`
+              : "Pending partner"}
+          </span>
+        </button>
+
+        {/* Card 4: Date */}
+        <button
+          type="button"
+          onClick={() => setActiveCardStep("date")}
+          className={cn(
+            "flex flex-col gap-1 p-3.5 rounded-xl border text-left transition select-none cursor-pointer",
+            activeCardStep === "date"
+              ? "border-amber-500/50 bg-amber-500/10 shadow-sm"
+              : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
+          )}
+        >
+          <div className="flex items-center gap-1.5 text-amber-500 font-bold text-xs">
+            <span className="size-2 rounded-full bg-amber-500" />
+            <span>Date</span>
+          </div>
+          <span className="text-[11px] text-muted-foreground mt-0.5 truncate">
+            {isGeofenceScanned ? "Live · Memories open" : "Review + recap open"}
+          </span>
+        </button>
       </div>
 
-      {/* Tab Contents */}
-      {activeStepTab === "setup" && (
+      {/* CARD 1: REQUEST SUMMARY VIEW */}
+      {activeCardStep === "request" && (
         <Card className="rounded-xl border-border bg-card/45">
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3303,13 +3440,14 @@ function DateHistoryDetail({
         </Card>
       )}
 
-      {activeStepTab === "matchers" && (
+      {/* CARD 2: MATCHER CANDIDATES DIRECTORY */}
+      {activeCardStep === "matcher" && (
         <Card className="rounded-xl border-border bg-card/45">
           <CardHeader>
-            <CardTitle className="text-base">Match options</CardTitle>
+            <CardTitle className="text-base">Match candidates</CardTitle>
             <CardDescription>
-              Requesters can come back to every option that was not rejected.
-              Friended matches move future conversation into Chats.
+              Requesters can review candidates, watch intro reels, and chat in
+              private date rooms.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -3321,7 +3459,7 @@ function DateHistoryDetail({
                 onShowChats={onShowChats}
                 onOpenChat={(id) => {
                   setActiveChatMatchId(id);
-                  setActiveStepTab("chat");
+                  setActiveCardStep("chat");
                 }}
               />
             ))}
@@ -3329,14 +3467,15 @@ function DateHistoryDetail({
         </Card>
       )}
 
-      {activeStepTab === "chat" && activeChatCandidate && (
+      {/* CANDIDATE CHAT / DATE ROOM VIEW */}
+      {activeCardStep === "chat" && activeChatCandidate && (
         <div className="flex flex-col gap-3">
           <div className="flex items-center">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
-                setActiveStepTab("matchers");
+                setActiveCardStep("matcher");
                 setActiveChatMatchId(null);
               }}
               className="text-xs text-muted-foreground hover:text-foreground h-8 rounded-full px-3 flex items-center gap-1 hover:bg-muted"
@@ -3351,7 +3490,7 @@ function DateHistoryDetail({
               (m) => m.status !== "declined"
             )}
             onBack={() => {
-              setActiveStepTab("matchers");
+              setActiveCardStep("matcher");
               setActiveChatMatchId(null);
             }}
             onChoosePartner={handleChoosePartner}
@@ -3361,152 +3500,258 @@ function DateHistoryDetail({
         </div>
       )}
 
-      {activeStepTab === "places" && (
-        <div className="flex flex-col gap-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card className="rounded-xl border-border bg-card/45">
-              <CardHeader>
-                <CardTitle className="text-base">Actual date</CardTitle>
-                <CardDescription>
-                  Places, reviews, content, and the accepted match stay attached
-                  to this date.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {acceptedMatch ? (
-                  <div className="flex items-center gap-3 rounded-lg border border-border bg-background/50 p-3">
-                    <Avatar className="size-12 border border-border">
-                      {acceptedMatch.photoUrl && (
-                        <AvatarImage src={acceptedMatch.photoUrl} />
-                      )}
-                      <AvatarFallback>
-                        {acceptedMatch.displayName.slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="font-bold text-sm">
-                        Date with {acceptedMatch.displayName}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Automatically friended after the completed date.
+      {/* CARD 3: CHOICE & GEOFENCE QR SCANNER */}
+      {activeCardStep === "choice" && (
+        <Card className="rounded-xl border-border bg-card/45">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Finalized Date Details & Geofence Check-in
+            </CardTitle>
+            <CardDescription>
+              Review revealed spot details, tweak location choices if needed,
+              and scan the QR code at the venue.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5">
+            {acceptedMatch ? (
+              <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3.5">
+                <Avatar className="size-12 border border-border">
+                  {acceptedMatch.photoUrl && (
+                    <AvatarImage src={acceptedMatch.photoUrl} />
+                  )}
+                  <AvatarFallback>
+                    {acceptedMatch.displayName.slice(0, 2)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-sm">
+                    Date with {acceptedMatch.displayName}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Confirmed partner · {acceptedMatch.compatibility}%
+                    compatibility match
+                  </p>
+                </div>
+                <Badge className="rounded-full bg-emerald-500/10 text-emerald-600 border-0">
+                  Accepted
+                </Badge>
+              </div>
+            ) : (
+              <div className="p-4 rounded-lg border border-dashed text-center text-xs text-muted-foreground">
+                No date partner accepted yet. Go to{" "}
+                <button
+                  type="button"
+                  onClick={() => setActiveCardStep("matcher")}
+                  className="text-primary underline font-bold"
+                >
+                  Matcher
+                </button>{" "}
+                to choose a partner!
+              </div>
+            )}
+
+            {/* Revealed Locations & Tweaker */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">
+                  Revealed Venue Spots
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  Adjust before confirming
+                </span>
+              </div>
+
+              {currentDate.places.map((place) => (
+                <div
+                  className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background/50 p-3"
+                  key={place.placeId}
+                >
+                  <div className="flex items-start gap-2">
+                    <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <div>
+                      <p className="font-bold text-xs">{place.name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {place.address}
                       </p>
                     </div>
                   </div>
-                ) : null}
-
-                <div className="flex flex-col gap-2">
-                  {currentDate.places.map((place) => (
-                    <div
-                      className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background/50 p-3"
-                      key={place.placeId}
-                    >
-                      <div className="flex items-start gap-2">
-                        <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
-                        <div>
-                          <p className="font-bold text-xs">{place.name}</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {place.address}
-                          </p>
-                        </div>
-                      </div>
-                      {place.rating ? (
-                        <Badge className="rounded-full text-[10px] border-0">
-                          <Star className="size-3 fill-yellow-500 text-yellow-500 mr-1" />
-                          {place.rating}
-                        </Badge>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Link
-                    className={buttonVariants({
-                      className: "rounded-full text-xs font-semibold",
-                      size: "sm",
-                    })}
-                    params={{ requestid: currentDate.id }}
-                    to="/reviews/$requestid"
-                  >
-                    <Star className="size-4" />
-                    Open review UI
-                  </Link>
-                  <Button
-                    className="rounded-full text-xs"
-                    size="sm"
-                    variant="outline"
-                  >
-                    <Plus className="size-4" />
-                    Add recap
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-xl border-border bg-card/45">
-              <CardHeader>
-                <CardTitle className="text-base">Date-room history</CardTitle>
-                <CardDescription>
-                  Match-room messages stay with the date unless someone becomes
-                  a friend.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <div className="flex flex-col gap-2">
-                  {currentDate.chatSummary.map((item) => (
-                    <div
-                      className="rounded-lg border border-border bg-background/50 p-3 text-xs text-muted-foreground"
-                      key={item}
-                    >
-                      {item}
-                    </div>
-                  ))}
-                </div>
-                <Button
-                  className="rounded-full text-xs"
-                  onClick={onShowChats}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <MessageCircle className="size-4" />
-                  Open friend chats
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card className="rounded-xl border-border bg-card/45">
-            <CardHeader>
-              <CardTitle className="text-base">Content & recap</CardTitle>
-              <CardDescription>
-                Optional date content can become private memories, public
-                recaps, or reward signals.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 sm:grid-cols-3">
-              {currentDate.content.map((item) => (
-                <div
-                  className="rounded-lg border border-border bg-background/50 p-3"
-                  key={item.label}
-                >
-                  <p className="text-xs font-bold">{item.label}</p>
-                  <p className="mt-1 text-[10px] text-muted-foreground">
-                    {item.status}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    {place.rating ? (
+                      <Badge className="rounded-full text-[10px] border-0">
+                        <Star className="size-3 fill-yellow-500 text-yellow-500 mr-1" />
+                        {place.rating}
+                      </Badge>
+                    ) : null}
+                    {!isLocationsConfirmed && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          toast.info(`Adjusting venue: ${place.name}`)
+                        }
+                        className="text-[10px] h-6 px-2 rounded-full border border-border"
+                      >
+                        Adjust
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+
+            {/* Confirmation & Geofence QR Scanner */}
+            <div className="border-t border-border/80 pt-4 flex flex-col gap-4">
+              {!isLocationsConfirmed ? (
+                <Button
+                  onClick={() => {
+                    setIsLocationsConfirmed(true);
+                    toast.success(
+                      "Locations locked! Geofence check-in is now active."
+                    );
+                  }}
+                  className="w-full rounded-full font-bold bg-primary text-primary-foreground text-xs"
+                >
+                  Confirm & Lock Location Details
+                </Button>
+              ) : (
+                <div className="flex flex-col items-center gap-3 p-5 rounded-xl border border-primary/20 bg-card/60 text-center">
+                  <div className="size-24 rounded-lg border-2 border-primary p-2 bg-white flex items-center justify-center shadow-md">
+                    {/* Simulated QR Code */}
+                    <div className="grid grid-cols-4 gap-1 size-full bg-black p-1">
+                      <div className="bg-white rounded-xs" />
+                      <div className="bg-white rounded-xs" />
+                      <div className="bg-black" />
+                      <div className="bg-white rounded-xs" />
+                      <div className="bg-white rounded-xs" />
+                      <div className="bg-black" />
+                      <div className="bg-white rounded-xs" />
+                      <div className="bg-white rounded-xs" />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="font-bold text-xs text-foreground">
+                      Venue Geofence Check-in
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 max-w-xs">
+                      Scan QR Code with your partner at the venue to unlock the
+                      live Date screen.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleSimulateQRScan}
+                    className="rounded-full font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                  >
+                    Scan & Check-in at Venue
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {availableMatches.length > 1 && activeStepTab !== "chat" && (
-        <p className="text-xs text-muted-foreground">
-          {availableMatches.length} non-rejected match room
-          {availableMatches.length === 1 ? "" : "s"} remain attached to this
-          date for sender history.
-        </p>
+      {/* CARD 4: LIVE DATE SCREEN */}
+      {activeCardStep === "date" && (
+        <Card className="rounded-xl border-border bg-card/45">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Live Date Screen</CardTitle>
+                <CardDescription>
+                  Attach media memories, access safety protocols, and end date
+                  for reviews.
+                </CardDescription>
+              </div>
+              <Badge className="rounded-full bg-emerald-500/10 text-emerald-600 border-0 font-bold">
+                Live Date Active
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-5">
+            {/* Media Upload Memories Section */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-foreground">
+                  Attach Date Memories (Photos & Videos)
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAddDemoMedia}
+                  className="rounded-full text-[10px] h-7 px-3 flex items-center gap-1"
+                >
+                  <Plus className="size-3" />
+                  Add Photo / Video
+                </Button>
+              </div>
+
+              {mediaList.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {mediaList.map((m) => (
+                    <div
+                      key={m.id}
+                      className="relative rounded-lg overflow-hidden border border-border aspect-square bg-black/40"
+                    >
+                      <img
+                        src={m.url}
+                        alt={m.name}
+                        className="size-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 border border-dashed border-border/80 rounded-lg text-center text-xs text-muted-foreground">
+                  No photos or videos attached yet. Click &quot;Add Photo /
+                  Video&quot; to capture memories!
+                </div>
+              )}
+            </div>
+
+            {/* Safety Menu */}
+            <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-bold text-xs text-foreground">
+                  Safety & Location Share
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Share live location with emergency contacts
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  toast.success(
+                    "Emergency contact notified of live date location."
+                  )
+                }
+                className="rounded-full text-xs border-amber-500/30 text-amber-600 hover:bg-amber-500/10 h-8"
+              >
+                Safety Hotline
+              </Button>
+            </div>
+
+            {/* End Date CTA */}
+            <div className="border-t border-border/80 pt-4 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                Ready to finish your date?
+              </span>
+              <Button
+                onClick={() => {
+                  toast.success("Date completed! Proceeding to review flow...");
+                  navigate({
+                    to: "/reviews/$requestid",
+                    params: { requestid: currentDate.id },
+                  });
+                }}
+                className="rounded-full font-bold text-xs bg-primary text-primary-foreground shadow-md px-5"
+              >
+                End Date & Complete Review
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
