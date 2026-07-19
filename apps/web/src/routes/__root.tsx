@@ -16,8 +16,8 @@ import { useEffect } from "react";
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
-import { useThemeStore } from "@/lib/theme";
 
 import Header from "../components/header";
 
@@ -42,39 +42,36 @@ const AuthLink = ({ children, href, to, ...props }: AuthLinkProps) => (
 
 const RootDocument = () => {
   const navigate = useNavigate();
-  const initTheme = useThemeStore((s) => s.initTheme);
-
-  useEffect(() => {
-    initTheme();
-  }, [initTheme]);
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <AuthProvider
-          authClient={authClient}
-          basePaths={{
-            auth: "/auth",
-            organization: "/organization",
-            settings: "/settings",
-          }}
-          Link={AuthLink}
-          navigate={({ to, replace }) => navigate({ replace, to })}
-          redirectTo="/me"
-        >
-          <div className="grid min-h-svh grid-rows-[auto_1fr]">
-            <Header />
-            <Outlet />
-          </div>
-        </AuthProvider>
-        <Toaster richColors />
-        <TanStackRouterDevtools position="bottom-left" />
-        <Analytics />
-        <SpeedInsights />
-        <Scripts />
+        <ThemeProvider defaultTheme="system" storageKey="theme">
+          <AuthProvider
+            authClient={authClient}
+            basePaths={{
+              auth: "/auth",
+              organization: "/organization",
+              settings: "/settings",
+            }}
+            Link={AuthLink}
+            navigate={({ to, replace }) => navigate({ replace, to })}
+            redirectTo="/me"
+          >
+            <div className="grid min-h-svh grid-rows-[auto_1fr]">
+              <Header />
+              <Outlet />
+            </div>
+          </AuthProvider>
+          <Toaster richColors />
+          <TanStackRouterDevtools position="bottom-left" />
+          <Analytics />
+          <SpeedInsights />
+          <Scripts />
+        </ThemeProvider>
       </body>
     </html>
   );

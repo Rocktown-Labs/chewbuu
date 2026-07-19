@@ -1,14 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { Bell, HeartHandshake, Monitor, Moon, Sun } from "lucide-react";
 
+import { useTheme } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
-import { useThemeStore } from "@/lib/theme";
 
 import UserMenu from "./user-menu";
 
 export default function Header() {
   const { data: session } = authClient.useSession();
-  const { theme, setTheme } = useThemeStore();
+  const { theme, setTheme } = useTheme();
 
   const publicLinks = [
     { label: "How it works", hash: "how-it-works" },
