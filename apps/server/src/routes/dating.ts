@@ -369,6 +369,32 @@ const assertCanDate = async (sessionUser: SessionUser, input: RequestInput) => {
       message: "Daily date booking limit reached.",
     });
   }
+
+  const targetTime = new Date(input.scheduledAt).getTime();
+  const twoHours = 2 * 60 * 60 * 1000;
+
+  const existingRequests: { scheduledAt: Date | string; status: string }[] =
+    isTestRuntime()
+      ? (memory.requests.get(sessionUser.id) ?? [])
+      : await db
+          .select({
+            scheduledAt: dateRequest.scheduledAt,
+            status: dateRequest.status,
+          })
+          .from(dateRequest)
+          .where(eq(dateRequest.userId, sessionUser.id));
+
+  for (const req of existingRequests) {
+    if (req.status === "declined" || req.status === "cancelled") {
+      continue;
+    }
+    const reqTime = new Date(req.scheduledAt).getTime();
+    if (Math.abs(reqTime - targetTime) < twoHours) {
+      throw new HTTPException(HttpStatusCodes.FORBIDDEN, {
+        message: "You already have a date booked within 2 hours of this time.",
+      });
+    }
+  }
 };
 
 type StoredProfile = ProfileInput & {
@@ -1554,7 +1580,11 @@ const createDateRequest = async (
 
 const listRequests = async (sessionUser: SessionUser) => {
   if (isTestRuntime()) {
-    return memory.requests.get(sessionUser.id) ?? [];
+    const reqs = memory.requests.get(sessionUser.id) ?? [];
+    return reqs.map((req) => ({
+      ...req,
+      matches: memory.matches.get(req.id) ?? buildMatches(req.id),
+    }));
   }
 
   const requests = await db
@@ -1576,9 +1606,20 @@ const listRequests = async (sessionUser: SessionUser) => {
       )
     );
 
+  const matches = await db
+    .select()
+    .from(dateMatch)
+    .where(
+      inArray(
+        dateMatch.requestId,
+        requests.map((request) => request.id)
+      )
+    );
+
   return requests.map((request) => ({
     ...request,
     places: places.filter((place) => place.requestId === request.id),
+    matches: matches.filter((match) => match.requestId === request.id),
   }));
 };
 

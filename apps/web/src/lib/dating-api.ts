@@ -120,6 +120,7 @@ export interface DatingSummary {
     id: string;
     partySize: number;
     status: string;
+    matches?: DateMatch[];
   })[];
 }
 

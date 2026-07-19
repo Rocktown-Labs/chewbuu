@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - 2026-07-19
+
+### Added
+
+- Added date request scheduling overlap validation to block booking dates within 2 hours of existing ones.
+
+### Changed
+
+- Updated Calendar view to integrate shadcn/ui interactive Calendar component.
+- Updated calendar days to render avatars of scheduled date partners.
+- Redesigned date history and request list to slim cards showing partner avatars, yellow date type badges, and clean mapped statuses.
+- Aligned sidebar navigation links to place the Feed option next to the Calendar title.
+
 ## [0.6.3] - 2026-07-18
 
 ### Added

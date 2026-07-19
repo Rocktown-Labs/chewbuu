@@ -5,6 +5,7 @@ import {
 } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button, buttonVariants } from "@chewbuu/ui/components/button";
+import { Calendar, CalendarDayButton } from "@chewbuu/ui/components/calendar";
 import {
   Card,
   CardContent,
@@ -256,6 +257,48 @@ const demoDateHistory: DateHistoryItem = {
   what: ["eat", "play", "talk"],
 };
 
+const getAcceptedMatchForRequest = (request: any) => {
+  if (request.id === demoDateHistory.id) {
+    return demoDateHistory.matches.find(
+      (match) => match.id === demoDateHistory.acceptedMatchId
+    );
+  }
+  if (request.matches && Array.isArray(request.matches)) {
+    const accepted = request.matches.find(
+      (m: any) => m.status === "accepted" || m.status === "friended"
+    );
+    if (accepted) return accepted;
+  }
+  if (
+    request.acceptedMatchId &&
+    request.matches &&
+    Array.isArray(request.matches)
+  ) {
+    const accepted = request.matches.find(
+      (m: any) => m.id === request.acceptedMatchId
+    );
+    if (accepted) return accepted;
+  }
+  return null;
+};
+
+const isSameDay = (date1: Date, date2: Date) => {
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+};
+
+const formatStatus = (status: string) => {
+  if (status === "places_selected") return "Matching";
+  if (status === "review_due" || status === "Review due") return "Review Due";
+  return status
+    .split("_")
+    .join(" ")
+    .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
 function RouteComponent() {
   return <MePage />;
 }
@@ -287,6 +330,9 @@ export function MePage({
   const [selectedDateHistoryId, setSelectedDateHistoryId] = useState<
     null | string
   >(initialDateId ?? null);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<
+    Date | undefined
+  >();
   const [dashboardChatsComponent, setDashboardChatsComponent] =
     useState<DashboardChatsComponent | null>(null);
 
@@ -462,7 +508,7 @@ export function MePage({
   ];
   const readinessReady =
     canDate && readinessItems.every((item) => item.checked);
-  const pendingRequests = summary?.requests ?? [];
+  const pendingRequests = useMemo(() => summary?.requests ?? [], [summary]);
   const selectedDateHistory =
     selectedDateHistoryId === demoDateHistory.id ? demoDateHistory : null;
   const unreadRequestCount = pendingRequests.filter(
@@ -472,6 +518,49 @@ export function MePage({
   const chatBadgeCount = pendingRequests.length;
   const notificationBadgeCount =
     unreadRequestCount + (summary?.readiness.pendingReviews ?? 0);
+
+  const getMatchesForDay = (date: Date) => {
+    const datesOnDay = [demoDateHistory, ...pendingRequests].filter((req) => {
+      const reqDate = new Date(req.scheduledAt);
+      return (
+        reqDate.getFullYear() === date.getFullYear() &&
+        reqDate.getMonth() === date.getMonth() &&
+        reqDate.getDate() === date.getDate()
+      );
+    });
+
+    return datesOnDay
+      .map((req) => getAcceptedMatchForRequest(req))
+      .filter(Boolean) as {
+      id: string;
+      displayName: string;
+      photoUrl?: string;
+      profilePhotoUrl?: string;
+    }[];
+  };
+
+  const filteredDates = useMemo(() => {
+    const dates = [demoDateHistory, ...pendingRequests];
+    if (!selectedCalendarDate) {
+      return dates.toSorted(
+        (a, b) =>
+          new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
+      );
+    }
+    return dates
+      .filter((request) => {
+        const requestDate = new Date(request.scheduledAt);
+        return (
+          requestDate.getFullYear() === selectedCalendarDate.getFullYear() &&
+          requestDate.getMonth() === selectedCalendarDate.getMonth() &&
+          requestDate.getDate() === selectedCalendarDate.getDate()
+        );
+      })
+      .toSorted(
+        (a, b) =>
+          new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
+      );
+  }, [pendingRequests, selectedCalendarDate]);
   const upcomingDates = [
     ...pendingRequests.map((request) => ({
       area: request.searchArea,
@@ -710,7 +799,7 @@ export function MePage({
       <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12">
         {/* LEFT SIDEBAR NAVIGATION */}
         <aside className="lg:col-span-3 border-r border-border/80 p-5 hidden lg:flex flex-col justify-between sticky top-0 h-screen overflow-y-auto">
-          <div className="flex flex-col gap-8 pt-16">
+          <div className="flex flex-col gap-8 pt-2">
             {/* Menu Links */}
             <nav className="flex flex-col gap-2">
               <button
@@ -1402,65 +1491,218 @@ export function MePage({
                   Booked date requests and confirmed plans show up here.
                 </p>
               </div>
-              <div className="grid gap-4 p-5">
-                {[demoDateHistory, ...pendingRequests].map((request) => {
-                  const requestId =
-                    "id" in request ? request.id : demoDateHistory.id;
-                  const requestDate = new Date(request.scheduledAt);
-                  const places = request.places ?? [];
+              <div className="flex flex-col items-center gap-6 p-5">
+                {/* Shadcn Calendar Component */}
+                <Card className="w-full max-w-md p-4 bg-card/45 border-border rounded-2xl flex justify-center shadow-md">
+                  <Calendar
+                    mode="single"
+                    selected={selectedCalendarDate}
+                    onSelect={setSelectedCalendarDate}
+                    className="w-full [--cell-size:3.25rem] bg-transparent border-0"
+                    components={{
+                      DayButton: (dayButtonProps) => {
+                        const { day, modifiers, className, children, ...rest } =
+                          dayButtonProps;
+                        const dayMatches = getMatchesForDay(day.date);
 
-                  return (
-                    <Card
-                      className="rounded-2xl border-border bg-card/45"
-                      key={requestId}
+                        return (
+                          <CalendarDayButton
+                            day={day}
+                            modifiers={modifiers}
+                            className={cn(
+                              className,
+                              "flex flex-col items-center justify-between py-1.5 h-full"
+                            )}
+                            {...rest}
+                          >
+                            <span className="text-xs font-semibold">
+                              {children}
+                            </span>
+                            {dayMatches.length > 0 && (
+                              <div className="flex -space-x-1.5 overflow-hidden mt-auto">
+                                {dayMatches.slice(0, 3).map((match, i) => (
+                                  <Avatar
+                                    className="size-4.5 border border-background shrink-0"
+                                    key={match.id || i}
+                                  >
+                                    <AvatarImage
+                                      src={
+                                        match.photoUrl || match.profilePhotoUrl
+                                      }
+                                    />
+                                    <AvatarFallback className="text-[6px] flex items-center justify-center bg-muted text-muted-foreground">
+                                      {match.displayName?.[0] || "?"}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                ))}
+                              </div>
+                            )}
+                          </CalendarDayButton>
+                        );
+                      },
+                    }}
+                  />
+                </Card>
+
+                {/* Selected Day Header */}
+                <div className="w-full flex items-center justify-between px-1">
+                  <h3 className="font-bold text-xs text-muted-foreground uppercase tracking-wider">
+                    {selectedCalendarDate
+                      ? selectedCalendarDate.toLocaleDateString(undefined, {
+                          weekday: "long",
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : "All Dates"}
+                  </h3>
+                  {selectedCalendarDate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedCalendarDate(undefined)}
+                      className="text-xs text-muted-foreground hover:text-foreground h-7 rounded-full px-3"
                     >
-                      <CardHeader>
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <CardTitle className="text-base">
-                              {request.what.map(formatLabel).join(", ")} date
-                            </CardTitle>
-                            <CardDescription>
-                              {requestDate.toLocaleDateString()} at{" "}
-                              {requestDate.toLocaleTimeString([], {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </CardDescription>
-                          </div>
-                          <Badge className="rounded-full capitalize">
-                            {request.status}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="flex flex-col gap-3">
-                        <p className="text-sm text-muted-foreground">
-                          {request.searchArea}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {places.slice(0, 3).map((place) => (
-                            <Badge
-                              className="rounded-full"
-                              key={place.placeId}
-                              variant="secondary"
-                            >
-                              {place.name}
-                            </Badge>
-                          ))}
-                        </div>
-                        <Button
-                          className="w-fit rounded-full"
-                          onClick={() => openDateHistory(requestId)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          View date
-                        </Button>
+                      Show All
+                    </Button>
+                  )}
+                </div>
+
+                {/* Dates List */}
+                <div className="grid gap-4 w-full">
+                  {filteredDates.length === 0 ? (
+                    <Card className="rounded-2xl border-border bg-card/45">
+                      <CardContent className="p-8 text-center text-sm text-muted-foreground">
+                        No dates scheduled for this day.
                       </CardContent>
                     </Card>
-                  );
-                })}
+                  ) : (
+                    filteredDates.map((request) => {
+                      const requestId =
+                        "id" in request ? request.id : demoDateHistory.id;
+                      const requestDate = new Date(request.scheduledAt);
+                      const places = request.places ?? [];
+                      const acceptedMatch = getAcceptedMatchForRequest(request);
+
+                      const dateTypes = request.what
+                        .map((w: string) => w.toLowerCase())
+                        .filter((w: string) =>
+                          ["eat", "drink", "play"].includes(w)
+                        )
+                        .map(
+                          (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
+                        );
+
+                      return (
+                        <Card
+                          className="rounded-xl border-border bg-card/40 hover:bg-card/50 transition duration-200"
+                          key={requestId}
+                        >
+                          <CardContent className="p-4 flex items-start gap-4">
+                            {/* Avatar / Icon on Left */}
+                            <div className="shrink-0">
+                              {acceptedMatch ? (
+                                <Avatar className="size-12 rounded-full border border-border/80 shadow-sm">
+                                  <AvatarImage
+                                    src={
+                                      acceptedMatch.photoUrl ||
+                                      acceptedMatch.profilePhotoUrl
+                                    }
+                                  />
+                                  <AvatarFallback className="text-sm font-semibold bg-primary/10 text-primary">
+                                    {acceptedMatch.displayName[0]}
+                                  </AvatarFallback>
+                                </Avatar>
+                              ) : (
+                                <div className="size-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
+                                  <CalendarHeart className="size-6 text-primary/80 animate-pulse" />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Details in the middle/right */}
+                            <div className="flex-1 min-w-0 flex flex-col gap-1.5">
+                              {/* Top Row: Date types & Status Badge */}
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex flex-wrap gap-1.5">
+                                  {dateTypes.map((type) => (
+                                    <span
+                                      key={type}
+                                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-amber-950 shadow-sm"
+                                    >
+                                      {type}
+                                    </span>
+                                  ))}
+                                </div>
+
+                                <Badge
+                                  className={cn(
+                                    "rounded-full text-[10px] font-medium border-0 px-2 py-0.5 capitalize shadow-sm",
+                                    request.status === "places_selected" &&
+                                      "bg-muted text-muted-foreground",
+                                    (request.status === "review_due" ||
+                                      request.status === "Review due") &&
+                                      "bg-destructive/10 text-destructive dark:bg-destructive/20",
+                                    request.status === "accepted" &&
+                                      "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                                  )}
+                                >
+                                  {formatStatus(request.status)}
+                                </Badge>
+                              </div>
+
+                              {/* Title */}
+                              <div className="flex flex-col">
+                                <h4 className="font-bold text-sm text-foreground truncate">
+                                  Date with{" "}
+                                  {acceptedMatch
+                                    ? acceptedMatch.displayName
+                                    : "Matching..."}
+                                </h4>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {requestDate.toLocaleDateString(undefined, {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })}{" "}
+                                  at{" "}
+                                  {requestDate.toLocaleTimeString([], {
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                  })}
+                                  {request.searchArea
+                                    ? ` · ${request.searchArea}`
+                                    : ""}
+                                </p>
+                              </div>
+
+                              {/* Places details (slimmer list) */}
+                              {places.length > 0 && (
+                                <p className="text-xs text-muted-foreground/80 truncate">
+                                  <span className="font-semibold text-muted-foreground/90">
+                                    At:
+                                  </span>{" "}
+                                  {places.map((p) => p.name).join(", ")}
+                                </p>
+                              )}
+
+                              {/* Action Button */}
+                              <div className="mt-1 flex items-center justify-between">
+                                <Button
+                                  className="rounded-full h-8 px-4 text-xs font-semibold"
+                                  onClick={() => openDateHistory(requestId)}
+                                  type="button"
+                                  variant="outline"
+                                >
+                                  View details
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
           )}

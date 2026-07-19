@@ -371,6 +371,48 @@ describe("dating routes", () => {
     });
   });
 
+  it("enforces date overlap prevention (within 2 hours)", async () => {
+    const headers = authHeaders({
+      "x-chewbuu-test-user-id": "overlap-test-user",
+    });
+
+    // First request at 12:00
+    const response1 = await app.request("/dating/requests", {
+      body: JSON.stringify({
+        ...dateRequestPayload,
+        scheduledAt: "2026-08-01T12:00:00.000Z",
+      }),
+      headers,
+      method: "POST",
+    });
+    expect(response1.status).toBe(201);
+
+    // Second request at 13:00 (overlaps - within 2 hours!)
+    const response2 = await app.request("/dating/requests", {
+      body: JSON.stringify({
+        ...dateRequestPayload,
+        scheduledAt: "2026-08-01T13:00:00.000Z",
+      }),
+      headers,
+      method: "POST",
+    });
+    expect(response2.status).toBe(403);
+    expect(await response2.json()).toMatchObject({
+      message: "You already have a date booked within 2 hours of this time.",
+    });
+
+    // Third request at 14:30 (allowed - more than 2 hours!)
+    const response3 = await app.request("/dating/requests", {
+      body: JSON.stringify({
+        ...dateRequestPayload,
+        scheduledAt: "2026-08-01T14:30:00.000Z",
+      }),
+      headers,
+      method: "POST",
+    });
+    expect(response3.status).toBe(201);
+  });
+
   it("allows sugar users to request covered group dates and returns matches", async () => {
     const headers = authHeaders({
       "x-chewbuu-test-tier": "sugar",
