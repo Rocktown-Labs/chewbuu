@@ -49,12 +49,20 @@ jobs:
         id: get_expiration_date
         run: echo "EXPIRES_AT=$(date -u --date '+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
 
+      - name: Cleanup existing preview branch if present
+        uses: neondatabase/delete-branch-action@v3
+        continue-on-error: true
+        with:
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: preview-pr-${{ github.event.number }}
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+
       - name: Create or Reuse Neon Branch
         id: create_neon_branch
         uses: neondatabase/create-branch-action@v6
         with:
           api_key: ${{ secrets.NEON_API_KEY }}
-          branch_name: preview/pr-${{ github.event.number }}
+          branch_name: preview-pr-${{ github.event.number }}
           expires_at: ${{ env.EXPIRES_AT }}
           project_id: ${{ vars.NEON_PROJECT_ID }}
 
@@ -73,5 +81,5 @@ jobs:
         uses: neondatabase/delete-branch-action@v3
         with:
           api_key: ${{ secrets.NEON_API_KEY }}
-          branch: preview/pr-${{ github.event.number }}
+          branch: preview-pr-${{ github.event.number }}
           project_id: ${{ vars.NEON_PROJECT_ID }}
