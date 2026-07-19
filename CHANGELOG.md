@@ -12,9 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
-- Updated Calendar view to integrate shadcn/ui interactive Calendar component.
-- Updated calendar days to render avatars of scheduled date partners.
-- Redesigned date history and request list to slim cards showing partner avatars, yellow date type badges, and clean mapped statuses.
+- Redesigned the Calendar view to a full-width Month Grid calendar with navigation controls, view selector, today action, and meal-type banner coloring (breakfast, lunch, dinner).
+- Filtered calendar events and date cards list to only show confirmed, review-due, and completed dates.
+- Redesigned date cards below the calendar to simple, flat row dividers featuring large partner avatars, calendar and map pin icons, and badges for location spots.
 - Aligned sidebar navigation links to place the Feed option next to the Calendar title.
 
 ## [0.6.3] - 2026-07-18

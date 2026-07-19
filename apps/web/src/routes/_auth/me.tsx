@@ -33,9 +33,12 @@ import {
 import {
   ArrowLeft,
   Bell,
+  Calendar as CalendarIcon,
   CalendarCheck,
   CalendarHeart,
   Check,
+  ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ClipboardList,
   Clock,
@@ -300,6 +303,64 @@ const formatStatus = (status: string) => {
     .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
+const getDaysInMonth = (date: Date) => {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+
+  // First day of the month
+  const firstDay = new Date(year, month, 1);
+  const startDayOfWeek = firstDay.getDay();
+
+  // Total days in the month
+  const totalDays = new Date(year, month + 1, 0).getDate();
+
+  const days: { date: Date; isCurrentMonth: boolean }[] = [];
+
+  // Padding from previous month
+  const prevMonthTotalDays = new Date(year, month, 0).getDate();
+  for (let i = startDayOfWeek - 1; i >= 0; i -= 1) {
+    days.push({
+      date: new Date(year, month - 1, prevMonthTotalDays - i),
+      isCurrentMonth: false,
+    });
+  }
+
+  // Days of current month
+  for (let i = 1; i <= totalDays; i += 1) {
+    days.push({
+      date: new Date(year, month, i),
+      isCurrentMonth: true,
+    });
+  }
+
+  // Padding from next month
+  const remaining = days.length % 7;
+  if (remaining > 0) {
+    const nextDaysNeeded = 7 - remaining;
+    for (let i = 1; i <= nextDaysNeeded; i += 1) {
+      days.push({
+        date: new Date(year, month + 1, i),
+        isCurrentMonth: false,
+      });
+    }
+  }
+
+  // Ensure exactly 42 days (6 weeks) for layout consistency
+  while (days.length < 42) {
+    const lastDay = days.at(-1);
+    if (lastDay) {
+      const nextDate = new Date(lastDay.date);
+      nextDate.setDate(nextDate.getDate() + 1);
+      days.push({
+        date: nextDate,
+        isCurrentMonth: false,
+      });
+    }
+  }
+
+  return days;
+};
+
 function RouteComponent() {
   return <MePage />;
 }
@@ -334,6 +395,11 @@ export function MePage({
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<
     Date | undefined
   >();
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
+  const calendarDays = useMemo(
+    () => getDaysInMonth(currentMonth),
+    [currentMonth]
+  );
   const [dashboardChatsComponent, setDashboardChatsComponent] =
     useState<DashboardChatsComponent | null>(null);
 
@@ -520,8 +586,20 @@ export function MePage({
   const notificationBadgeCount =
     unreadRequestCount + (summary?.readiness.pendingReviews ?? 0);
 
-  const getMatchesForDay = (date: Date) => {
-    const datesOnDay = [demoDateHistory, ...pendingRequests].filter((req) => {
+  const confirmedDates = useMemo(() => {
+    return [demoDateHistory, ...pendingRequests].filter((req) => {
+      const status = (req.status ?? "").toLowerCase();
+      return (
+        status === "accepted" ||
+        status === "completed" ||
+        status === "review_due" ||
+        status === "review due"
+      );
+    });
+  }, [pendingRequests]);
+
+  const getDatesForDay = (date: Date) => {
+    return confirmedDates.filter((req) => {
       const reqDate = new Date(req.scheduledAt);
       return (
         reqDate.getFullYear() === date.getFullYear() &&
@@ -529,6 +607,10 @@ export function MePage({
         reqDate.getDate() === date.getDate()
       );
     });
+  };
+
+  const getMatchesForDay = (date: Date) => {
+    const datesOnDay = getDatesForDay(date);
 
     return datesOnDay
       .map((req) => getAcceptedMatchForRequest(req))
@@ -541,14 +623,13 @@ export function MePage({
   };
 
   const filteredDates = useMemo(() => {
-    const dates = [demoDateHistory, ...pendingRequests];
     if (!selectedCalendarDate) {
-      return dates.toSorted(
+      return confirmedDates.toSorted(
         (a, b) =>
           new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
       );
     }
-    return dates
+    return confirmedDates
       .filter((request) => {
         const requestDate = new Date(request.scheduledAt);
         return (
@@ -561,7 +642,7 @@ export function MePage({
         (a, b) =>
           new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
       );
-  }, [pendingRequests, selectedCalendarDate]);
+  }, [confirmedDates, selectedCalendarDate]);
   const upcomingDates = [
     ...pendingRequests.map((request) => ({
       area: request.searchArea,
@@ -1485,224 +1566,362 @@ export function MePage({
           )}
 
           {activeTab === "calendar" && (
-            <div className="flex flex-col">
-              <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
-                <h2 className="text-xl font-bold">Calendar</h2>
-                <p className="mt-1 text-muted-foreground text-xs">
-                  Booked date requests and confirmed plans show up here.
-                </p>
-              </div>
-              <div className="flex flex-col items-center gap-6 p-5">
-                {/* Shadcn Calendar Component */}
-                <Card className="w-full max-w-md p-4 bg-card/45 border-border rounded-2xl flex justify-center shadow-md">
-                  <Calendar
-                    mode="single"
-                    selected={selectedCalendarDate}
-                    onSelect={setSelectedCalendarDate}
-                    className="w-full [--cell-size:3.25rem] bg-transparent border-0"
-                    components={{
-                      DayButton: (dayButtonProps) => {
-                        const { day, modifiers, className, children, ...rest } =
-                          dayButtonProps;
-                        const dayMatches = getMatchesForDay(day.date);
+            <div className="flex flex-col h-full bg-background">
+              {/* Calendar Header with Controls */}
+              <div className="border-b border-border/80 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
+                <div>
+                  <h2 className="text-xl font-bold">Calendar</h2>
+                  <p className="mt-1 text-muted-foreground text-xs font-medium">
+                    Only confirmed dates show here. Block off your schedule.
+                  </p>
+                </div>
 
-                        return (
-                          <CalendarDayButton
-                            day={day}
-                            modifiers={modifiers}
-                            className={cn(
-                              className,
-                              "flex flex-col items-center justify-between py-1.5 h-full"
-                            )}
-                            {...rest}
-                          >
-                            <span className="text-xs font-semibold">
-                              {children}
-                            </span>
-                            {dayMatches.length > 0 && (
-                              <div className="flex -space-x-1.5 overflow-hidden mt-auto">
-                                {dayMatches.slice(0, 3).map((match, i) => (
-                                  <Avatar
-                                    className="size-4.5 border border-background shrink-0"
-                                    key={match.id || i}
-                                  >
-                                    <AvatarImage
-                                      src={
-                                        match.photoUrl || match.profilePhotoUrl
-                                      }
-                                    />
-                                    <AvatarFallback className="text-[6px] flex items-center justify-center bg-muted text-muted-foreground">
-                                      {match.displayName?.[0] || "?"}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                ))}
-                              </div>
-                            )}
-                          </CalendarDayButton>
-                        );
-                      },
-                    }}
-                  />
-                </Card>
-
-                {/* Selected Day Header */}
-                <div className="w-full flex items-center justify-between px-1">
-                  <h3 className="font-bold text-xs text-muted-foreground uppercase tracking-wider">
-                    {selectedCalendarDate
-                      ? selectedCalendarDate.toLocaleDateString(undefined, {
-                          weekday: "long",
-                          month: "short",
-                          day: "numeric",
-                        })
-                      : "All Dates"}
-                  </h3>
-                  {selectedCalendarDate && (
+                {/* Navigation controls matching screenshot_1784484597.png */}
+                <div className="flex items-center justify-between md:justify-end gap-3 flex-wrap">
+                  <div className="flex items-center bg-card border border-border rounded-lg shadow-sm p-0.5">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setSelectedCalendarDate(undefined)}
-                      className="text-xs text-muted-foreground hover:text-foreground h-7 rounded-full px-3"
+                      onClick={() => {
+                        setCurrentMonth(new Date());
+                        setSelectedCalendarDate(undefined);
+                      }}
+                      className="text-xs font-semibold px-3 h-8 rounded-md hover:bg-muted"
                     >
-                      Show All
+                      Today
                     </Button>
-                  )}
+                    <div className="w-px h-4 bg-border/60" />
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => {
+                        const prev = new Date(currentMonth);
+                        prev.setMonth(prev.getMonth() - 1);
+                        setCurrentMonth(prev);
+                      }}
+                      className="size-8 rounded-md hover:bg-muted animate-none"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => {
+                        const next = new Date(currentMonth);
+                        next.setMonth(next.getMonth() + 1);
+                        setCurrentMonth(next);
+                      }}
+                      className="size-8 rounded-md hover:bg-muted animate-none"
+                    >
+                      <ChevronRight className="size-4" />
+                    </Button>
+                  </div>
+
+                  {/* Current Month & Year Display */}
+                  <span className="text-base font-bold text-foreground min-w-[120px] text-center">
+                    {currentMonth.toLocaleDateString(undefined, {
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </span>
+
+                  <div className="flex items-center gap-2 ml-auto md:ml-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs font-medium h-9 rounded-lg border-border bg-card flex items-center gap-1.5 shadow-sm"
+                    >
+                      Month
+                      <ChevronDown className="size-3.5 text-muted-foreground" />
+                    </Button>
+                    <Button
+                      size="icon-sm"
+                      className="size-9 rounded-lg shadow-sm"
+                    >
+                      <Plus className="size-4.5" />
+                    </Button>
+                  </div>
                 </div>
+              </div>
 
-                {/* Dates List */}
-                <div className="grid gap-4 w-full">
-                  {filteredDates.length === 0 ? (
-                    <Card className="rounded-2xl border-border bg-card/45">
-                      <CardContent className="p-8 text-center text-sm text-muted-foreground">
-                        No dates scheduled for this day.
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    filteredDates.map((request) => {
-                      const requestId =
-                        "id" in request ? request.id : demoDateHistory.id;
-                      const requestDate = new Date(request.scheduledAt);
-                      const places = request.places ?? [];
-                      const acceptedMatch = getAcceptedMatchForRequest(request);
+              <div className="p-6 flex flex-col gap-6">
+                {/* Full-width Month Grid Calendar */}
+                <Card className="w-full bg-card/30 border-border rounded-2xl overflow-hidden shadow-lg">
+                  {/* Day of Week Labels */}
+                  <div className="grid grid-cols-7 bg-muted/30 border-b border-border/80 text-center py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                      (dayName) => (
+                        <div key={dayName}>{dayName}</div>
+                      )
+                    )}
+                  </div>
 
-                      const dateTypes = request.what
-                        .map((w: string) => w.toLowerCase())
-                        .filter((w: string) =>
-                          ["eat", "drink", "play"].includes(w)
-                        )
-                        .map(
-                          (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
-                        );
+                  {/* Day Grid */}
+                  <div className="grid grid-cols-7 border-l border-t border-border/30">
+                    {calendarDays.map(({ date: dayDate, isCurrentMonth }) => {
+                      const dayDates = getDatesForDay(dayDate);
+                      const isToday = isSameDay(dayDate, new Date());
+                      const isSelected =
+                        selectedCalendarDate &&
+                        isSameDay(dayDate, selectedCalendarDate);
 
                       return (
-                        <Card
-                          className="rounded-xl border-border bg-card/40 hover:bg-card/50 transition duration-200"
-                          key={requestId}
+                        <button
+                          type="button"
+                          key={dayDate.toISOString()}
+                          onClick={() => {
+                            if (
+                              selectedCalendarDate &&
+                              isSameDay(selectedCalendarDate, dayDate)
+                            ) {
+                              setSelectedCalendarDate(undefined);
+                            } else {
+                              setSelectedCalendarDate(dayDate);
+                            }
+                          }}
+                          className={cn(
+                            "border-r border-b border-border/30 min-h-[110px] p-2 flex flex-col gap-1.5 transition duration-150 cursor-pointer select-none relative group text-left items-stretch justify-start w-full bg-transparent font-normal hover:bg-muted/10",
+                            !isCurrentMonth && "bg-muted/10 opacity-40",
+                            isSelected && "bg-primary/5 hover:bg-primary/10",
+                            isCurrentMonth && !isSelected && "hover:bg-muted/20"
+                          )}
                         >
-                          <CardContent className="p-4 flex items-start gap-4">
-                            {/* Avatar / Icon on Left */}
-                            <div className="shrink-0">
-                              {acceptedMatch ? (
-                                <Avatar className="size-12 rounded-full border border-border/80 shadow-sm">
-                                  <AvatarImage
-                                    src={
-                                      acceptedMatch.photoUrl ||
-                                      acceptedMatch.profilePhotoUrl
-                                    }
-                                  />
-                                  <AvatarFallback className="text-sm font-semibold bg-primary/10 text-primary">
-                                    {acceptedMatch.displayName[0]}
-                                  </AvatarFallback>
-                                </Avatar>
-                              ) : (
-                                <div className="size-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
-                                  <CalendarHeart className="size-6 text-primary/80 animate-pulse" />
-                                </div>
+                          {/* Day Number Header */}
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={cn(
+                                "text-xs font-bold flex items-center justify-center size-6 rounded-full transition duration-150",
+                                isToday &&
+                                  "bg-foreground text-background font-extrabold shadow-sm",
+                                !isToday && isCurrentMonth && "text-foreground",
+                                !isToday &&
+                                  !isCurrentMonth &&
+                                  "text-muted-foreground"
                               )}
-                            </div>
+                            >
+                              {dayDate.getDate()}
+                            </span>
+                            {isSelected && (
+                              <span className="size-1.5 rounded-full bg-primary" />
+                            )}
+                          </div>
 
-                            {/* Details in the middle/right */}
-                            <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                              {/* Top Row: Date types & Status Badge */}
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
-                                <div className="flex flex-wrap gap-1.5">
-                                  {dateTypes.map((type) => (
-                                    <span
-                                      key={type}
-                                      className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400 text-amber-950 shadow-sm"
-                                    >
-                                      {type}
-                                    </span>
-                                  ))}
-                                </div>
+                          {/* Event Banners / Pills */}
+                          <div className="flex flex-col gap-1 mt-auto w-full overflow-hidden">
+                            {dayDates.slice(0, 3).map((req) => {
+                              const match = getAcceptedMatchForRequest(req);
+                              const reqDate = new Date(req.scheduledAt);
+                              const hour = reqDate.getHours();
 
-                                <Badge
+                              // Meal Type Details
+                              let mealType = "Dinner";
+                              let mealColorClass =
+                                "bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-400 border-l-2 border-indigo-500";
+
+                              if (hour < 11) {
+                                mealType = "Breakfast";
+                                mealColorClass =
+                                  "bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border-l-2 border-amber-500";
+                              } else if (hour < 16) {
+                                mealType = "Lunch";
+                                mealColorClass =
+                                  "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 border-l-2 border-emerald-500";
+                              }
+
+                              return (
+                                <div
+                                  key={req.id}
                                   className={cn(
-                                    "rounded-full text-[10px] font-medium border-0 px-2 py-0.5 capitalize shadow-sm",
-                                    request.status === "places_selected" &&
-                                      "bg-muted text-muted-foreground",
-                                    (request.status === "review_due" ||
-                                      request.status === "Review due") &&
-                                      "bg-destructive/10 text-destructive dark:bg-destructive/20",
-                                    request.status === "accepted" &&
-                                      "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                                    "flex items-center gap-1.5 px-1.5 py-1 rounded text-[10px] font-bold leading-none truncate w-full shadow-sm",
+                                    mealColorClass
                                   )}
                                 >
-                                  {formatStatus(request.status)}
-                                </Badge>
+                                  {match ? (
+                                    <Avatar className="size-4 shrink-0 rounded-full border border-background">
+                                      <AvatarImage
+                                        src={
+                                          match.photoUrl ||
+                                          match.profilePhotoUrl
+                                        }
+                                      />
+                                      <AvatarFallback className="text-[5px]">
+                                        {match.displayName?.[0]}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  ) : (
+                                    <CalendarHeart className="size-3 text-current/80 shrink-0" />
+                                  )}
+                                  <span className="truncate">
+                                    {match ? match.displayName : "Matching"} ·{" "}
+                                    {mealType}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                            {dayDates.length > 3 && (
+                              <div className="text-[9px] font-semibold text-muted-foreground text-center bg-muted/40 py-0.5 rounded">
+                                + {dayDates.length - 3} more
                               </div>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Card>
 
-                              {/* Title */}
-                              <div className="flex flex-col">
-                                <h4 className="font-bold text-sm text-foreground truncate">
-                                  Date with{" "}
-                                  {acceptedMatch
-                                    ? acceptedMatch.displayName
-                                    : "Matching..."}
-                                </h4>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {requestDate.toLocaleDateString(undefined, {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                  })}{" "}
-                                  at{" "}
-                                  {requestDate.toLocaleTimeString([], {
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                  })}
-                                  {request.searchArea
-                                    ? ` · ${request.searchArea}`
-                                    : ""}
-                                </p>
-                              </div>
+                {/* Filter and Date List Section */}
+                <div className="flex flex-col gap-4 mt-2">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                    <h3 className="text-base font-bold text-foreground">
+                      {selectedCalendarDate ? (
+                        <span>
+                          Dates on{" "}
+                          <span className="text-primary">
+                            {selectedCalendarDate.toLocaleDateString(
+                              undefined,
+                              {
+                                weekday: "long",
+                                month: "short",
+                                day: "numeric",
+                              }
+                            )}
+                          </span>
+                        </span>
+                      ) : (
+                        "Upcoming meetings"
+                      )}
+                    </h3>
+                    {selectedCalendarDate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedCalendarDate(undefined)}
+                        className="text-xs text-muted-foreground hover:text-foreground h-7 rounded-full px-3 hover:bg-muted"
+                      >
+                        Show All
+                      </Button>
+                    )}
+                  </div>
 
-                              {/* Places details (slimmer list) */}
-                              {places.length > 0 && (
-                                <p className="text-xs text-muted-foreground/80 truncate">
-                                  <span className="font-semibold text-muted-foreground/90">
-                                    At:
-                                  </span>{" "}
-                                  {places.map((p) => p.name).join(", ")}
-                                </p>
-                              )}
+                  {/* Redesigned Card List matching screenshot_1784485238.png */}
+                  <div className="flex flex-col w-full divide-y divide-border/60">
+                    {filteredDates.length === 0 ? (
+                      <div className="py-8 text-center text-sm text-muted-foreground">
+                        No dates scheduled for this day.
+                      </div>
+                    ) : (
+                      filteredDates.map((request) => {
+                        const requestId =
+                          "id" in request ? request.id : demoDateHistory.id;
+                        const requestDate = new Date(request.scheduledAt);
+                        const places = request.places ?? [];
+                        const acceptedMatch =
+                          getAcceptedMatchForRequest(request);
 
-                              {/* Action Button */}
-                              <div className="mt-1 flex items-center justify-between">
-                                <Button
-                                  className="rounded-full h-8 px-4 text-xs font-semibold"
-                                  onClick={() => openDateHistory(requestId)}
-                                  type="button"
-                                  variant="outline"
-                                >
-                                  View details
-                                </Button>
+                        const formattedDate = requestDate.toLocaleDateString(
+                          undefined,
+                          {
+                            month: "long",
+                            day: "numeric",
+                            year: "numeric",
+                          }
+                        );
+                        const formattedTime = requestDate.toLocaleTimeString(
+                          [],
+                          {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          }
+                        );
+
+                        return (
+                          <div
+                            key={requestId}
+                            className="py-4 flex items-center justify-between gap-4 group transition"
+                          >
+                            {/* Left part: Avatar & Info */}
+                            <div className="flex items-center gap-4 min-w-0">
+                              <Avatar className="size-12 rounded-full border border-border/80 shadow-sm shrink-0">
+                                <AvatarImage
+                                  src={
+                                    acceptedMatch?.photoUrl ||
+                                    acceptedMatch?.profilePhotoUrl
+                                  }
+                                />
+                                <AvatarFallback className="text-base font-semibold bg-primary/10 text-primary">
+                                  {acceptedMatch?.displayName?.[0] || "?"}
+                                </AvatarFallback>
+                              </Avatar>
+
+                              <div className="min-w-0 flex flex-col gap-1.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="font-bold text-base text-foreground truncate">
+                                    {acceptedMatch
+                                      ? acceptedMatch.displayName
+                                      : "Matching..."}
+                                  </h4>
+
+                                  <Badge
+                                    className={cn(
+                                      "rounded-full text-[10px] font-medium border-0 px-2 py-0.5 capitalize shadow-sm shrink-0",
+                                      request.status === "places_selected" &&
+                                        "bg-muted text-muted-foreground",
+                                      (request.status === "review_due" ||
+                                        request.status === "Review due") &&
+                                        "bg-destructive/10 text-destructive dark:bg-destructive/20",
+                                      request.status === "accepted" &&
+                                        "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
+                                    )}
+                                  >
+                                    {formatStatus(request.status)}
+                                  </Badge>
+                                </div>
+
+                                {/* Calendar Row */}
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <CalendarIcon className="size-4 shrink-0 opacity-70" />
+                                  <span>
+                                    {formattedDate} at {formattedTime}
+                                  </span>
+                                </div>
+
+                                {/* MapPin / Places Badges Row */}
+                                {places.length > 0 && (
+                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                                    <MapPin className="size-4 shrink-0 opacity-70" />
+                                    <div className="flex flex-wrap gap-1">
+                                      {places.map((place) => (
+                                        <Badge
+                                          key={place.placeId}
+                                          variant="secondary"
+                                          className="text-[10px] px-2 py-0 h-5 font-medium rounded-md bg-muted/60"
+                                        >
+                                          {place.name}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })
-                  )}
+
+                            {/* Right part: Action / Menu */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Button
+                                className="rounded-full h-8 px-4 text-xs font-semibold"
+                                onClick={() => openDateHistory(requestId)}
+                                type="button"
+                                variant="outline"
+                              >
+                                View details
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
