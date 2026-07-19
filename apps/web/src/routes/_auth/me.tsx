@@ -497,7 +497,7 @@ export function MePage({
   }, [userRecaps]);
 
   const displayName = session.data?.user.name ?? "there";
-  const tier =
+  const membershipTier =
     summary?.membershipTier ?? session.data?.user.membershipTier ?? "social";
   const canDate = summary?.readiness.canDate ?? false;
   const media = profile?.media ?? [];

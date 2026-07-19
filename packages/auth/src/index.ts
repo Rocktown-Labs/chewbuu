@@ -3,6 +3,7 @@ import { stripe } from "@better-auth/stripe";
 import { createDb, ensureSchemaMigrated } from "@chewbuu/db";
 import * as schema from "@chewbuu/db/schema/auth";
 import { env } from "@chewbuu/env/server";
+import { Redis } from "@upstash/redis";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins/admin";
