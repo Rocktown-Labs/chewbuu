@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import {
+  Bell,
   CalendarHeart,
   HeartHandshake,
   Monitor,
@@ -54,7 +55,7 @@ export default function Header() {
             Chewbuu
           </Link>
         </div>
-        <nav className="hidden items-center justify-center gap-5 text-muted-foreground text-sm sm:flex">
+        <nav className="hidden items-center justify-center gap-5 text-muted-foreground text-sm lg:flex">
           {session
             ? appLinks.map(({ to, label }) => (
                 <Link
@@ -86,6 +87,15 @@ export default function Header() {
           >
             <ThemeIcon className="size-4" />
           </button>
+          {session && (
+            <Link
+              aria-label="Alerts"
+              className="relative flex size-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              to="/me/notifications"
+            >
+              <Bell aria-hidden="true" className="size-4" />
+            </Link>
+          )}
           {!session && (
             <Link
               className="hidden rounded-full border border-border bg-card px-4 py-2 font-medium text-foreground text-sm transition hover:bg-muted md:inline-flex"
@@ -109,15 +119,6 @@ export default function Header() {
             >
               <CalendarHeart aria-hidden="true" className="size-4" />
               Plan
-            </Link>
-          )}
-          {session && (
-            <Link
-              aria-label="My profile"
-              className="hidden size-9 items-center justify-center rounded-full border border-border bg-card text-foreground transition hover:bg-muted md:flex"
-              to="/me"
-            >
-              <UserRound aria-hidden="true" className="size-4" />
             </Link>
           )}
           <UserMenu />

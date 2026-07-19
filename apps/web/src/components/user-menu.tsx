@@ -1,3 +1,8 @@
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@chewbuu/ui/components/avatar";
 import { Button } from "@chewbuu/ui/components/button";
 import {
   DropdownMenu,
@@ -28,11 +33,24 @@ export default function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button className="rounded-full" variant="outline" />}
+        render={
+          <Button
+            aria-label="Account menu"
+            className="size-9 rounded-full p-0"
+            variant="outline"
+          />
+        }
       >
-        {session.user.name}
+        <Avatar className="size-8">
+          {session.user.image ? (
+            <AvatarImage alt="" src={session.user.image} />
+          ) : null}
+          <AvatarFallback className="text-[10px] font-bold uppercase">
+            {session.user.name?.slice(0, 2) ?? "ME"}
+          </AvatarFallback>
+        </Avatar>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="bg-card">
+      <DropdownMenuContent align="end" className="bg-card">
         <DropdownMenuGroup>
           <DropdownMenuLabel>My Account</DropdownMenuLabel>
           <DropdownMenuSeparator />

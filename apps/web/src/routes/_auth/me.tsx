@@ -12,6 +12,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@chewbuu/ui/components/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@chewbuu/ui/components/dialog";
 import { Input } from "@chewbuu/ui/components/input";
 import { Progress } from "@chewbuu/ui/components/progress";
 import { Textarea } from "@chewbuu/ui/components/textarea";
@@ -30,15 +37,20 @@ import {
   ChevronRight,
   ClipboardList,
   Clock,
+  Eye,
   ExternalLink,
   Heart,
   Home,
   LogOut,
   MapPin,
+  Menu,
   MessageCircle,
   MessageSquare,
+  MoreHorizontal,
+  Play,
   Plus,
   Search,
+  Settings,
   ShieldCheck,
   Star,
   User,
@@ -131,6 +143,13 @@ interface MePageProps {
 }
 
 type DashboardChatsComponent = ComponentType<{ activeChannelId?: string }>;
+type ProfileMode = "edit" | "menu" | "profile" | "settings";
+type ProfileStatTarget = "circles" | "friends" | "recaps";
+type ProfileMediaItem = {
+  kind: "intro_video" | "photo" | "profile_photo";
+  label: string;
+  url: string;
+};
 
 const getAge = (birthdayString: string) => {
   const birthday = new Date(birthdayString);
@@ -253,9 +272,11 @@ export function MePage({
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
   const [spotsCategory, setSpotsCategory] =
     useState<SpotCategory>(initialSpotsCategory);
-  const [profileSubTab, setProfileSubTab] = useState<
-    "intro" | "photos" | "recaps"
-  >("recaps");
+  const [profileMode, setProfileMode] = useState<ProfileMode>("profile");
+  const [profileStatTarget, setProfileStatTarget] =
+    useState<ProfileStatTarget | null>(null);
+  const [profilePhotoActionsOpen, setProfilePhotoActionsOpen] = useState(false);
+  const [mediaViewer, setMediaViewer] = useState<ProfileMediaItem | null>(null);
 
   const [summary, setSummary] = useState<DatingSummary | null>(null);
   const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
@@ -370,6 +391,31 @@ export function MePage({
     ...(profilePhoto ? [{ url: profilePhoto }] : []),
     ...extraPhotos,
   ];
+  const profileMediaItems: ProfileMediaItem[] = [
+    ...(introVideo
+      ? [
+          {
+            kind: "intro_video" as const,
+            label: "Verified intro",
+            url: introVideo,
+          },
+        ]
+      : []),
+    ...(profilePhoto
+      ? [
+          {
+            kind: "profile_photo" as const,
+            label: "Profile photo",
+            url: profilePhoto,
+          },
+        ]
+      : []),
+    ...extraPhotos.map((photo, index) => ({
+      kind: "photo" as const,
+      label: `Photo ${index + 1}`,
+      url: photo.url,
+    })),
+  ];
   const trustedContactCount = profile?.trustedContacts?.length ?? 0;
   const spouseInvite = profile?.friendInvites?.find(
     (invite) => invite.relationship === "spouse"
@@ -384,6 +430,14 @@ export function MePage({
   const pendingCircleInvites = circleInvites.filter(
     (invite) => invite.status !== "joined"
   );
+  const circleGroups = [
+    {
+      id: "close-friends",
+      members: circleMembers,
+      name: "Close Friends",
+      pending: pendingCircleInvites,
+    },
+  ];
   const age = profile?.birthday ? getAge(profile.birthday) : null;
   const profileComplete = Boolean(
     profile?.bio &&
@@ -483,6 +537,9 @@ export function MePage({
   const setDashboardTab = (tab: DashboardTab) => {
     setActiveTab(tab);
     pushMePath(routeForTab(tab));
+    if (tab !== "profile") {
+      setProfileStatTarget(null);
+    }
 
     if (tab === "matches" && pendingRequests.length > 0) {
       const nextReadIds = Array.from(
@@ -494,6 +551,20 @@ export function MePage({
         JSON.stringify(nextReadIds)
       );
     }
+  };
+
+  const openProfileMore = () => {
+    setActiveTab("profile");
+    setProfileMode("menu");
+    setProfileStatTarget(null);
+    pushMePath("/me/profile");
+  };
+
+  const openProfileMode = (mode: ProfileMode) => {
+    setActiveTab("profile");
+    setProfileMode(mode);
+    setProfileStatTarget(null);
+    pushMePath("/me/profile");
   };
 
   const openDateHistory = (dateId: string) => {
@@ -711,7 +782,7 @@ export function MePage({
               </button>
               <button
                 type="button"
-                onClick={() => setDashboardTab("profile")}
+                onClick={() => openProfileMode("profile")}
                 className={`flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold transition-all duration-200 cursor-pointer ${
                   activeTab === "profile"
                     ? "bg-primary/10 text-primary"
@@ -723,7 +794,7 @@ export function MePage({
               </button>
               <button
                 type="button"
-                onClick={() => setDashboardTab("profile")}
+                onClick={() => openProfileMode("edit")}
                 className="flex items-center gap-4 px-4 py-3 rounded-full text-base font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200"
               >
                 <ClipboardList className="size-5" />
@@ -776,28 +847,6 @@ export function MePage({
             </button>
           </div>
         </aside>
-
-        {/* MOBILE TOP BAR (visible on mobile only) */}
-        <header className="lg:hidden border-b border-border/80 p-4 flex items-center justify-between sticky top-0 bg-background/80 backdrop-blur-md z-40 w-full col-span-1">
-          <div className="flex items-center gap-2">
-            <img
-              src="/brand/chewbuu-logo-500-trans.png"
-              alt="Chewbuu"
-              className="h-6 w-6"
-            />
-            <span className="font-extrabold tracking-tight">chewbuu</span>
-          </div>
-          <Link
-            to={canDate ? "/date/new" : "/onboarding"}
-            className={buttonVariants({
-              className: "rounded-full text-xs font-semibold h-8",
-              size: "sm",
-            })}
-          >
-            <CalendarHeart className="size-4" />
-            Plan a Date
-          </Link>
-        </header>
 
         {/* MAIN MIDDLE COLUMN (FEED / SPOTS / MATCHES / CHATS / PROFILE) */}
         <main className="lg:col-span-6 border-r border-border/80 min-h-screen pb-24 lg:pb-6">
@@ -1430,402 +1479,463 @@ export function MePage({
           {activeTab === "profile" && (
             <div className="flex flex-col">
               <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30 flex items-center justify-between">
-                <h2 className="text-xl font-bold">My Profile</h2>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold">
+                    {profileMode === "settings"
+                      ? "Settings"
+                      : profileMode === "edit"
+                        ? "Edit Profile"
+                        : profileMode === "menu"
+                          ? "More"
+                          : "My Profile"}
+                  </h2>
+                  {profileMode === "profile" && (
+                    <MobileDailyLimit
+                      requestsCount={summary?.requests.length ?? 0}
+                      tier={tier}
+                    />
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   <Button
                     className="rounded-full text-xs font-semibold h-8"
-                    onClick={() => setProfileSubTab("recaps")}
+                    onClick={() =>
+                      setProfileMode(
+                        profileMode === "edit" ? "profile" : "edit"
+                      )
+                    }
                     size="sm"
                     type="button"
                     variant="outline"
                   >
-                    Edit Profile
+                    {profileMode === "edit" ? "View Profile" : "Edit Profile"}
                   </Button>
                   <Button
                     aria-label="Sign out"
-                    className="rounded-full lg:hidden"
-                    onClick={handleSignOut}
+                    className="rounded-full"
+                    onClick={openProfileMore}
                     size="icon-sm"
                     variant="ghost"
                   >
-                    <LogOut className="size-4" />
+                    <Menu className="size-4" />
                   </Button>
                 </div>
               </div>
 
-              {/* Instagram Header */}
-              <div className="p-5 flex flex-col gap-5 border-b border-border/80">
-                <div className="flex items-center gap-6 md:gap-10">
-                  <Avatar className="size-20 md:size-24 border-2 border-primary/20 shadow-md">
-                    {profilePhoto && <AvatarImage src={profilePhoto} />}
-                    <AvatarFallback className="font-bold text-lg uppercase bg-primary/10 text-primary">
-                      {displayName.slice(0, 2)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 grid grid-cols-3 gap-2 text-center">
-                    <div className="flex flex-col">
-                      <span className="font-extrabold text-lg md:text-xl text-foreground">
-                        {
-                          allRecaps.filter((r) => r.userName === displayName)
-                            .length
-                        }
-                      </span>
-                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
-                        Recaps
-                      </span>
-                    </div>
-                    <div className="flex flex-col border-x border-border/80">
-                      <span className="font-extrabold text-lg md:text-xl text-foreground flex items-center justify-center gap-0.5">
-                        {circleMembers.length}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
-                        Friends
-                      </span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-extrabold text-lg md:text-xl text-foreground">
-                        {circleInvites.length}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
-                        Circle
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* User Info */}
-                <div className="flex flex-col text-left gap-1.5 mt-2">
-                  <h3 className="font-bold text-lg text-foreground flex items-center gap-1.5">
-                    {displayName}
-                    {age ? (
-                      <span className="text-muted-foreground font-semibold">
-                        {age}
-                      </span>
-                    ) : null}
-                    <Check className="size-4 text-primary fill-primary/10 rounded-full" />
-                  </h3>
-                  {profile?.occupation && (
-                    <p className="text-xs font-semibold text-muted-foreground">
-                      {profile.occupation}
-                    </p>
-                  )}
-                  {profile?.bio && (
-                    <p className="text-sm text-foreground/90 mt-1 max-w-xl">
-                      {profile.bio}
-                    </p>
-                  )}
-
-                  {/* Private Details */}
-                  {spouseInvite && (
-                    <p className="text-xs text-muted-foreground">
-                      Spouse or partner invited:{" "}
-                      <span className="font-semibold text-foreground">
-                        @
-                        {spouseInvite.name ||
-                          spouseInvite.email?.split("@")[0] ||
-                          spouseInvite.phone ||
-                          "pending"}
-                      </span>
-                    </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {profile?.lookingFor?.map((item) => (
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] font-semibold rounded-full px-2.5 py-0.5"
-                        key={item}
-                      >
-                        {item}
-                      </Badge>
-                    ))}
-                    {profile?.kids && (
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] font-semibold rounded-full px-2.5 py-0.5"
-                      >
-                        {profile.kids}
-                      </Badge>
-                    )}
-                    {profile?.wantsKids && (
-                      <Badge
-                        variant="secondary"
-                        className="text-[10px] font-semibold rounded-full px-2.5 py-0.5"
-                      >
-                        {profile.wantsKids}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                {profilePhotos.length > 0 && (
-                  <div className="flex gap-3 overflow-x-auto pt-2">
-                    {profilePhotos.slice(0, 6).map((photo, index) => (
-                      <div
-                        className="h-28 w-28 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted/20"
-                        key={`${photo.url}-${index}`}
-                      >
-                        <img
-                          alt={`Profile ${index + 1}`}
-                          className="h-full w-full object-cover"
-                          src={photo.url}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Mobile widgets (desktop shows them in the right rail) */}
-              <div className="flex flex-col gap-4 p-5 lg:hidden">
-                <DashboardWidgets
-                  circleMembers={circleMembers}
-                  pendingCircleInvites={pendingCircleInvites}
-                  readinessItems={readinessItems}
-                  readinessReady={readinessReady}
-                  requestsCount={summary?.requests.length ?? 0}
+              {profileMode === "menu" && (
+                <ProfileMoreMenu
+                  onEdit={() => setProfileMode("edit")}
+                  onSettings={() => setProfileMode("settings")}
+                  onSignOut={handleSignOut}
+                  onViewProfile={() => setProfileMode("profile")}
                   tier={tier}
                 />
-              </div>
+              )}
 
-              {/* Instagram Sub-tabs */}
-              <div className="flex border-b border-border/80">
-                <button
-                  type="button"
-                  onClick={() => setProfileSubTab("recaps")}
-                  className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition duration-200 cursor-pointer ${
-                    profileSubTab === "recaps"
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Recaps
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setProfileSubTab("intro")}
-                  className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition duration-200 cursor-pointer ${
-                    profileSubTab === "intro"
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Verified Intro
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setProfileSubTab("photos")}
-                  className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition duration-200 cursor-pointer ${
-                    profileSubTab === "photos"
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Extra Photos
-                </button>
-              </div>
+              {profileMode === "settings" && (
+                <ProfileSettingsPanel profile={profile} tier={tier} />
+              )}
 
-              {/* Profile Sub-tab Content */}
-              <div className="p-5">
-                {profileSubTab === "recaps" && (
-                  <div className="flex flex-col gap-6">
-                    {/* Add Recap Trigger Button */}
-                    <Button
-                      onClick={() => setShowAddRecap(true)}
-                      className="rounded-full font-bold flex items-center justify-center gap-1.5 w-full border border-dashed border-primary/45 bg-primary/5 text-primary hover:bg-primary/10 transition"
-                      variant="outline"
-                    >
-                      <Plus className="size-4" />
-                      Upload New Date Recap
-                    </Button>
+              {profileMode === "edit" && (
+                <ProfileEditPanel
+                  profile={profile}
+                  setProfileMode={setProfileMode}
+                  tier={tier}
+                />
+              )}
 
-                    {/* Add Recap Form Dialog */}
-                    {showAddRecap && (
-                      <Card className="border-2 border-primary/30 p-5 mt-2 rounded-2xl bg-card/60">
-                        <form
-                          onSubmit={handleCreateRecap}
-                          className="flex flex-col gap-4"
+              {profileMode === "profile" && (
+                <>
+                  {/* Instagram Header */}
+                  <div className="p-5 flex flex-col gap-5 border-b border-border/80">
+                    <div className="flex items-center gap-6 md:gap-10">
+                      <button
+                        aria-label="Profile photo actions"
+                        className="rounded-full"
+                        onClick={() => setProfilePhotoActionsOpen(true)}
+                        type="button"
+                      >
+                        <Avatar className="size-20 md:size-24 border-2 border-primary/20 shadow-md">
+                          {profilePhoto && <AvatarImage src={profilePhoto} />}
+                          <AvatarFallback className="font-bold text-lg uppercase bg-primary/10 text-primary">
+                            {displayName.slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </button>
+                      <div className="flex-1 grid grid-cols-3 gap-2 text-center">
+                        <button
+                          className="flex flex-col rounded-xl px-2 py-1 transition hover:bg-card/60"
+                          onClick={() => setProfileStatTarget("recaps")}
+                          type="button"
                         >
-                          <h4 className="font-bold text-sm text-foreground">
-                            Write a New Date Recap
-                          </h4>
-                          <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+                          <span className="font-extrabold text-lg md:text-xl text-foreground">
+                            {
+                              allRecaps.filter(
+                                (r) => r.userName === displayName
+                              ).length
+                            }
+                          </span>
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
+                            Recaps
+                          </span>
+                        </button>
+                        <button
+                          className="flex flex-col border-x border-border/80 px-2 py-1 transition hover:bg-card/60"
+                          onClick={() => setProfileStatTarget("friends")}
+                          type="button"
+                        >
+                          <span className="font-extrabold text-lg md:text-xl text-foreground flex items-center justify-center gap-0.5">
+                            {circleMembers.length}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
+                            Friends
+                          </span>
+                        </button>
+                        <button
+                          className="flex flex-col rounded-xl px-2 py-1 transition hover:bg-card/60"
+                          onClick={() => setProfileStatTarget("circles")}
+                          type="button"
+                        >
+                          <span className="font-extrabold text-lg md:text-xl text-foreground">
+                            {circleGroups.length}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
+                            Circles
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* User Info */}
+                    <div className="flex flex-col text-left gap-1.5 mt-2">
+                      <h3 className="font-bold text-lg text-foreground flex items-center gap-1.5">
+                        {displayName}
+                        {age ? (
+                          <span className="text-muted-foreground font-semibold">
+                            {age}
+                          </span>
+                        ) : null}
+                        <Check className="size-4 text-primary fill-primary/10 rounded-full" />
+                      </h3>
+                      {profile?.occupation && (
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          {profile.occupation}
+                        </p>
+                      )}
+                      {profile?.bio && (
+                        <p className="text-sm text-foreground/90 mt-1 max-w-xl">
+                          {profile.bio}
+                        </p>
+                      )}
+
+                      {/* Private Details */}
+                      {spouseInvite && (
+                        <p className="text-xs text-muted-foreground">
+                          Spouse or partner invited:{" "}
+                          <span className="font-semibold text-foreground">
+                            @
+                            {spouseInvite.name ||
+                              spouseInvite.email?.split("@")[0] ||
+                              spouseInvite.phone ||
+                              "pending"}
+                          </span>
+                        </p>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {profile?.lookingFor?.map((item) => (
+                          <Badge
+                            variant="secondary"
+                            className="rounded-full bg-primary px-2.5 py-0.5 font-bold text-[10px] text-primary-foreground"
+                            key={item}
+                          >
+                            {item}
+                          </Badge>
+                        ))}
+                        {profile?.kids && (
+                          <Badge
+                            variant="secondary"
+                            className="rounded-full bg-primary px-2.5 py-0.5 font-bold text-[10px] text-primary-foreground"
+                          >
+                            {profile.kids}
+                          </Badge>
+                        )}
+                        {profile?.wantsKids && (
+                          <Badge
+                            variant="secondary"
+                            className="rounded-full bg-primary px-2.5 py-0.5 font-bold text-[10px] text-primary-foreground"
+                          >
+                            {profile.wantsKids}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <ProfileMediaRail
+                      media={profileMediaItems}
+                      onOpen={setMediaViewer}
+                    />
+                    <ProfileStatPanel
+                      circleGroups={circleGroups}
+                      recapsCount={
+                        allRecaps.filter((r) => r.userName === displayName)
+                          .length
+                      }
+                      target={profileStatTarget}
+                    />
+                  </div>
+
+                  {/* Profile Recaps */}
+                  <div className="flex border-b border-border/80">
+                    <button
+                      type="button"
+                      className="flex-1 border-primary border-b-2 py-3 font-bold text-primary text-xs uppercase tracking-wider transition duration-200"
+                    >
+                      Recaps
+                    </button>
+                  </div>
+
+                  {/* Profile Sub-tab Content */}
+                  <div className="p-5">
+                    <div className="flex flex-col gap-6">
+                      <Link
+                        className={buttonVariants({
+                          className:
+                            "w-full rounded-full border border-dashed border-primary/45 bg-primary/5 font-bold text-primary hover:bg-primary/10",
+                        })}
+                        to={canDate ? "/date/new" : "/onboarding"}
+                      >
+                        <CalendarHeart className="size-4" />
+                        Book a Date to Capture a Recap
+                      </Link>
+
+                      {/* Add Recap Form Dialog */}
+                      {showAddRecap && (
+                        <Card className="border-2 border-primary/30 p-5 mt-2 rounded-2xl bg-card/60">
+                          <form
+                            onSubmit={handleCreateRecap}
+                            className="flex flex-col gap-4"
+                          >
+                            <h4 className="font-bold text-sm text-foreground">
+                              Write a New Date Recap
+                            </h4>
+                            <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold text-muted-foreground ml-1">
+                                  Place Name
+                                </span>
+                                <Input
+                                  placeholder="E.g. KJ's Sandwich Shop"
+                                  value={recapForm.placeName}
+                                  onChange={(e) =>
+                                    setRecapForm({
+                                      ...recapForm,
+                                      placeName: e.target.value,
+                                    })
+                                  }
+                                  className="rounded-full h-9 text-xs"
+                                  required
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold text-muted-foreground ml-1">
+                                  Date Partner Name
+                                </span>
+                                <Input
+                                  placeholder="E.g. Sarah, Dax"
+                                  value={recapForm.personName}
+                                  onChange={(e) =>
+                                    setRecapForm({
+                                      ...recapForm,
+                                      personName: e.target.value,
+                                    })
+                                  }
+                                  className="rounded-full h-9 text-xs"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold text-muted-foreground ml-1">
+                                  Photo URL (Optional)
+                                </span>
+                                <Input
+                                  placeholder="E.g. https://example.com/date.jpg"
+                                  value={recapForm.photoUrl}
+                                  onChange={(e) =>
+                                    setRecapForm({
+                                      ...recapForm,
+                                      photoUrl: e.target.value,
+                                    })
+                                  }
+                                  className="rounded-full h-9 text-xs"
+                                />
+                              </div>
+                            </div>
+
                             <div className="flex flex-col gap-1">
                               <span className="text-[10px] font-bold text-muted-foreground ml-1">
-                                Place Name
+                                What did you love about this date?
                               </span>
-                              <Input
-                                placeholder="E.g. KJ's Sandwich Shop"
-                                value={recapForm.placeName}
+                              <Textarea
+                                placeholder="Describe your recap. E.g., Great conversations, loved the pool table..."
+                                value={recapForm.caption}
                                 onChange={(e) =>
                                   setRecapForm({
                                     ...recapForm,
-                                    placeName: e.target.value,
+                                    caption: e.target.value,
                                   })
                                 }
-                                className="rounded-full h-9 text-xs"
+                                className="rounded-xl min-h-16 text-xs p-3"
                                 required
                               />
                             </div>
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-bold text-muted-foreground ml-1">
-                                Date Partner Name
-                              </span>
-                              <Input
-                                placeholder="E.g. Sarah, Dax"
-                                value={recapForm.personName}
-                                onChange={(e) =>
-                                  setRecapForm({
-                                    ...recapForm,
-                                    personName: e.target.value,
-                                  })
-                                }
+
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                onClick={() => setShowAddRecap(false)}
+                                variant="ghost"
                                 className="rounded-full h-9 text-xs"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
-                            <div className="flex flex-col gap-1">
-                              <span className="text-[10px] font-bold text-muted-foreground ml-1">
-                                Photo URL (Optional)
-                              </span>
-                              <Input
-                                placeholder="E.g. https://example.com/date.jpg"
-                                value={recapForm.photoUrl}
-                                onChange={(e) =>
-                                  setRecapForm({
-                                    ...recapForm,
-                                    photoUrl: e.target.value,
-                                  })
-                                }
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="submit"
                                 className="rounded-full h-9 text-xs"
-                              />
+                              >
+                                Publish Recap
+                              </Button>
                             </div>
-                          </div>
-
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[10px] font-bold text-muted-foreground ml-1">
-                              What did you love about this date?
-                            </span>
-                            <Textarea
-                              placeholder="Describe your recap. E.g., Great conversations, loved the pool table..."
-                              value={recapForm.caption}
-                              onChange={(e) =>
-                                setRecapForm({
-                                  ...recapForm,
-                                  caption: e.target.value,
-                                })
-                              }
-                              className="rounded-xl min-h-16 text-xs p-3"
-                              required
-                            />
-                          </div>
-
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              type="button"
-                              onClick={() => setShowAddRecap(false)}
-                              variant="ghost"
-                              className="rounded-full h-9 text-xs"
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              type="submit"
-                              className="rounded-full h-9 text-xs"
-                            >
-                              Publish Recap
-                            </Button>
-                          </div>
-                        </form>
-                      </Card>
-                    )}
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {userRecaps.map((recap) => (
-                        <div
-                          className="rounded-2xl border bg-card overflow-hidden shadow-sm hover:shadow-md transition duration-200"
-                          key={recap.id}
-                        >
-                          {recap.photos[0] && (
-                            <div className="aspect-video w-full relative bg-muted/10">
-                              <img
-                                src={recap.photos[0]}
-                                alt={recap.placeName}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          )}
-                          <div className="p-4 flex flex-col gap-2">
-                            <span className="font-bold text-xs text-primary">
-                              {recap.placeName}
-                            </span>
-                            <p className="text-xs text-foreground/90 font-medium truncate">
-                              {recap.caption}
-                            </p>
-                            <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-2 border-t pt-2">
-                              <span>With {recap.personName}</span>
-                              <span>
-                                {new Date(recap.createdAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {userRecaps.length === 0 && (
-                        <p className="text-sm text-muted-foreground italic col-span-2 text-center py-8">
-                          No date recaps uploaded yet. Go on dates to post
-                          recaps.
-                        </p>
+                          </form>
+                        </Card>
                       )}
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {userRecaps.map((recap) => (
+                          <div
+                            className="rounded-2xl border bg-card overflow-hidden shadow-sm hover:shadow-md transition duration-200"
+                            key={recap.id}
+                          >
+                            {recap.photos[0] && (
+                              <div className="aspect-video w-full relative bg-muted/10">
+                                <img
+                                  src={recap.photos[0]}
+                                  alt={recap.placeName}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            )}
+                            <div className="p-4 flex flex-col gap-2">
+                              <span className="font-bold text-xs text-primary">
+                                {recap.placeName}
+                              </span>
+                              <p className="text-xs text-foreground/90 font-medium truncate">
+                                {recap.caption}
+                              </p>
+                              <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-2 border-t pt-2">
+                                <span>With {recap.personName}</span>
+                                <span>
+                                  {new Date(
+                                    recap.createdAt
+                                  ).toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {userRecaps.length === 0 && (
+                          <p className="text-sm text-muted-foreground italic col-span-2 text-center py-8">
+                            No date recaps uploaded yet. Go on dates to post
+                            recaps.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                )}
-
-                {profileSubTab === "intro" && (
-                  <div className="flex flex-col gap-4 max-w-xl mx-auto text-center py-4">
-                    {introVideo ? (
-                      <div className="aspect-video w-full rounded-2xl overflow-hidden border border-border bg-black relative">
-                        <video
-                          src={introVideo}
-                          controls
-                          className="w-full h-full object-cover"
-                        >
-                          <track kind="captions" />
-                        </video>
-                        <Badge className="absolute top-3 left-3 bg-primary text-primary-foreground font-bold text-[10px] rounded-full flex items-center gap-1">
-                          <Check className="size-3" /> Verified Live Intro
-                        </Badge>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground italic">
-                        No verified intro video uploaded yet.
-                      </p>
-                    )}
+                </>
+              )}
+              <Dialog
+                onOpenChange={(open) => setProfilePhotoActionsOpen(open)}
+                open={profilePhotoActionsOpen}
+              >
+                <DialogContent className="rounded-2xl bg-card">
+                  <DialogHeader>
+                    <DialogTitle>Profile media</DialogTitle>
+                    <DialogDescription>
+                      Choose how you want to open your profile media.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-2">
+                    <Button
+                      className="rounded-full justify-start"
+                      disabled={!profilePhoto}
+                      onClick={() => {
+                        if (profilePhoto) {
+                          setMediaViewer({
+                            kind: "profile_photo",
+                            label: "Profile photo",
+                            url: profilePhoto,
+                          });
+                          setProfilePhotoActionsOpen(false);
+                        }
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      <Eye className="size-4" />
+                      View image
+                    </Button>
+                    <Button
+                      className="rounded-full justify-start"
+                      disabled={!introVideo}
+                      onClick={() => {
+                        if (introVideo) {
+                          setMediaViewer({
+                            kind: "intro_video",
+                            label: "Verified intro",
+                            url: introVideo,
+                          });
+                          setProfilePhotoActionsOpen(false);
+                        }
+                      }}
+                      type="button"
+                    >
+                      <Play className="size-4" />
+                      Play intro
+                    </Button>
                   </div>
-                )}
-
-                {profileSubTab === "photos" && (
-                  <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
-                    {extraPhotos.map((photo, i) => (
-                      <div
-                        key={photo.url}
-                        className="aspect-square rounded-2xl overflow-hidden border bg-muted/10"
-                      >
-                        <img
-                          src={photo.url}
-                          alt={`Extra ${i + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ))}
-                    {extraPhotos.length === 0 && (
-                      <p className="text-sm text-muted-foreground italic col-span-3 text-center py-8">
-                        No extra photos uploaded.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+                </DialogContent>
+              </Dialog>
+              <Dialog
+                onOpenChange={(open) => !open && setMediaViewer(null)}
+                open={!!mediaViewer}
+              >
+                <DialogContent className="rounded-2xl bg-card p-3 sm:max-w-lg">
+                  <DialogHeader className="px-1">
+                    <DialogTitle>{mediaViewer?.label}</DialogTitle>
+                    <DialogDescription>
+                      {mediaViewer?.kind === "intro_video"
+                        ? "Verified intro video"
+                        : "Profile photo"}
+                    </DialogDescription>
+                  </DialogHeader>
+                  {mediaViewer?.kind === "intro_video" ? (
+                    <video
+                      className="aspect-video w-full rounded-xl bg-black object-contain"
+                      controls
+                      src={mediaViewer.url}
+                    >
+                      <track kind="captions" />
+                    </video>
+                  ) : mediaViewer ? (
+                    <img
+                      alt=""
+                      className="max-h-[70vh] w-full rounded-xl object-contain"
+                      src={mediaViewer.url}
+                    />
+                  ) : null}
+                </DialogContent>
+              </Dialog>
             </div>
           )}
         </main>
@@ -1842,9 +1952,22 @@ export function MePage({
           />
         </aside>
 
+        <Link
+          aria-label={canDate ? "Plan a date" : "Finish profile"}
+          className={buttonVariants({
+            className:
+              "fixed right-4 bottom-24 z-40 rounded-full px-4 shadow-lg shadow-primary/20 lg:hidden",
+            size: "sm",
+          })}
+          to={canDate ? "/date/new" : "/onboarding"}
+        >
+          <CalendarHeart className="size-4" />
+          {canDate ? "Plan" : "Finish"}
+        </Link>
+
         {/* MOBILE BOTTOM TAB BAR */}
         <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border/80 bg-background/90 backdrop-blur-md lg:hidden">
-          <div className="grid grid-cols-7">
+          <div className="grid grid-cols-6">
             {(
               [
                 { icon: Home, label: "Feed", tab: "feed" },
@@ -1852,8 +1975,7 @@ export function MePage({
                 { icon: Heart, label: "Dates", tab: "matches" },
                 { icon: MessageCircle, label: "Chats", tab: "chats" },
                 { icon: CalendarCheck, label: "Calendar", tab: "calendar" },
-                { icon: Bell, label: "Alerts", tab: "notifications" },
-                { icon: User, label: "Profile", tab: "profile" },
+                { icon: MoreHorizontal, label: "More", tab: "profile" },
               ] as const
             ).map((item) => (
               <button
@@ -1864,7 +1986,11 @@ export function MePage({
                     : "text-muted-foreground hover:text-foreground"
                 }`}
                 key={item.tab}
-                onClick={() => setDashboardTab(item.tab)}
+                onClick={() =>
+                  item.tab === "profile"
+                    ? openProfileMore()
+                    : setDashboardTab(item.tab)
+                }
                 type="button"
               >
                 <span className="relative">
@@ -1884,12 +2010,6 @@ export function MePage({
                       {calendarBadgeCount}
                     </span>
                   )}
-                  {item.tab === "notifications" &&
-                    notificationBadgeCount > 0 && (
-                      <span className="-right-2 -top-1 absolute flex size-4 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground">
-                        {notificationBadgeCount}
-                      </span>
-                    )}
                 </span>
                 {item.label}
               </button>
@@ -1906,6 +2026,378 @@ interface CircleInvite {
   name?: string;
   phone?: string;
   status?: string;
+}
+
+function MobileDailyLimit({
+  requestsCount,
+  tier,
+}: {
+  requestsCount: number;
+  tier: string;
+}) {
+  const dailyLimit = tier === "social" ? 2 : tier === "mingle" ? 8 : 24;
+
+  return (
+    <div className="mt-2 flex min-w-44 items-center gap-2 lg:hidden">
+      <span className="text-muted-foreground text-[10px]">
+        {requestsCount}/{dailyLimit} booked
+      </span>
+      <Progress
+        className="h-1.5 max-w-28 flex-1 rounded-full"
+        value={(requestsCount / dailyLimit) * 100}
+      />
+      <Badge className="rounded-full text-[9px] uppercase">{tier}</Badge>
+    </div>
+  );
+}
+
+function ProfileMoreMenu({
+  onEdit,
+  onSettings,
+  onSignOut,
+  onViewProfile,
+  tier,
+}: {
+  onEdit: () => void;
+  onSettings: () => void;
+  onSignOut: () => void;
+  onViewProfile: () => void;
+  tier: string;
+}) {
+  return (
+    <div className="grid gap-3 p-5">
+      <Card className="rounded-2xl border-border bg-card/45">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <User className="size-4 text-primary" />
+            Profile
+          </CardTitle>
+          <CardDescription>
+            View your public profile or update what people see.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2">
+          <Button
+            className="rounded-full justify-start"
+            onClick={onViewProfile}
+            type="button"
+            variant="outline"
+          >
+            <Eye className="size-4" />
+            View profile
+          </Button>
+          <Button
+            className="rounded-full justify-start"
+            onClick={onEdit}
+            type="button"
+            variant="outline"
+          >
+            <ClipboardList className="size-4" />
+            Edit profile
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-border bg-card/45">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Settings className="size-4 text-primary" />
+            Settings
+          </CardTitle>
+          <CardDescription>
+            Notification preferences, interests, and onboarding details.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2">
+          <Button
+            className="rounded-full justify-start"
+            onClick={onSettings}
+            type="button"
+          >
+            <Settings className="size-4" />
+            View settings
+          </Button>
+          <Badge className="w-fit rounded-full text-[10px] uppercase">
+            {tier} member
+          </Badge>
+        </CardContent>
+      </Card>
+
+      <Button
+        className="rounded-full justify-start"
+        onClick={onSignOut}
+        type="button"
+        variant="outline"
+      >
+        <LogOut className="size-4" />
+        Sign out
+      </Button>
+    </div>
+  );
+}
+
+function ProfileSettingsPanel({
+  profile,
+  tier,
+}: {
+  profile: DatingProfilePayload | null;
+  tier: string;
+}) {
+  const interestRows = [
+    ["Looking for", profile?.lookingFor ?? []],
+    ["Interests", profile?.interests ?? []],
+    ["Favorite things", profile?.favoriteThings ?? []],
+    ["Dating modes", profile?.datingModes ?? []],
+  ] as const;
+
+  return (
+    <div className="grid gap-4 p-5">
+      <Card className="rounded-2xl border-border bg-card/45">
+        <CardHeader>
+          <CardTitle className="text-base">Notification Preferences</CardTitle>
+          <CardDescription>
+            These are preview controls until account settings persistence lands.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {["Date requests", "Chat messages", "Calendar reminders"].map(
+            (label) => (
+              <label
+                className="flex items-center justify-between rounded-2xl border border-border bg-background/40 px-3 py-2 text-sm"
+                key={label}
+              >
+                <span>{label}</span>
+                <input
+                  className="accent-primary"
+                  defaultChecked
+                  type="checkbox"
+                />
+              </label>
+            )
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-border bg-card/45">
+        <CardHeader>
+          <CardTitle className="text-base">Onboarding Details</CardTitle>
+          <CardDescription className="capitalize">
+            {tier} membership
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {interestRows.map(([label, values]) => (
+            <div className="grid gap-2" key={label}>
+              <p className="font-semibold text-sm">{label}</p>
+              <div className="flex flex-wrap gap-2">
+                {values.length > 0 ? (
+                  values.map((value) => (
+                    <Badge
+                      className="rounded-full bg-primary px-2.5 text-[10px] text-primary-foreground"
+                      key={value}
+                    >
+                      {formatLabel(value)}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-muted-foreground text-xs">
+                    Nothing selected yet.
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ProfileEditPanel({
+  profile,
+  setProfileMode,
+  tier,
+}: {
+  profile: DatingProfilePayload | null;
+  setProfileMode: (mode: ProfileMode) => void;
+  tier: string;
+}) {
+  const shownBadges = [
+    ...(profile?.lookingFor ?? []).slice(0, 4),
+    profile?.kids,
+    profile?.wantsKids,
+  ].filter(Boolean);
+
+  return (
+    <div className="grid gap-4 p-5">
+      <Card className="rounded-2xl border-border bg-card/45">
+        <CardHeader>
+          <CardTitle className="text-base">Public Profile</CardTitle>
+          <CardDescription>
+            Profile editing is being split out from onboarding. For now this
+            shows the fields that will become editable here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <Input
+            className="rounded-full"
+            defaultValue={profile?.occupation ?? ""}
+            placeholder="Occupation"
+          />
+          <Textarea
+            className="min-h-24 rounded-2xl"
+            defaultValue={profile?.bio ?? ""}
+            placeholder="Bio"
+          />
+          <div className="grid gap-2">
+            <p className="font-semibold text-sm">Visible badges</p>
+            <div className="flex flex-wrap gap-2">
+              {shownBadges.map((badge) => (
+                <Badge
+                  className="rounded-full bg-primary px-2.5 text-[10px] text-primary-foreground"
+                  key={badge}
+                >
+                  {formatLabel(String(badge))}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              Badge visibility should stay limited so profiles do not become a
+              wall of labels.
+            </p>
+          </div>
+          <Badge className="w-fit rounded-full text-[10px] uppercase">
+            {tier} member
+          </Badge>
+          <Button
+            className="w-fit rounded-full"
+            onClick={() => setProfileMode("profile")}
+            type="button"
+          >
+            Done
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ProfileMediaRail({
+  media,
+  onOpen,
+}: {
+  media: ProfileMediaItem[];
+  onOpen: (item: ProfileMediaItem) => void;
+}) {
+  if (media.length === 0) return null;
+
+  return (
+    <div className="flex gap-3 overflow-x-auto pt-2">
+      {media.map((item) => (
+        <button
+          className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted/20"
+          key={`${item.kind}-${item.url}`}
+          onClick={() => onOpen(item)}
+          type="button"
+        >
+          {item.kind === "intro_video" ? (
+            <>
+              <video className="h-full w-full object-cover" src={item.url}>
+                <track kind="captions" />
+              </video>
+              <span className="absolute inset-0 grid place-items-center bg-black/25 text-white">
+                <Play className="size-6" />
+              </span>
+            </>
+          ) : (
+            <img alt="" className="h-full w-full object-cover" src={item.url} />
+          )}
+          <span className="absolute right-2 bottom-2 rounded-full bg-background/90 px-2 py-0.5 font-bold text-[9px] text-foreground">
+            {item.kind === "intro_video" ? "Intro" : "Photo"}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ProfileStatPanel({
+  circleGroups,
+  recapsCount,
+  target,
+}: {
+  circleGroups: {
+    id: string;
+    members: CircleInvite[];
+    name: string;
+    pending: CircleInvite[];
+  }[];
+  recapsCount: number;
+  target: ProfileStatTarget | null;
+}) {
+  if (!target) return null;
+
+  if (target === "recaps") {
+    return (
+      <Card className="rounded-2xl border-border bg-card/45">
+        <CardContent className="p-4 text-sm">
+          {recapsCount} recap{recapsCount === 1 ? "" : "s"} captured from dates.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (target === "friends") {
+    const friends = circleGroups.flatMap((circle) => circle.members);
+
+    return (
+      <Card className="rounded-2xl border-border bg-card/45">
+        <CardContent className="grid gap-2 p-4">
+          {friends.length > 0 ? (
+            friends.map((friend, index) => (
+              <p
+                className="text-sm"
+                key={friend.email ?? friend.phone ?? index}
+              >
+                {friend.name ||
+                  friend.email?.split("@")[0] ||
+                  friend.phone ||
+                  "Friend"}
+              </p>
+            ))
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No friends have joined yet.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="rounded-2xl border-border bg-card/45">
+      <CardContent className="grid gap-3 p-4">
+        {circleGroups.map((circle) => (
+          <div
+            className="rounded-2xl border border-border bg-background/45 p-3"
+            key={circle.id}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-bold text-sm">{circle.name}</p>
+              <Badge className="rounded-full text-[9px]">
+                {circle.members.length} members
+              </Badge>
+            </div>
+            <p className="mt-2 text-muted-foreground text-xs">
+              Circle group chats should be created automatically once the circle
+              membership model is synced to Stream.
+            </p>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
 }
 
 function DashboardWidgets({
