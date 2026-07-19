@@ -54,7 +54,7 @@ jobs:
         uses: neondatabase/create-branch-action@v6
         with:
           api_key: ${{ secrets.NEON_API_KEY }}
-          branch_name: preview/pr-${{ github.event.number }}-${{ needs.setup.outputs.branch }}
+          branch_name: preview/pr-${{ github.event.number }}
           expires_at: ${{ env.EXPIRES_AT }}
           project_id: ${{ vars.NEON_PROJECT_ID }}
 
@@ -73,5 +73,5 @@ jobs:
         uses: neondatabase/delete-branch-action@v3
         with:
           api_key: ${{ secrets.NEON_API_KEY }}
-          branch: preview/pr-${{ github.event.number }}-${{ needs.setup.outputs.branch }}
+          branch: preview/pr-${{ github.event.number }}
           project_id: ${{ vars.NEON_PROJECT_ID }}
