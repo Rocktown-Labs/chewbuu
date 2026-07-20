@@ -57,6 +57,8 @@ export const env = createEnv({
     SENT_DM_API_KEY: z.string().optional(),
     SENT_DM_BASE_URL: z.url().default("https://api.sent.dm"),
     SENT_DM_FROM: z.string().optional(),
+    SENTRY_AUTH_TOKEN: z.string().optional(),
+    SENTRY_DSN: z.string().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
     UPSTASH_REDIS_REST_URL: z.url().optional(),
   },

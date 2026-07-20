@@ -1,6 +1,9 @@
+import "./instrument";
 import { auth } from "@chewbuu/auth";
 import { env } from "@chewbuu/env/server";
 import { apiReference } from "@scalar/hono-api-reference";
+import * as Sentry from "@sentry/hono/node";
+import { sentry } from "@sentry/hono/node";
 import { initLogger } from "evlog";
 import { createAuthMiddleware } from "evlog/better-auth";
 import type { BetterAuthInstance } from "evlog/better-auth";
@@ -31,6 +34,7 @@ const identifyUser = createAuthMiddleware(auth as BetterAuthInstance, {
 
 const app = createRouter();
 
+app.use(sentry(app));
 app.use(evlog());
 app.use("*", async (c, next) => {
   await identifyUser(c.get("log"), c.req.raw.headers, c.req.path);
@@ -53,6 +57,14 @@ app.doc("/openapi.json", {
     version: "0.1.0",
   },
   openapi: "3.0.0",
+});
+
+app.get("/debug-sentry", (c) => {
+  Sentry.logger.info("User triggered test error", {
+    action: "test_error_endpoint",
+  });
+  Sentry.metrics.count("test_counter", 1);
+  throw new Error("My first Sentry error!");
 });
 
 app.get(
