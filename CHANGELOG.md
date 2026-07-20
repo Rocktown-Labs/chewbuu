@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-07-20
+
+### Added
+
+- Added Sentry error monitoring and tracing for `apps/web` (TanStack Start React) with client-side Session Replay, server-side error capture via `wrapFetchWithSentry`, TanStack Router browser tracing, and global middleware instrumentation.
+- Added Sentry error monitoring, tracing, and profiling for `apps/server` (Hono) via `@sentry/hono/node` with the `sentry()` middleware and `nodeProfilingIntegration`.
+- Added `instrument.client.ts`, `client.tsx`, `server.ts`, `start.ts`, and `instrument.server.mjs` entry files for the web app's Sentry integration.
+- Added `instrument.ts` for the Hono server's Sentry initialization.
+- Added `sentryTanstackStart` Vite plugin configured for the `chewbuu-web` project.
+- Added `/debug-sentry` test route on the Hono server for manual Sentry validation.
+- Added `/api/sentry-example` test route on the web app for manual Sentry tracing validation.
+- Added `SENTRY_DSN` and `SENTRY_AUTH_TOKEN` to the server env schema.
+
 ## [0.6.2] - 2026-07-18
 
 ### Added
