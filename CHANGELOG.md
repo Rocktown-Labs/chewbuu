@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Redesigned Chats and Date rooms for Chewbuu’s dating flow: video-first intro exchange, 3-reply unlock, pick/friend/continue/block CTAs, shadcn Message/Bubble/Attachment/Marker/MessageScroller composition, and real camera/mic capture.
+- Added three walkable demo date scenarios (sent request, received request, friend path) with nested matcher chats and a pre-date confirm screen (sender/receiver POVs, spot adjust/suggest, DiceUI QR check-in, reschedule/cancel penalty dialogs, Open-Meteo weather + Maps directions).
+- Added `@diceui/qr-code` to `@chewbuu/ui` for venue check-in codes with Chewbuu logo overlay.
 - Added Sentry error monitoring and tracing for `apps/web` (TanStack Start React) with client-side Session Replay, server-side error capture via `wrapFetchWithSentry`, TanStack Router browser tracing, and global middleware instrumentation.
 - Added Sentry error monitoring, tracing, and profiling for `apps/server` (Hono) via `@sentry/hono/node` with the `sentry()` middleware and `nodeProfilingIntegration`.
 - Added `instrument.client.ts`, `client.tsx`, `server.ts`, `start.ts`, and `instrument.server.mjs` entry files for the web app's Sentry integration.
@@ -16,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `/debug-sentry` test route on the Hono server for manual Sentry validation.
 - Added `/api/sentry-example` test route on the web app for manual Sentry tracing validation.
 - Added `SENTRY_DSN` and `SENTRY_AUTH_TOKEN` to the server env schema.
+
+### Changed
+
+- Replaced the X-style sky-blue chat pane with a mobile-first Friends / Date rooms experience, active-date banners that deep-link back to the date page, and no unused call buttons.
 
 ## [0.6.4] - 2026-07-19
 

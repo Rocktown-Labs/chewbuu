@@ -67,7 +67,10 @@ import { toast } from "sonner";
 
 import { PasskeysCard } from "@/components/auth/passkey";
 import { DateRecapFeed } from "@/components/feed/date-recap-feed";
-import { DateRoomChat } from "@/features/date-wizard/date-room-chat";
+import type { ChatPerson, DateScenario } from "@/features/chat/chat-types";
+import { DateChat } from "@/features/chat/date-chat";
+import { DateConfirmScreen } from "@/features/chat/date-confirm";
+import { demoDateScenarios } from "@/features/chat/demo-data";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
@@ -149,7 +152,10 @@ interface MePageProps {
   initialTab?: DashboardTab;
 }
 
-type DashboardChatsComponent = ComponentType<{ activeChannelId?: string }>;
+type DashboardChatsComponent = ComponentType<{
+  activeChannelId?: string;
+  onOpenDate?: (dateId: string) => void;
+}>;
 type ProfileMode = "edit" | "menu" | "profile" | "settings";
 type ProfileStatTarget = "circles" | "friends" | "recaps";
 type ProfileMediaItem = {
@@ -157,6 +163,63 @@ type ProfileMediaItem = {
   label: string;
   url: string;
 };
+
+const scenarioToHistory = (scenario: DateScenario): DateHistoryItem => ({
+  acceptedMatchId: scenario.acceptedMatchId ?? "",
+  chatSummary: [
+    scenario.role === "receiver"
+      ? `${scenario.theirName} requested this date with you.`
+      : "You started this request and are reviewing match rooms.",
+    "Intro videos exchange first, then three video replies unlock decisions.",
+    "Pick for the date, add as a friend, keep chatting, or block.",
+  ],
+  content: [
+    { label: "Intro videos", status: "Ready" },
+    { label: "Video exchange", status: "In progress" },
+    { label: "Confirm plan", status: "After pick" },
+  ],
+  id: scenario.id,
+  matches: scenario.matches.map((match) => ({
+    compatibility: match.compatibility ?? 0,
+    displayName: match.name,
+    id: match.id,
+    note: match.note ?? "",
+    photoUrl: match.avatar,
+    status: "suggested" as DateHistoryMatchStatus,
+    tags: match.tags ?? [],
+  })),
+  places: scenario.places.map((place) => ({
+    ...place,
+    types: [] as string[],
+  })),
+  requesterView: scenario.role === "sender",
+  scheduledAt: scenario.scheduledAt,
+  searchArea: scenario.searchArea,
+  status: scenario.status,
+  timeline: [
+    {
+      label: "Request",
+      tone: "done",
+      value: `${scenario.places.length} spots selected`,
+    },
+    {
+      label: "Matcher",
+      tone: "live",
+      value: `${scenario.matches.length} candidate rooms`,
+    },
+    { label: "Choice", tone: "muted", value: "Pending partner" },
+    { label: "Date", tone: "muted", value: "After confirm + check-in" },
+  ],
+  title: scenario.title,
+  what: scenario.what,
+});
+
+const demoDateHistories: DateHistoryItem[] =
+  demoDateScenarios.map(scenarioToHistory);
+
+const demoDateHistoryById = Object.fromEntries(
+  demoDateHistories.map((item) => [item.id, item])
+) as Record<string, DateHistoryItem>;
 
 const getAge = (birthdayString: string) => {
   const birthday = new Date(birthdayString);
@@ -181,93 +244,10 @@ const formatLabel = (value: string) =>
     .join(" ")
     .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
 
-const demoDateHistory: DateHistoryItem = {
-  acceptedMatchId: "demo-match-maya",
-  chatSummary: [
-    "Maya sent an intro and picked the booth by the window.",
-    "You confirmed 7:30 PM and shared the second spot.",
-    "After the date, Maya was added to Friends, so future messages move to Chats.",
-  ],
-  content: [
-    { label: "Food photo", status: "Saved to recap draft" },
-    { label: "Outfit check", status: "Private" },
-    { label: "Recap video", status: "Waiting for review" },
-  ],
-  id: "demo-date-123456",
-  matches: [
-    {
-      compatibility: 94,
-      displayName: "Maya",
-      id: "demo-match-maya",
-      note: "Accepted the plan, exchanged videos, and became a friend after the date.",
-      photoUrl:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=70",
-      status: "friended",
-      tags: ["Live music", "Tacos", "Low-pressure"],
-    },
-    {
-      compatibility: 88,
-      displayName: "Jordan",
-      id: "demo-match-jordan",
-      note: "Saved for later. Date-room history stays attached to this request.",
-      photoUrl:
-        "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=70",
-      status: "saved",
-      tags: ["Pool", "Sports", "Coffee"],
-    },
-    {
-      compatibility: 83,
-      displayName: "Riley",
-      id: "demo-match-riley",
-      note: "Declined by requester. This person does not move to friend chat.",
-      photoUrl:
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=70",
-      status: "declined",
-      tags: ["Comedy", "Dessert", "Group hangs"],
-    },
-  ],
-  places: [
-    {
-      address: "East Nashville",
-      name: "The Golden Booth",
-      placeId: "demo-place-golden-booth",
-      rating: "4.7",
-      types: ["restaurant", "bar", "date_fit"],
-    },
-    {
-      address: "Main Street",
-      name: "Cue & Co.",
-      placeId: "demo-place-cue",
-      rating: "4.6",
-      types: ["pool", "play", "combo"],
-    },
-    {
-      address: "Downtown",
-      name: "Third Place Coffee",
-      placeId: "demo-place-third",
-      rating: "4.8",
-      types: ["cafe", "talk", "quiet"],
-    },
-  ],
-  requesterView: true,
-  scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
-  searchArea: "Nashville, TN",
-  status: "Review due",
-  timeline: [
-    { label: "Request", tone: "done", value: "3 spots selected" },
-    { label: "Matcher", tone: "done", value: "40 candidates reviewed" },
-    { label: "Choice", tone: "done", value: "Maya accepted" },
-    { label: "Date", tone: "live", value: "Review + recap open" },
-  ],
-  title: "Eat, Play, Talk date",
-  what: ["eat", "play", "talk"],
-};
-
 const getAcceptedMatchForRequest = (request: any) => {
-  if (request.id === demoDateHistory.id) {
-    return demoDateHistory.matches.find(
-      (match) => match.id === demoDateHistory.acceptedMatchId
-    );
+  const demo = demoDateHistoryById[request.id as string];
+  if (demo) {
+    return demo.matches.find((match) => match.id === demo.acceptedMatchId);
   }
   if (request.matches && Array.isArray(request.matches)) {
     const accepted = request.matches.find(
@@ -476,7 +456,7 @@ export function MePage({
     let active = true;
 
     const loadChats = async () => {
-      const module = await import("@/features/stream/dashboard-chats");
+      const module = await import("@/features/chat/chats-home");
       if (active) {
         setDashboardChatsComponent(() => module.DashboardChats);
       }
@@ -577,8 +557,9 @@ export function MePage({
   const readinessReady =
     canDate && readinessItems.every((item) => item.checked);
   const pendingRequests = useMemo(() => summary?.requests ?? [], [summary]);
-  const selectedDateHistory =
-    selectedDateHistoryId === demoDateHistory.id ? demoDateHistory : null;
+  const selectedDateHistory = selectedDateHistoryId
+    ? (demoDateHistoryById[selectedDateHistoryId] ?? null)
+    : null;
   const unreadRequestCount = pendingRequests.filter(
     (request) => !readRequestIds.includes(request.id)
   ).length;
@@ -588,13 +569,16 @@ export function MePage({
     unreadRequestCount + (summary?.readiness.pendingReviews ?? 0);
 
   const confirmedDates = useMemo(() => {
-    return [demoDateHistory, ...pendingRequests].filter((req) => {
+    return [...demoDateHistories, ...pendingRequests].filter((req) => {
       const status = (req.status ?? "").toLowerCase();
       return (
         status === "accepted" ||
         status === "completed" ||
         status === "review_due" ||
-        status === "review due"
+        status === "review due" ||
+        status === "matching" ||
+        status === "action needed" ||
+        Boolean(demoDateHistoryById[req.id])
       );
     });
   }, [pendingRequests]);
@@ -640,14 +624,14 @@ export function MePage({
       status: request.status,
       title: `${request.what.map(formatLabel).join(", ")} request`,
     })),
-    {
-      area: demoDateHistory.searchArea,
-      id: demoDateHistory.id,
-      places: demoDateHistory.places,
-      scheduledAt: demoDateHistory.scheduledAt,
-      status: demoDateHistory.status,
-      title: demoDateHistory.title,
-    },
+    ...demoDateHistories.map((date) => ({
+      area: date.searchArea,
+      id: date.id,
+      places: date.places,
+      scheduledAt: date.scheduledAt,
+      status: date.status,
+      title: date.title,
+    })),
   ]
     .toSorted(
       (dateA, dateB) =>
@@ -1392,10 +1376,13 @@ export function MePage({
                   />
                 ) : (
                   <>
-                    <DateHistoryNotification
-                      date={demoDateHistory}
-                      onOpen={() => openDateHistory(demoDateHistory.id)}
-                    />
+                    {demoDateHistories.map((date) => (
+                      <DateHistoryNotification
+                        date={date}
+                        key={date.id}
+                        onOpen={() => openDateHistory(date.id)}
+                      />
+                    ))}
                     {pendingRequests.length === 0 ? (
                       <Card className="rounded-2xl border-border bg-card/45">
                         <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
@@ -1500,7 +1487,10 @@ export function MePage({
                 </p>
               </div>
               {ChatView ? (
-                <ChatView activeChannelId={initialChatId} />
+                <ChatView
+                  activeChannelId={initialChatId}
+                  onOpenDate={(dateId) => openDateHistory(dateId)}
+                />
               ) : (
                 <div className="p-5">
                   <Card className="rounded-2xl border-border bg-card/45">
@@ -1871,7 +1861,9 @@ export function MePage({
                     ) : (
                       filteredDates.map((request) => {
                         const requestId =
-                          "id" in request ? request.id : demoDateHistory.id;
+                          "id" in request
+                            ? request.id
+                            : demoDateHistories[0]?.id;
                         const requestDate = new Date(request.scheduledAt);
                         const places = request.places ?? [];
                         const acceptedMatch =
@@ -3172,7 +3164,6 @@ function DateHistoryDetail({
 }) {
   const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState<DateHistoryItem>(date);
-  const [isLocationsConfirmed, setIsLocationsConfirmed] = useState(false);
   const [isGeofenceScanned, setIsGeofenceScanned] = useState(false);
   const [mediaList, setMediaList] = useState<
     { id: string; name: string; url: string }[]
@@ -3234,14 +3225,6 @@ function DateHistoryDetail({
     });
     setActiveCardStep("matcher");
     toast.success("Match candidate declined.");
-  };
-
-  const handleSimulateQRScan = () => {
-    setIsGeofenceScanned(true);
-    setActiveCardStep("date");
-    toast.success(
-      "Geofence verified! QR Code scanned. Welcome to your live date!"
-    );
   };
 
   const handleAddDemoMedia = () => {
@@ -3428,171 +3411,130 @@ function DateHistoryDetail({
               Back to Candidates
             </Button>
           </div>
-          <DateRoomChat
-            candidate={activeChatCandidate}
-            allCandidates={currentDate.matches.filter(
-              (m) => m.status !== "declined"
-            )}
+          <DateChat
+            allCandidates={currentDate.matches
+              .filter((m) => m.status !== "declined")
+              .map(
+                (match): ChatPerson => ({
+                  avatar: match.photoUrl ?? "",
+                  compatibility: match.compatibility,
+                  id: match.id,
+                  introVideoThumb: match.photoUrl,
+                  name: match.displayName,
+                  note: match.note,
+                  tags: match.tags,
+                  verified: true,
+                })
+              )}
+            initialMessages={
+              demoDateScenarios.find((s) => s.id === currentDate.id)
+                ?.roomMessages ?? []
+            }
             onBack={() => {
               setActiveCardStep("matcher");
               setActiveChatMatchId(null);
             }}
-            onChoosePartner={handleChoosePartner}
-            onDeclinePartner={handleDeclinePartner}
+            onBlock={handleDeclinePartner}
+            onContinue={() => {
+              toast.success("Keep chatting — text and voice unlocked.");
+              onShowChats();
+            }}
+            onFriend={(matchId) => {
+              setCurrentDate((prev) => ({
+                ...prev,
+                matches: prev.matches.map((m) =>
+                  m.id === matchId ? { ...m, status: "friended" as const } : m
+                ),
+              }));
+              toast.success("Added as a friend — room moved to Chats.");
+              onShowChats();
+            }}
+            onPick={handleChoosePartner}
             onSwitchCandidate={(id) => setActiveChatMatchId(id)}
+            person={{
+              avatar: activeChatCandidate.photoUrl ?? "",
+              compatibility: activeChatCandidate.compatibility,
+              id: activeChatCandidate.id,
+              introVideoThumb: activeChatCandidate.photoUrl,
+              name: activeChatCandidate.displayName,
+              note: activeChatCandidate.note,
+              tags: activeChatCandidate.tags,
+              verified: true,
+            }}
+            role={currentDate.requesterView ? "sender" : "receiver"}
+            subtitle={`${currentDate.title} · ${currentDate.requesterView ? "Your request" : "Incoming request"}`}
           />
         </div>
       )}
 
-      {/* CARD 3: CHOICE & GEOFENCE QR SCANNER */}
-      {activeCardStep === "choice" && (
+      {/* CARD 3: PRE-DATE CONFIRM + QR */}
+      {activeCardStep === "choice" && acceptedMatch ? (
+        <DateConfirmScreen
+          onCancelDate={() => {
+            setCurrentDate((prev) => ({
+              ...prev,
+              status: "Canceled",
+            }));
+          }}
+          onCheckedIn={() => {
+            setIsGeofenceScanned(true);
+            setActiveCardStep("date");
+          }}
+          onFinalize={() => {
+            setCurrentDate((prev) => ({
+              ...prev,
+              status: "Confirmed",
+            }));
+          }}
+          onOpenChat={() => {
+            setActiveChatMatchId(acceptedMatch.id);
+            setActiveCardStep("chat");
+          }}
+          onReschedule={(nextIso) => {
+            setCurrentDate((prev) => ({
+              ...prev,
+              scheduledAt: nextIso,
+            }));
+          }}
+          onSuggestPlace={(placeName) => {
+            toast.message(`Suggested spot: ${placeName}`);
+          }}
+          partner={{
+            avatar: acceptedMatch.photoUrl ?? "",
+            compatibility: acceptedMatch.compatibility,
+            id: acceptedMatch.id,
+            name: acceptedMatch.displayName,
+            note: acceptedMatch.note,
+            tags: acceptedMatch.tags,
+            verified: true,
+          }}
+          places={currentDate.places.map((place) => ({
+            address: place.address ?? currentDate.searchArea,
+            name: place.name,
+            placeId: place.placeId,
+            rating: place.rating,
+          }))}
+          role={currentDate.requesterView ? "sender" : "receiver"}
+          scheduledAt={currentDate.scheduledAt}
+          searchArea={currentDate.searchArea}
+          title={currentDate.title}
+        />
+      ) : null}
+      {activeCardStep === "choice" && !acceptedMatch ? (
         <Card className="rounded-xl border-border bg-card/45">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Finalized Date Details & Geofence Check-in
-            </CardTitle>
-            <CardDescription>
-              Review revealed spot details, tweak location choices if needed,
-              and scan the QR code at the venue.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-5">
-            {acceptedMatch ? (
-              <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3.5">
-                <Avatar className="size-12 border border-border">
-                  {acceptedMatch.photoUrl && (
-                    <AvatarImage src={acceptedMatch.photoUrl} />
-                  )}
-                  <AvatarFallback>
-                    {acceptedMatch.displayName.slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-sm">
-                    Date with {acceptedMatch.displayName}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Confirmed partner · {acceptedMatch.compatibility}%
-                    compatibility match
-                  </p>
-                </div>
-                <Badge className="rounded-full bg-emerald-500/10 text-emerald-600 border-0">
-                  Accepted
-                </Badge>
-              </div>
-            ) : (
-              <div className="p-4 rounded-lg border border-dashed text-center text-xs text-muted-foreground">
-                No date partner accepted yet. Go to{" "}
-                <button
-                  type="button"
-                  onClick={() => setActiveCardStep("matcher")}
-                  className="text-primary underline font-bold"
-                >
-                  Matcher
-                </button>{" "}
-                to choose a partner!
-              </div>
-            )}
-
-            {/* Revealed Locations & Tweaker */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground">
-                  Revealed Venue Spots
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  Adjust before confirming
-                </span>
-              </div>
-
-              {currentDate.places.map((place) => (
-                <div
-                  className="flex items-start justify-between gap-3 rounded-lg border border-border bg-background/50 p-3"
-                  key={place.placeId}
-                >
-                  <div className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
-                    <div>
-                      <p className="font-bold text-xs">{place.name}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {place.address}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {place.rating ? (
-                      <Badge className="rounded-full text-[10px] border-0">
-                        <Star className="size-3 fill-yellow-500 text-yellow-500 mr-1" />
-                        {place.rating}
-                      </Badge>
-                    ) : null}
-                    {!isLocationsConfirmed && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          toast.info(`Adjusting venue: ${place.name}`)
-                        }
-                        className="text-[10px] h-6 px-2 rounded-full border border-border"
-                      >
-                        Adjust
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Confirmation & Geofence QR Scanner */}
-            <div className="border-t border-border/80 pt-4 flex flex-col gap-4">
-              {!isLocationsConfirmed ? (
-                <Button
-                  onClick={() => {
-                    setIsLocationsConfirmed(true);
-                    toast.success(
-                      "Locations locked! Geofence check-in is now active."
-                    );
-                  }}
-                  className="w-full rounded-full font-bold bg-primary text-primary-foreground text-xs"
-                >
-                  Confirm & Lock Location Details
-                </Button>
-              ) : (
-                <div className="flex flex-col items-center gap-3 p-5 rounded-xl border border-primary/20 bg-card/60 text-center">
-                  <div className="size-24 rounded-lg border-2 border-primary p-2 bg-white flex items-center justify-center shadow-md">
-                    {/* Simulated QR Code */}
-                    <div className="grid grid-cols-4 gap-1 size-full bg-black p-1">
-                      <div className="bg-white rounded-xs" />
-                      <div className="bg-white rounded-xs" />
-                      <div className="bg-black" />
-                      <div className="bg-white rounded-xs" />
-                      <div className="bg-white rounded-xs" />
-                      <div className="bg-black" />
-                      <div className="bg-white rounded-xs" />
-                      <div className="bg-white rounded-xs" />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="font-bold text-xs text-foreground">
-                      Venue Geofence Check-in
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 max-w-xs">
-                      Scan QR Code with your partner at the venue to unlock the
-                      live Date screen.
-                    </p>
-                  </div>
-                  <Button
-                    onClick={handleSimulateQRScan}
-                    className="rounded-full font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-                  >
-                    Scan & Check-in at Venue
-                  </Button>
-                </div>
-              )}
-            </div>
+          <CardContent className="p-6 text-center text-sm text-muted-foreground">
+            No date partner picked yet. Open{" "}
+            <button
+              type="button"
+              onClick={() => setActiveCardStep("matcher")}
+              className="font-bold text-primary underline"
+            >
+              Matcher
+            </button>{" "}
+            , exchange videos, then pick someone.
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {/* CARD 4: LIVE DATE SCREEN */}
       {activeCardStep === "date" && (
