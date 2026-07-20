@@ -1,22 +1,25 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, notFound } from "@tanstack/react-router";
 
 import { MePage } from "../../me";
 
 const spotCategories = new Set(["all", "eat", "drink", "play"]);
-const getSpotCategory = (category: string): "all" | "drink" | "eat" | "play" =>
-  spotCategories.has(category)
-    ? (category as "all" | "drink" | "eat" | "play")
-    : "all";
 
 export const Route = createFileRoute("/_auth/me/spots/$category")({
+  beforeLoad: ({ params }) => {
+    if (!spotCategories.has(params.category)) {
+      throw notFound();
+    }
+  },
   component: RouteComponent,
 });
 
 function RouteComponent() {
   const { category } = Route.useParams();
-  const initialSpotsCategory = getSpotCategory(category);
 
   return (
-    <MePage initialSpotsCategory={initialSpotsCategory} initialTab="spots" />
+    <MePage
+      initialSpotsCategory={category as "all" | "drink" | "eat" | "play"}
+      initialTab="spots"
+    />
   );
 }

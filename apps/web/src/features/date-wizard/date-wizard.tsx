@@ -57,6 +57,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { NavigationBlocker } from "@/components/navigation-blocker";
 import { datingApi } from "@/lib/dating-api";
 import type {
   DateMatch,
@@ -354,6 +355,11 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
+      <NavigationBlocker
+        description="You are in the middle of creating a date request. Leaving now will discard your selections."
+        shouldBlock={step > 0 && step < 3}
+        title="Discard Date Request?"
+      />
       <header className="flex flex-col gap-3">
         <Button
           className="w-fit"

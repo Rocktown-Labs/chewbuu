@@ -34,6 +34,13 @@ vi.mock("@tanstack/react-router", async () => {
         {children}
       </a>
     ),
+    notFound: () => new Error("Not Found"),
+    useBlocker: () => ({
+      proceed: vi.fn(),
+      reset: vi.fn(),
+      state: "idle",
+      status: "idle",
+    }),
     useNavigate: () => mocks.navigate,
   };
 });

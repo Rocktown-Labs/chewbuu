@@ -50,6 +50,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { NavigationBlocker } from "@/components/navigation-blocker";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
@@ -832,6 +833,11 @@ export function OnboardingForm() {
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-7 px-4 py-8">
+      <NavigationBlocker
+        description="You have onboarding setup in progress. If you leave now, you will lose unsaved step entries."
+        shouldBlock={step > 0 && step < 4}
+        title="Unsaved Onboarding Progress"
+      />
       <header className="grid gap-5 lg:grid-cols-[1fr_320px] lg:items-end">
         <div className="flex flex-col gap-3">
           <Badge

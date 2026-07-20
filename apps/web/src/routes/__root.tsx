@@ -15,6 +15,7 @@ import { Suspense, lazy } from "react";
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { NotFoundPage } from "@/components/not-found-page";
 import { ThemeProvider } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
 
@@ -86,6 +87,7 @@ const RootDocument = () => {
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootDocument,
+  notFoundComponent: NotFoundPage,
   head: () => ({
     links: [
       {

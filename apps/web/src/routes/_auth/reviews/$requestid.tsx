@@ -9,12 +9,13 @@ import {
 } from "@chewbuu/ui/components/card";
 import { Field, FieldLabel } from "@chewbuu/ui/components/field";
 import { Textarea } from "@chewbuu/ui/components/textarea";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Check, ChevronRight, MapPin, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { toast } from "sonner";
 
+import { NavigationBlocker } from "@/components/navigation-blocker";
 import { reviewsApi } from "@/lib/dating-api";
 import type { DateReviewPayload, ReviewPrompt } from "@/lib/dating-api";
 
@@ -175,8 +176,20 @@ function RouteComponent() {
     );
   }
 
+  const isDirty =
+    !isSubmitting &&
+    (Object.keys(personCriteria).length > 0 ||
+      Object.keys(placeCriteria).length > 0 ||
+      personComment.trim().length > 0 ||
+      placeComment.trim().length > 0);
+
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8">
+      <NavigationBlocker
+        description="Your review ratings haven't been submitted yet and will be lost if you navigate away."
+        shouldBlock={isDirty}
+        title="Leave Date Review?"
+      />
       <header className="flex flex-col gap-3">
         <Button
           className="w-fit"
