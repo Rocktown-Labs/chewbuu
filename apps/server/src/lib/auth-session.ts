@@ -5,6 +5,7 @@ import * as HttpStatusCodes from "stoker/http-status-codes";
 
 export interface SessionUser {
   dailyDateLimit: number;
+  displayUsername: string | null;
   email: string;
   hasCompletedOnboarding: boolean;
   hasIntroVideo: boolean;
@@ -12,6 +13,7 @@ export interface SessionUser {
   id: string;
   membershipTier: string;
   name: string;
+  username: string | null;
 }
 
 const toBoolean = (value: string | null) => value === "true";
@@ -25,6 +27,9 @@ export const getSessionUser = async (
     if (testUserId) {
       return {
         dailyDateLimit: Number(headers.get("x-chewbuu-test-daily-limit") ?? 2),
+        displayUsername:
+          headers.get("x-chewbuu-test-display-username") ??
+          headers.get("x-chewbuu-test-username"),
         email: headers.get("x-chewbuu-test-email") ?? "test@chewbuu.local",
         hasCompletedOnboarding: toBoolean(
           headers.get("x-chewbuu-test-onboarded")
@@ -34,6 +39,7 @@ export const getSessionUser = async (
         id: testUserId,
         membershipTier: headers.get("x-chewbuu-test-tier") ?? "social",
         name: headers.get("x-chewbuu-test-name") ?? "Test User",
+        username: headers.get("x-chewbuu-test-username"),
       };
     }
   }
@@ -50,6 +56,7 @@ export const getSessionUser = async (
 
   return {
     dailyDateLimit: session.user.dailyDateLimit ?? 2,
+    displayUsername: session.user.displayUsername ?? null,
     email: session.user.email,
     hasCompletedOnboarding: session.user.hasCompletedOnboarding ?? false,
     hasIntroVideo: session.user.hasIntroVideo ?? false,
@@ -57,5 +64,6 @@ export const getSessionUser = async (
     id: session.user.id,
     membershipTier: session.user.membershipTier ?? "social",
     name: session.user.name,
+    username: session.user.username ?? null,
   };
 };

@@ -14,6 +14,7 @@ import { evlogErrorHandler } from "evlog/nitro/v3";
 import { Suspense, lazy } from "react";
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 
+import { authPlugins } from "@/components/auth/auth-plugins";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { NotFoundPage } from "@/components/not-found-page";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -63,7 +64,9 @@ const RootDocument = () => {
             }}
             Link={AuthLink}
             navigate={({ to, replace }) => navigate({ replace, to })}
+            plugins={authPlugins}
             redirectTo="/me"
+            socialProviders={["google"]}
           >
             <div className="grid min-h-svh grid-rows-[auto_1fr]">
               <Header />

@@ -9,8 +9,6 @@ import { Input } from "@chewbuu/ui/components/input";
 import { cn } from "@chewbuu/ui/lib/utils";
 import {
   CheckCircle2,
-  Heart,
-  Image,
   Mic,
   MoreHorizontal,
   Phone,
@@ -20,7 +18,6 @@ import {
   Smile,
   Video,
   PanelLeft,
-  SlidersHorizontal,
 } from "lucide-react";
 import { useState } from "react";
 

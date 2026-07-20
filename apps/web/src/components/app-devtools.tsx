@@ -38,9 +38,8 @@ function ChewbuuStateDevtoolsPanel() {
         <pre className="overflow-x-auto rounded border border-border bg-muted/50 p-2 text-[11px]">
           {JSON.stringify(
             {
-              currentStep: onboardingStore.currentStep,
-              data: onboardingStore.data,
-              stepHistory: onboardingStore.stepHistory,
+              step: onboardingStore.step,
+              profile: onboardingStore.profile,
             },
             null,
             2

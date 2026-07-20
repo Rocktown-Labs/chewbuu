@@ -547,17 +547,26 @@ const draftProfileDefaults = {
 } satisfies ProfileInput;
 
 const getReadiness = async (sessionUser: SessionUser) => {
+  const hasUsername = !!(sessionUser.username || sessionUser.displayUsername);
+
   if (isTestRuntime()) {
     const storedProfile = memory.profiles.get(sessionUser.id);
     const pendingReviews = 0;
+    const hasSafetyContact = !!(
+      storedProfile?.safetyOptIn || storedProfile?.trustedContacts?.length
+    );
+    const baseOnboarded =
+      storedProfile?.onboarded ?? sessionUser.hasCompletedOnboarding;
+    const isFullyOnboarded = hasUsername && hasSafetyContact && baseOnboarded;
 
     return {
       canDate:
-        storedProfile?.canDate ??
-        (sessionUser.hasCompletedOnboarding &&
-          sessionUser.hasIntroVideo &&
-          sessionUser.hasProfilePhoto),
-      onboarded: storedProfile?.onboarded ?? sessionUser.hasCompletedOnboarding,
+        (storedProfile?.canDate ??
+          (sessionUser.hasCompletedOnboarding &&
+            sessionUser.hasIntroVideo &&
+            sessionUser.hasProfilePhoto)) &&
+        isFullyOnboarded,
+      onboarded: isFullyOnboarded,
       pendingReviews,
     };
   }
@@ -573,14 +582,27 @@ const getReadiness = async (sessionUser: SessionUser) => {
     .where(
       and(eq(dateReview.userId, sessionUser.id), eq(dateReview.required, true))
     );
+  const safetyContacts = await db
+    .select({ id: trustedContact.id })
+    .from(trustedContact)
+    .where(eq(trustedContact.userId, sessionUser.id))
+    .limit(1);
+
+  const hasSafetyContact = !!(
+    storedProfile?.safetyOptIn || safetyContacts.length > 0
+  );
+  const baseOnboarded =
+    storedProfile?.onboarded ?? sessionUser.hasCompletedOnboarding;
+  const isFullyOnboarded = hasUsername && hasSafetyContact && baseOnboarded;
 
   return {
     canDate:
-      storedProfile?.canDate ??
-      (sessionUser.hasCompletedOnboarding &&
-        sessionUser.hasIntroVideo &&
-        sessionUser.hasProfilePhoto),
-    onboarded: storedProfile?.onboarded ?? sessionUser.hasCompletedOnboarding,
+      (storedProfile?.canDate ??
+        (sessionUser.hasCompletedOnboarding &&
+          sessionUser.hasIntroVideo &&
+          sessionUser.hasProfilePhoto)) &&
+      isFullyOnboarded,
+    onboarded: isFullyOnboarded,
     pendingReviews: pendingReviews.filter((review) => !review.completedAt)
       .length,
   };
@@ -649,9 +671,15 @@ const buildReferralRows = (inviteRows: StoredInvite[]) =>
 const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
   const mediaState = hasRequiredMedia(input.media);
   const { canDate } = mediaState;
+  const hasUsername = !!(sessionUser.username || sessionUser.displayUsername);
+  const hasSafetyContact = !!(
+    input.safetyOptIn || input.trustedContacts.length > 0
+  );
   const onboarded =
-    sessionUser.hasCompletedOnboarding ||
-    !!(input.birthday && input.sex && input.sexuality && input.area);
+    hasUsername &&
+    hasSafetyContact &&
+    (sessionUser.hasCompletedOnboarding ||
+      !!(input.birthday && input.sex && input.sexuality && input.area));
   const inputWithInvitePurposes = {
     ...input,
     friendInvites: input.friendInvites.map((invite) => ({

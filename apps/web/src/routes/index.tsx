@@ -5,12 +5,10 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import {
-  CalendarHeart,
   Check,
   ChevronDown,
   ChevronRight,
   MapPin,
-  MessagesSquare,
   Receipt,
   ShieldCheck,
   Users,

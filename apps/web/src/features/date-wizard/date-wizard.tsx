@@ -59,16 +59,18 @@ import { toast } from "sonner";
 
 import { NavigationBlocker } from "@/components/navigation-blocker";
 import { datingApi } from "@/lib/dating-api";
-import type {
-  DateMatch,
-  DatePlace,
-  DateRequestPayload,
-  DateWhat,
-} from "@/lib/dating-api";
+import type { DateMatch, DatePlace, DateWhat } from "@/lib/dating-api";
 
 const steps = ["Plan", "Places", "Matches"] as const;
 
 type WizardWhat = "eat" | "drink" | "play";
+
+type PartyMember = {
+  displayName?: string;
+  email?: string;
+  name?: string;
+  phone?: string;
+};
 
 const activityOptions: { hint: string; label: string; value: WizardWhat }[] = [
   { hint: "Restaurants & food", label: "Eat", value: "eat" },
@@ -140,7 +142,7 @@ const isComboPlace = (types: string[]): boolean => {
 const placeMatchesCategory = (
   place: DatePlace,
   category: WizardWhat,
-  placesByCategory: Record<WizardWhat, DatePlace[]>
+  placesByCategory: Partial<Record<WizardWhat, DatePlace[]>>
 ): boolean => {
   if (placesByCategory[category]?.some((p) => p.placeId === place.placeId)) {
     return true;
@@ -177,7 +179,7 @@ const placeMatchesCategory = (
 const isPlacesSelectionValid = (
   selectedPlaces: DatePlace[],
   categories: WizardWhat[],
-  placesByCategory: Record<WizardWhat, DatePlace[]>
+  placesByCategory: Partial<Record<WizardWhat, DatePlace[]>>
 ): boolean => {
   if (selectedPlaces.length === 0) return false;
   if (selectedPlaces.length > 3) return false;
@@ -263,7 +265,7 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
     onSubmit: async ({ value }) => {
       const response = await datingApi.createRequest({
         ...value,
-        partyMembers: value.partyMembers.filter((member) =>
+        partyMembers: value.partyMembers.filter((member: PartyMember) =>
           Boolean(member.email?.trim() || member.phone?.trim())
         ),
         scheduledAt: new Date(value.scheduledAt).toISOString(),
@@ -298,7 +300,9 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
         if (under21 && form.getFieldValue("what").includes("drink")) {
           form.setFieldValue(
             "what",
-            form.getFieldValue("what").filter((item) => item !== "drink")
+            form
+              .getFieldValue("what")
+              .filter((item: DateWhat) => item !== "drink")
           );
         }
 

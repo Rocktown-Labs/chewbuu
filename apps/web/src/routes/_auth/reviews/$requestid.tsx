@@ -9,7 +9,7 @@ import {
 } from "@chewbuu/ui/components/card";
 import { Field, FieldLabel } from "@chewbuu/ui/components/field";
 import { Textarea } from "@chewbuu/ui/components/textarea";
-import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Check, ChevronRight, MapPin, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";

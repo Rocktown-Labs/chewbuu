@@ -15,6 +15,13 @@
       "when": 1784497799301,
       "tag": "0001_messy_vengeance",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784510611199,
+      "tag": "0002_passkey_aaguid",
+      "breakpoints": true
     }
   ]
 }

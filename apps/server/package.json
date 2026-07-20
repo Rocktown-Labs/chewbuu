@@ -21,13 +21,16 @@
     "@hono/node-server": "^2.0.8",
     "@hono/zod-openapi": "^1.4.0",
     "@scalar/hono-api-reference": "^0.11.9",
+    "@upstash/redis": "^1.38.0",
     "@vercel/blob": "^2.6.1",
+    "@workflow/ai": "^4.2.0",
     "ai": "catalog:",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "evlog": "catalog:",
     "hono": "^4.12.27",
     "stoker": "^2.0.1",
+    "workflow": "^4.6.0",
     "zod": "catalog:"
   },
   "devDependencies": {

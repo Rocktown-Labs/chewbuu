@@ -11,6 +11,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Integrated client-side probabilistic `BloomFilter` data structure and `@tanstack/react-pacer`'s `useDebouncedValue` hook for instant username availability validation during onboarding.
 - Added `username` and `displayUsername` columns to `user` database schema and configured Better Auth `username()` server and client plugins.
 - Added date request scheduling overlap validation to block booking dates within 2 hours of existing ones.
+- Added Vercel Workflow SDK durable workflow scaffolding (`onboardingWorkflow`, `dateMatchingWorkflow`, `recapProcessingWorkflow`, `reviewProcessingWorkflow`) with a `/workflows` Hono router for async invite dispatch, match expiry, recap fan-out, and review aggregation.
+- Added a virtualized `DateRecapFeed` component with infinite-query pagination and Vercel Blob responsive images for the `/me` feed.
+- Added Better Auth `passkey()` server plugin and client passkey support, including a passkey sign-in button on auth views and a passkey management card in profile settings.
+- Added better-auth-ui plugin configuration wiring the username sign-up field, passkey auth button, and Google social provider into the app's auth screens.
+- Added lefthook pre-push hooks that run typechecks and the full test suite before code reaches GitHub.
+
+### Fixed
+
+- Fixed the `/me` route crash (`Can't find variable: tier`) by deriving the `tier` alias from the resolved membership tier.
+- Fixed the dating profile save flow so media-based `canDate` state is computed correctly alongside the new onboarding gates.
+- Fixed the `@tanstack/react-pacer` debouncer options call signature in the username availability checker.
 
 ### Changed
 
@@ -22,6 +33,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Aligned sidebar navigation links to place the Feed option next to the Calendar title.
 - Restructured the date history detail view into a clean step-by-step navigation tab bar (Setup Details, Match Candidates, Places & Recap) to simplify dating state progression.
 - Implemented a premium custom Video-DM Chat Room component featuring a nested active conversations sidebar, side-by-side intro video mockups, simulated 2-minute video response recorder with timer and pulsing recording indicator, and structured choose/decline CTA prompts.
+- Onboarding readiness now requires a Better Auth username and a safety contact before a profile is marked complete or allowed to date.
+- Sign-in now accepts an email address or a username when the username plugin is enabled.
+- Onboarding now persists the collected username to Better Auth and seeds the field from the session user.
+- Expanded `bun run check-types` coverage to the web app via a new `check-types` script so the pre-push gate type-checks every app and package.
 
 ## [0.6.3] - 2026-07-18
 

@@ -5,7 +5,6 @@ import {
 } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button, buttonVariants } from "@chewbuu/ui/components/button";
-import { Calendar, CalendarDayButton } from "@chewbuu/ui/components/calendar";
 import {
   Card,
   CardContent,
@@ -61,12 +60,13 @@ import {
   Star,
   User,
   UserPlus,
-  Video,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { PasskeysCard } from "@/components/auth/passkey";
+import { DateRecapFeed } from "@/components/feed/date-recap-feed";
 import { DateRoomChat } from "@/features/date-wizard/date-room-chat";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -499,15 +499,12 @@ export function MePage({
   const displayName = session.data?.user.name ?? "there";
   const membershipTier =
     summary?.membershipTier ?? session.data?.user.membershipTier ?? "social";
+  const tier = membershipTier;
   const canDate = summary?.readiness.canDate ?? false;
   const media = profile?.media ?? [];
   const profilePhoto = media.find((item) => item.kind === "profile_photo")?.url;
   const introVideo = media.find((item) => item.kind === "intro_video")?.url;
   const extraPhotos = media.filter((item) => item.kind === "photo");
-  const profilePhotos = [
-    ...(profilePhoto ? [{ url: profilePhoto }] : []),
-    ...extraPhotos,
-  ];
   const profileMediaItems: ProfileMediaItem[] = [
     ...(introVideo
       ? [
@@ -611,19 +608,6 @@ export function MePage({
         reqDate.getDate() === date.getDate()
       );
     });
-  };
-
-  const getMatchesForDay = (date: Date) => {
-    const datesOnDay = getDatesForDay(date);
-
-    return datesOnDay
-      .map((req) => getAcceptedMatchForRequest(req))
-      .filter(Boolean) as {
-      id: string;
-      displayName: string;
-      photoUrl?: string;
-      profilePhotoUrl?: string;
-    }[];
   };
 
   const filteredDates = useMemo(() => {
@@ -2396,46 +2380,7 @@ export function MePage({
                         </Card>
                       )}
 
-                      <div className="grid gap-4 md:grid-cols-2">
-                        {userRecaps.map((recap) => (
-                          <div
-                            className="rounded-2xl border bg-card overflow-hidden shadow-sm hover:shadow-md transition duration-200"
-                            key={recap.id}
-                          >
-                            {recap.photos[0] && (
-                              <div className="aspect-video w-full relative bg-muted/10">
-                                <img
-                                  src={recap.photos[0]}
-                                  alt={recap.placeName}
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                            )}
-                            <div className="p-4 flex flex-col gap-2">
-                              <span className="font-bold text-xs text-primary">
-                                {recap.placeName}
-                              </span>
-                              <p className="text-xs text-foreground/90 font-medium truncate">
-                                {recap.caption}
-                              </p>
-                              <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-2 border-t pt-2">
-                                <span>With {recap.personName}</span>
-                                <span>
-                                  {new Date(
-                                    recap.createdAt
-                                  ).toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        {userRecaps.length === 0 && (
-                          <p className="text-sm text-muted-foreground italic col-span-2 text-center py-8">
-                            No date recaps uploaded yet. Go on dates to post
-                            recaps.
-                          </p>
-                        )}
-                      </div>
+                      <DateRecapFeed initialItems={userRecaps} />
                     </div>
                   </div>
                 </>
@@ -2738,6 +2683,8 @@ function ProfileSettingsPanel({
 
   return (
     <div className="grid gap-4 p-5">
+      <PasskeysCard />
+
       <Card className="rounded-2xl border-border bg-card/45">
         <CardHeader>
           <CardTitle className="text-base">Notification Preferences</CardTitle>
@@ -3237,9 +3184,6 @@ function DateHistoryDetail({
 
   const acceptedMatch = currentDate.matches.find(
     (match) => match.id === currentDate.acceptedMatchId
-  );
-  const availableMatches = currentDate.matches.filter(
-    (match) => match.status !== "declined"
   );
 
   const [activeCardStep, setActiveCardStep] = useState<

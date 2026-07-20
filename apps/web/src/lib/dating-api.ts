@@ -46,6 +46,7 @@ export interface DatingProfilePayload {
   lookingFor: string[];
   maritalStatus?: string;
   media: DatingMedia[];
+  name?: string;
   politics?: string;
   religion?: string;
   safetyOptIn: boolean;

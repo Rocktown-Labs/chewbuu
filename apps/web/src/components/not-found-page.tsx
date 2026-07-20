@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { AlertCircle, ArrowLeft, HeartHandshake, Home } from "lucide-react";
+import { AlertCircle, ArrowLeft, Home } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 

@@ -32,7 +32,7 @@ export function useUsernameChecker(rawUsername: string) {
 
   const [debouncedUsername] = useDebouncedValue(
     rawUsername.trim().toLowerCase(),
-    250
+    { wait: 250 }
   );
 
   useEffect(() => {

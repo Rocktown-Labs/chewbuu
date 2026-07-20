@@ -33,6 +33,7 @@ export async function ensureSchemaMigrated() {
         "user_id" text NOT NULL
       );
     `;
+    await sql`ALTER TABLE "passkey" ADD COLUMN IF NOT EXISTS "aaguid" text;`;
   } catch (error) {
     console.error("Schema migration check error:", error);
   }

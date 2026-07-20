@@ -1,3 +1,4 @@
+import { passkeyClient } from "@better-auth/passkey/client";
 import { stripeClient } from "@better-auth/stripe/client";
 import { env } from "@chewbuu/env/web";
 import {
@@ -73,14 +74,10 @@ export const authClient = createAuthClient({
           required: false,
           type: "string",
         },
-        username: {
-          input: true,
-          required: true,
-          type: "string",
-        },
       },
     }),
     usernameClient(),
+    passkeyClient(),
     adminClient(),
     stripeClient({
       subscription: true,

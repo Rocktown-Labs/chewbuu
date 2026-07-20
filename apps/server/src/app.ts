@@ -18,6 +18,7 @@ import pricingRoute from "./routes/pricing";
 import reviewsRoute from "./routes/reviews";
 import streamRoute from "./routes/stream";
 import uploadRoute from "./routes/upload";
+import { workflowRouter } from "./routes/workflow";
 
 initLogger({
   env: { service: "chewbuu-server" },
@@ -72,7 +73,8 @@ const routes = app
   .route("/", pricingRoute)
   .route("/", reviewsRoute)
   .route("/", streamRoute)
-  .route("/", uploadRoute);
+  .route("/", uploadRoute)
+  .route("/workflows", workflowRouter);
 
 app.notFound(notFound);
 app.onError(onError);

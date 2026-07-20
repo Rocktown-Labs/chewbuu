@@ -1,4 +1,5 @@
 import { expo } from "@better-auth/expo";
+import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
 import { createDb, ensureSchemaMigrated } from "@chewbuu/db";
 import * as schema from "@chewbuu/db/schema/auth";
@@ -130,6 +131,7 @@ export const createAuth = () => {
     plugins: [
       expo(),
       username(),
+      passkey(),
       admin({
         adminRoles: ["admin"],
         defaultRole: "user",

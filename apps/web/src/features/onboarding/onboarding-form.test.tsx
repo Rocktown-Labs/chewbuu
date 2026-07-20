@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { AnchorHTMLAttributes } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OnboardingForm } from "./onboarding-form";
@@ -21,29 +22,27 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@tanstack/react-router", async () => {
-  const React = await import("react");
-
-  return {
-    Link: ({
-      children,
-      to,
-      ...props
-    }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }) => (
-      <a href={to} {...props}>
-        {children}
-      </a>
-    ),
-    notFound: () => new Error("Not Found"),
-    useBlocker: () => ({
-      proceed: vi.fn(),
-      reset: vi.fn(),
-      state: "idle",
-      status: "idle",
-    }),
-    useNavigate: () => mocks.navigate,
-  };
-});
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    to,
+    ...props
+  }: AnchorHTMLAttributes<HTMLAnchorElement> & {
+    to: string;
+  }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+  notFound: () => new Error("Not Found"),
+  useBlocker: () => ({
+    proceed: vi.fn(),
+    reset: vi.fn(),
+    state: "idle",
+    status: "idle",
+  }),
+  useNavigate: () => mocks.navigate,
+}));
 
 vi.mock("@/lib/dating-api", () => ({
   datingApi: {

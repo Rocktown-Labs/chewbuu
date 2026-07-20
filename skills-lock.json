@@ -150,6 +150,12 @@
       "skillPath": "skills/image/SKILL.md",
       "computedHash": "e4b5511566d08a79f6f5fd26319eaaac0e18e1e238848c5a3fb2e9839e306ebe"
     },
+    "internal-dev-workbench": {
+      "source": "vercel/workflow",
+      "sourceType": "github",
+      "skillPath": "skills/internal-dev-workbench/SKILL.md",
+      "computedHash": "0a95e27fa15772abf98de088375a0f84ab8f183b577b2120903698406ce90bc5"
+    },
     "launch": {
       "source": "coreyhaines31/marketingskills",
       "sourceType": "github",
@@ -191,6 +197,12 @@
       "sourceType": "github",
       "skillPath": "skills/marketing-psychology/SKILL.md",
       "computedHash": "50d735eb0f5c36f379ed2200f21aeacc9b9ad85667b5d33ec6111857352a1340"
+    },
+    "migrating-to-workflow-sdk": {
+      "source": "vercel/workflow",
+      "sourceType": "github",
+      "skillPath": "skills/migrating-to-workflow-sdk/SKILL.md",
+      "computedHash": "f641182d7988667a46e1549943e3daa29faac412da8716828d99eee5f7b626cb"
     },
     "neon": {
       "source": "neondatabase/agent-skills",
@@ -448,6 +460,18 @@
       "sourceType": "github",
       "skillPath": "skills/web-design-guidelines/SKILL.md",
       "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+    },
+    "workflow": {
+      "source": "vercel/workflow",
+      "sourceType": "github",
+      "skillPath": "skills/workflow/SKILL.md",
+      "computedHash": "eae859f624c59eeb67ddb91e8f1bc85793f463bc3ff4c854cb53dd3a72fd01a5"
+    },
+    "workflow-init": {
+      "source": "vercel/workflow",
+      "sourceType": "github",
+      "skillPath": "skills/workflow-init/SKILL.md",
+      "computedHash": "e74ed0468589670865a7dc1dcf4f8cd21c3dce164e5caa66d74c5800d70dfe68"
     }
   }
 }

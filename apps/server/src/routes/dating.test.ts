@@ -17,6 +17,7 @@ const authHeaders = (overrides: Record<string, string> = {}) =>
     "x-chewbuu-test-profile-photo": "true",
     "x-chewbuu-test-tier": "social",
     "x-chewbuu-test-user-id": crypto.randomUUID(),
+    "x-chewbuu-test-username": "testuser",
     ...overrides,
   });
 
@@ -65,6 +66,16 @@ const birthdayForAge = (age: number, dayOffset = 0) => {
     today.getDate() + dayOffset
   );
   return birthday.toISOString().slice(0, 10);
+};
+
+const saveTestProfile = async (headers: Headers) => {
+  const response = await app.request("/dating/profile", {
+    body: JSON.stringify(profilePayload),
+    headers,
+    method: "PUT",
+  });
+
+  expect(response.status).toBe(200);
 };
 
 const dateRequestPayload = {
@@ -134,6 +145,44 @@ describe("dating routes", () => {
     expect(await summaryResponse.json()).toMatchObject({
       readiness: {
         canDate: true,
+      },
+    });
+  });
+
+  it("does not complete onboarding without a username", async () => {
+    const headers = authHeaders({ "x-chewbuu-test-username": "" });
+    const saveResponse = await app.request("/dating/profile", {
+      body: JSON.stringify(profilePayload),
+      headers,
+      method: "PUT",
+    });
+
+    expect(saveResponse.status).toBe(200);
+    expect(await saveResponse.json()).toMatchObject({
+      readiness: {
+        canDate: false,
+        onboarded: false,
+      },
+    });
+  });
+
+  it("does not complete onboarding without a safety contact", async () => {
+    const headers = authHeaders();
+    const saveResponse = await app.request("/dating/profile", {
+      body: JSON.stringify({
+        ...profilePayload,
+        safetyOptIn: false,
+        trustedContacts: [],
+      }),
+      headers,
+      method: "PUT",
+    });
+
+    expect(saveResponse.status).toBe(200);
+    expect(await saveResponse.json()).toMatchObject({
+      readiness: {
+        canDate: false,
+        onboarded: false,
       },
     });
   });
@@ -319,6 +368,9 @@ describe("dating routes", () => {
   });
 
   it("blocks social users from group date requests", async () => {
+    const headers = authHeaders();
+    await saveTestProfile(headers);
+
     const response = await app.request("/dating/requests", {
       body: JSON.stringify({
         ...dateRequestPayload,
@@ -329,7 +381,7 @@ describe("dating routes", () => {
           },
         ],
       }),
-      headers: authHeaders(),
+      headers,
       method: "POST",
     });
 
@@ -357,11 +409,14 @@ describe("dating routes", () => {
   });
 
   it("enforces the daily booked date limit", async () => {
+    const headers = authHeaders({
+      "x-chewbuu-test-daily-limit": "0",
+    });
+    await saveTestProfile(headers);
+
     const response = await app.request("/dating/requests", {
       body: JSON.stringify(dateRequestPayload),
-      headers: authHeaders({
-        "x-chewbuu-test-daily-limit": "0",
-      }),
+      headers,
       method: "POST",
     });
 
@@ -375,6 +430,7 @@ describe("dating routes", () => {
     const headers = authHeaders({
       "x-chewbuu-test-user-id": "overlap-test-user",
     });
+    await saveTestProfile(headers);
 
     // First request at 12:00
     const response1 = await app.request("/dating/requests", {
@@ -418,6 +474,8 @@ describe("dating routes", () => {
       "x-chewbuu-test-tier": "sugar",
       "x-chewbuu-test-user-id": crypto.randomUUID(),
     });
+    await saveTestProfile(headers);
+
     const response = await app.request("/dating/requests", {
       body: JSON.stringify({
         ...dateRequestPayload,
@@ -662,6 +720,8 @@ describe("dating routes", () => {
       "x-chewbuu-test-tier": "mingle",
       "x-chewbuu-test-user-id": crypto.randomUUID(),
     });
+    await saveTestProfile(headers);
+
     const response = await app.request("/dating/requests", {
       body: JSON.stringify({
         ...dateRequestPayload,

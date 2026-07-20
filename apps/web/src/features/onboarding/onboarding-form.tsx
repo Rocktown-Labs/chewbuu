@@ -1,4 +1,3 @@
-import { Avatar, AvatarFallback } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button } from "@chewbuu/ui/components/button";
 import {
@@ -26,8 +25,13 @@ import {
 } from "@chewbuu/ui/components/select";
 import { Slider } from "@chewbuu/ui/components/slider";
 import { Textarea } from "@chewbuu/ui/components/textarea";
-import { useForm } from "@tanstack/react-form";
-import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  type FormAsyncValidateOrFn,
+  type FormValidateOrFn,
+  type ReactFormExtendedApi,
+  useForm,
+} from "@tanstack/react-form";
+import { useNavigate } from "@tanstack/react-router";
 import { upload } from "@vercel/blob/client";
 import {
   Camera,
@@ -306,8 +310,8 @@ const defaultValues = {
   ageRangeMax: MAXIMUM_MATCH_AGE,
   ageRangeMin: MINIMUM_AGE,
   datingModes: ["solo"],
-  favoriteThings: [],
-  friendInvites: [],
+  favoriteThings: [] as string[],
+  friendInvites: [] as DatingProfilePayload["friendInvites"],
   height: "",
   interestDetails: {} as Record<string, string[]>,
   interestedIn: [] as string[],
@@ -332,7 +336,27 @@ const defaultValues = {
   distanceMiles: 25,
 };
 
-type OnboardingFormApi = any;
+type OnboardingFormValues = typeof defaultValues;
+type OnboardingSyncValidator =
+  | FormValidateOrFn<OnboardingFormValues>
+  | undefined;
+type OnboardingAsyncValidator =
+  | FormAsyncValidateOrFn<OnboardingFormValues>
+  | undefined;
+type OnboardingFormApi = ReactFormExtendedApi<
+  OnboardingFormValues,
+  OnboardingSyncValidator,
+  OnboardingSyncValidator,
+  OnboardingAsyncValidator,
+  OnboardingSyncValidator,
+  OnboardingAsyncValidator,
+  OnboardingSyncValidator,
+  OnboardingAsyncValidator,
+  OnboardingSyncValidator,
+  OnboardingAsyncValidator,
+  OnboardingAsyncValidator,
+  unknown
+>;
 
 const getAge = (birthdayString: string) => {
   const today = new Date();
@@ -464,7 +488,6 @@ const formatPhoneNumber = (value: string) => {
 export function OnboardingForm() {
   const navigate = useNavigate();
   const {
-    profile: persistedProfile,
     step: persistedStep,
     setStep: setPersistedStep,
     setProfile: setPersistedProfile,
@@ -504,6 +527,32 @@ export function OnboardingForm() {
         }
       }
 
+      // Claim the username on Better Auth so it is unique across the platform
+      if (
+        session?.user &&
+        value.username &&
+        value.username !== session.user.username
+      ) {
+        try {
+          const { error: usernameError } = await authClient.updateUser({
+            username: value.username,
+          });
+
+          if (usernameError) {
+            toast.error(
+              usernameError.message ??
+                "That username is taken. Pick another one."
+            );
+            updateStep(0);
+            return;
+          }
+        } catch (error) {
+          console.error("Failed to update username in auth:", error);
+          toast.error("Could not save your username. Try again.");
+          return;
+        }
+      }
+
       await datingApi.saveProfile({
         ...value,
         media,
@@ -516,16 +565,10 @@ export function OnboardingForm() {
 
   // Sync form values to Zustand store as the user edits
   useEffect(() => {
-    const unsub = form.store.subscribe((state) => {
+    const subscription = form.store.subscribe((state) => {
       setPersistedProfile(state.values);
     });
-    return () => {
-      if (typeof unsub === "function") {
-        unsub();
-      } else if (unsub && typeof (unsub as any).unsubscribe === "function") {
-        (unsub as any).unsubscribe();
-      }
-    };
+    return () => subscription.unsubscribe();
   }, [form.store, setPersistedProfile]);
 
   // Load existing profile from API on mount and merge with local persisted values
@@ -543,6 +586,10 @@ export function OnboardingForm() {
         if (session?.user) {
           form.setFieldValue("name", merged.name || session.user.name || "");
           form.setFieldValue("email", merged.email || session.user.email || "");
+          form.setFieldValue(
+            "username",
+            merged.username || session.user.username || ""
+          );
         } else {
           form.setFieldValue("name", merged.name || "");
           form.setFieldValue("email", merged.email || "");
@@ -1635,11 +1682,13 @@ function MultiPillSelect({
 function InterestsStep({ form }: { form: OnboardingFormApi }) {
   return (
     <form.Subscribe
-      selector={(state) => [
-        state.values.interestDetails,
-        state.values.area,
-        state.values.birthday,
-      ]}
+      selector={(state) =>
+        [
+          state.values.interestDetails,
+          state.values.area,
+          state.values.birthday,
+        ] as const
+      }
     >
       {([interestDetails, areaValue, birthdayValue]) => (
         <InterestsStepContent
@@ -1674,9 +1723,9 @@ function InterestsStepContent({
         : interestCategories,
     [age]
   );
-  const [activeCategory, setActiveCategory] = useState(
-    availableInterestCategories[0].label
-  );
+  const [activeCategory, setActiveCategory] = useState<
+    (typeof interestCategories)[number]["label"]
+  >(availableInterestCategories[0].label);
   const [customInterest, setCustomInterest] = useState("");
   const [placesByQuery, setPlacesByQuery] = useState<
     Record<string, DatePlace[]>
@@ -2152,12 +2201,14 @@ function ValuesStep({ form }: { form: OnboardingFormApi }) {
 function FriendsStep({ form }: { form: OnboardingFormApi }) {
   return (
     <form.Subscribe
-      selector={(state) => [
-        state.values.friendInvites,
-        state.values.maritalStatus,
-        state.values.membershipTier,
-        state.values.trustedContacts,
-      ]}
+      selector={(state) =>
+        [
+          state.values.friendInvites,
+          state.values.maritalStatus,
+          (state.values as { membershipTier?: string }).membershipTier,
+          state.values.trustedContacts,
+        ] as const
+      }
     >
       {([friendInvites, maritalStatus, membershipTier, trustedContacts]) => {
         const invites = (friendInvites || []) as {
@@ -2283,6 +2334,15 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
   );
 }
 
+interface StripeUpgradeActions {
+  stripe: {
+    upgrade: (input: {
+      priceId: string;
+      callbackURL: string;
+    }) => Promise<{ error: { message: string } | null }>;
+  };
+}
+
 function PremiumStep({
   plans,
   form,
@@ -2306,7 +2366,16 @@ function PremiumStep({
     return `$${annualPrice}/yr`;
   };
 
-  const planDetails = {
+  const planDetails: Record<
+    MembershipPlan["tier"],
+    {
+      tagline: string;
+      highlight: boolean;
+      badge?: string;
+      ctaLabel: string;
+      features: string[];
+    }
+  > = {
     social: {
       tagline: "Solo dating, standard speed",
       highlight: false,
@@ -2363,7 +2432,9 @@ function PremiumStep({
 
     try {
       toast.loading("Redirecting to checkout...", { id: "checkout" });
-      const res = await authClient.stripe.upgrade({
+      const res = await (
+        authClient as unknown as StripeUpgradeActions
+      ).stripe.upgrade({
         priceId,
         callbackURL: `${window.location.origin}/me`,
       });

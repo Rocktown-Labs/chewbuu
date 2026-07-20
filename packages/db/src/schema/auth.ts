@@ -38,6 +38,7 @@ export const user = pgTable("user", {
 export const passkey = pgTable(
   "passkey",
   {
+    aaguid: text("aaguid"),
     backedUp: boolean("backed_up").default(false).notNull(),
     counter: integer("counter").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
