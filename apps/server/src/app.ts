@@ -59,7 +59,7 @@ app.doc("/openapi.json", {
   openapi: "3.0.0",
 });
 
-app.get("/debug-sentry", (c) => {
+app.get("/debug-sentry", () => {
   Sentry.logger.info("User triggered test error", {
     action: "test_error_endpoint",
   });

@@ -15,14 +15,7 @@ if (dsn) {
 
     enabled: process.env.NODE_ENV !== "test",
 
-    profileSessionSampleRate: 1,
-    profileLifecycle: "trace",
-
+    // Profiling is enabled via nodeProfilingIntegration; sample rate options vary by SDK version.
     enableLogs: true,
-
-    dataCollection: {
-      // userInfo: false,
-      // httpBodies: [],
-    },
   });
 }
