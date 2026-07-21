@@ -197,7 +197,7 @@ export function DateChat({
   const candidates = allCandidates.length > 0 ? allCandidates : [person];
 
   return (
-    <div className="flex h-[min(720px,calc(100dvh-8rem))] min-h-[520px] w-full overflow-hidden rounded-2xl border border-border/80 bg-background shadow-xl md:flex-row flex-col">
+    <div className="flex h-[min(720px,calc(100dvh-12rem))] min-h-[440px] w-full overflow-hidden bg-background md:min-h-[520px] md:flex-row flex-col">
       {candidates.length > 1 ? (
         <aside className="flex max-h-40 w-full shrink-0 flex-col border-b border-border/80 bg-card/40 md:max-h-none md:w-72 md:border-r md:border-b-0">
           <div className="flex items-center justify-between border-b border-border/80 px-3 py-3">

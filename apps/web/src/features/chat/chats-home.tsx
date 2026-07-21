@@ -194,10 +194,10 @@ export function DashboardChats({
   ).length;
 
   return (
-    <div className="flex h-[calc(100dvh-7.5rem)] min-h-[520px] w-full overflow-hidden rounded-2xl border border-border/80 bg-background shadow-xl">
+    <div className="flex h-[calc(100dvh-4rem)] min-h-[520px] w-full overflow-hidden bg-background">
       <aside
         className={cn(
-          "w-full shrink-0 flex-col border-r border-border/80 bg-card/30 md:flex md:w-80",
+          "w-full shrink-0 flex-col border-r border-border/80 bg-card/20 md:flex md:w-80",
           mobileShowThread ? "hidden md:flex" : "flex"
         )}
       >

@@ -28,7 +28,6 @@ export function useUsernameChecker(rawUsername: string) {
   const [status, setStatus] = useState<
     "idle" | "checking" | "available" | "taken" | "invalid"
   >("idle");
-  const [isInstantBloom, setIsInstantBloom] = useState(false);
 
   const [debouncedUsername] = useDebouncedValue(
     rawUsername.trim().toLowerCase(),
@@ -40,27 +39,22 @@ export function useUsernameChecker(rawUsername: string) {
 
     if (!username) {
       setStatus("idle");
-      setIsInstantBloom(false);
       return;
     }
 
     if (username.length < 3 || !/^[a-zA-Z0-9_]+$/.test(username)) {
       setStatus("invalid");
-      setIsInstantBloom(false);
       return;
     }
 
-    // Bloom Filter check: false means 100% available!
     const mightBeTaken = clientBloomFilter.mightContain(username);
 
     if (!mightBeTaken) {
       setStatus("available");
-      setIsInstantBloom(true);
       return;
     }
 
     setStatus("checking");
-    setIsInstantBloom(false);
 
     const timer = setTimeout(() => {
       if (TAKEN_USERNAMES.includes(username)) {
@@ -73,5 +67,5 @@ export function useUsernameChecker(rawUsername: string) {
     return () => clearTimeout(timer);
   }, [debouncedUsername]);
 
-  return { debouncedUsername, isInstantBloom, status };
+  return { debouncedUsername, status };
 }

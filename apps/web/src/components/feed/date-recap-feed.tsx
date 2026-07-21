@@ -7,6 +7,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Image } from "@unpic/react";
 import { Heart, MapPin, MessageSquare, Share2, Sparkles } from "lucide-react";
 import { useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 export interface FeedRecapItem {
   caption: string;
@@ -22,6 +23,7 @@ export interface FeedRecapItem {
 }
 
 interface DateRecapFeedProps {
+  emptyAction?: ReactNode;
   initialItems?: FeedRecapItem[];
 }
 
@@ -33,6 +35,7 @@ interface RecapFeedPage {
 const defaultInitialItems: FeedRecapItem[] = [];
 
 export function DateRecapFeed({
+  emptyAction,
   initialItems = defaultInitialItems,
 }: DateRecapFeedProps) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -100,6 +103,7 @@ export function DateRecapFeed({
           Be the first to share a date recap from your recent spots and invite
           friends to follow your vibe!
         </p>
+        {emptyAction ? <div className="mt-5">{emptyAction}</div> : null}
       </div>
     );
   }

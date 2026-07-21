@@ -559,7 +559,7 @@ describe("dating routes", () => {
         what: ["eat", "drink", "play"],
       })
     ).toBe(
-      "chicken whiskey pool food restaurant bar drinks wine beer coffee cocktail fun entertainment things to do in Little Rock, AR"
+      "chicken whiskey pool food restaurant bar drinks wine beer coffee cocktail fun entertainment things to do near Little Rock, AR"
     );
   });
 
@@ -570,7 +570,7 @@ describe("dating routes", () => {
         filters: ["yoga", "hiking"],
         what: ["move"],
       })
-    ).toBe("yoga hiking fitness gym activity workout in Nashville, TN");
+    ).toBe("yoga hiking fitness gym activity workout near Nashville, TN");
   });
 
   it("omits empty filters from the Google Places text query", () => {
@@ -580,7 +580,7 @@ describe("dating routes", () => {
         filters: [],
         what: ["eat"],
       })
-    ).toBe("food restaurant in Nashville, TN");
+    ).toBe("food restaurant near Nashville, TN");
   });
 
   it("keeps text filters when biasing Google Places by coordinates", async () => {
@@ -621,7 +621,7 @@ describe("dating routes", () => {
     };
     expect(body).toMatchObject({
       includedType: "restaurant",
-      textQuery: "tacos food restaurant in Searcy, AR",
+      textQuery: "tacos food restaurant near Searcy, AR",
     });
     expect(body.locationBias?.circle?.center).toEqual({
       latitude: 35.2468,

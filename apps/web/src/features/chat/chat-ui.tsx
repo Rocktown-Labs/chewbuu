@@ -1,9 +1,4 @@
 import {
-  Attachment,
-  AttachmentMedia,
-  AttachmentTrigger,
-} from "@chewbuu/ui/components/attachment";
-import {
   Avatar,
   AvatarFallback,
   AvatarImage,
@@ -77,6 +72,9 @@ import {
   isDateRoomLockedToVideo,
 } from "./chat-types";
 import { formatDuration, useMediaRecorder } from "./use-media-recorder";
+
+const urlPattern = /https?:\/\/[^\s<>"']+/i;
+const imageUrlPattern = /\.(?:apng|avif|gif|jpe?g|png|webp)(?:\?.*)?$/i;
 
 export function personInitials(name: string): string {
   return name
@@ -190,54 +188,91 @@ function MediaAttachmentBubble({
   thumb?: string;
   title?: string;
 }) {
+  const label =
+    kind === "voice"
+      ? "Voice note"
+      : kind === "video"
+        ? (title ?? "Video")
+        : (title ?? "Photo");
+
   return (
     <Bubble align={align} variant="ghost">
-      <BubbleContent className="p-0">
-        <Attachment
-          className="overflow-hidden rounded-2xl"
-          orientation="vertical"
-          state="done"
-        >
-          <AttachmentMedia
-            className="aspect-[3/4] w-36 sm:w-40"
-            variant="image"
+      <BubbleContent className="overflow-hidden rounded-2xl p-0">
+        {kind === "voice" ? (
+          <button
+            aria-label={label}
+            className="flex min-w-36 items-center gap-3 rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-left"
+            onClick={onOpen}
+            type="button"
           >
-            {kind === "voice" ? (
-              <div className="flex size-full flex-col items-center justify-center gap-2 bg-muted text-foreground">
-                <Mic />
-                <span className="text-[10px] font-semibold">
-                  {durationSec ? formatDuration(durationSec) : "Voice"}
-                </span>
-              </div>
-            ) : (
-              <>
-                {thumb ? (
-                  <img alt="" className="size-full object-cover" src={thumb} />
-                ) : (
-                  <div className="size-full bg-muted" />
-                )}
-                {kind === "video" ? (
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/25">
-                    <span className="flex size-10 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
-                      <Play className="fill-current" />
-                    </span>
-                  </span>
-                ) : null}
-                {durationSec ? (
-                  <span className="absolute right-2 bottom-2 rounded-full bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                    {formatDuration(durationSec)}
-                  </span>
-                ) : null}
-              </>
-            )}
-          </AttachmentMedia>
-          {title ? (
-            <span className="px-2 pb-1.5 text-[10px] font-medium text-muted-foreground">
-              {title}
+            <span className="grid size-9 place-items-center rounded-full bg-background/80 text-foreground">
+              <Mic className="size-4" />
             </span>
-          ) : null}
-          <AttachmentTrigger onClick={onOpen} />
-        </Attachment>
+            <span className="flex flex-col">
+              <span className="font-bold text-xs">Voice note</span>
+              <span className="text-[10px] text-muted-foreground">
+                {durationSec ? formatDuration(durationSec) : "Tap to play"}
+              </span>
+            </span>
+          </button>
+        ) : (
+          <button
+            aria-label={label}
+            className="relative block max-w-52 overflow-hidden rounded-2xl border border-border/70 bg-muted/30 text-left sm:max-w-60"
+            onClick={onOpen}
+            type="button"
+          >
+            {thumb ? (
+              <img
+                alt={label}
+                className="aspect-[3/4] w-full object-cover"
+                src={thumb}
+              />
+            ) : (
+              <span className="block aspect-[3/4] w-40 bg-muted" />
+            )}
+            {kind === "video" ? (
+              <span className="absolute inset-0 flex items-center justify-center bg-black/25">
+                <span className="flex size-10 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
+                  <Play className="fill-current" />
+                </span>
+              </span>
+            ) : null}
+            {durationSec ? (
+              <span className="absolute right-2 bottom-2 rounded-full bg-black/70 px-1.5 py-0.5 font-semibold text-[10px] text-white">
+                {formatDuration(durationSec)}
+              </span>
+            ) : null}
+          </button>
+        )}
+      </BubbleContent>
+    </Bubble>
+  );
+}
+
+function LinkPreviewBubble({
+  align,
+  text,
+}: {
+  align: "end" | "start";
+  text?: string;
+}) {
+  const url = text?.match(urlPattern)?.[0];
+
+  if (!url || !imageUrlPattern.test(url)) {
+    return null;
+  }
+
+  return (
+    <Bubble align={align} variant="ghost">
+      <BubbleContent className="mt-1 overflow-hidden rounded-2xl border border-border/70 p-0">
+        <a href={url} rel="noreferrer" target="_blank">
+          <img
+            alt="Link preview"
+            className="max-h-64 w-52 object-cover sm:w-64"
+            src={url}
+          />
+        </a>
       </BubbleContent>
     </Bubble>
   );
@@ -280,16 +315,19 @@ export function ChatMessageRow({
       <MessageContent>
         {!isMe && showAvatar ? <MessageHeader>{name}</MessageHeader> : null}
         {message.kind === "text" ? (
-          <Bubble align={align} variant={isMe ? "default" : "muted"}>
-            <BubbleContent className="rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed">
-              {message.text}
-            </BubbleContent>
-            {message.reaction ? (
-              <BubbleReactions align={isMe ? "end" : "start"} side="bottom">
-                <span className="text-xs">{message.reaction}</span>
-              </BubbleReactions>
-            ) : null}
-          </Bubble>
+          <>
+            <Bubble align={align} variant={isMe ? "default" : "muted"}>
+              <BubbleContent className="rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed">
+                {message.text}
+              </BubbleContent>
+              {message.reaction ? (
+                <BubbleReactions align={isMe ? "end" : "start"} side="bottom">
+                  <span className="text-xs">{message.reaction}</span>
+                </BubbleReactions>
+              ) : null}
+            </Bubble>
+            <LinkPreviewBubble align={align} text={message.text} />
+          </>
         ) : null}
         {message.kind === "intro_video" ||
         message.kind === "video" ||

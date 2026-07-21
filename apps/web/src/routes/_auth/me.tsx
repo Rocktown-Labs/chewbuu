@@ -19,9 +19,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@chewbuu/ui/components/dialog";
-import { Field, FieldLabel } from "@chewbuu/ui/components/field";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@chewbuu/ui/components/field";
 import { Input } from "@chewbuu/ui/components/input";
 import { Progress } from "@chewbuu/ui/components/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@chewbuu/ui/components/select";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { cn } from "@chewbuu/ui/lib/utils";
 import {
@@ -81,6 +92,7 @@ import {
   type DatingProfilePayload,
   type DatingSummary,
 } from "@/lib/dating-api";
+import { useUsernameChecker } from "@/lib/use-username-checker";
 
 interface DateRecap {
   id: string;
@@ -165,6 +177,74 @@ type ProfileMediaItem = {
   label: string;
   url: string;
 };
+
+const sexOptions = [
+  "Female",
+  "Male",
+  "Nonbinary",
+  "Trans Woman",
+  "Trans Man",
+  "Prefer Not to Say",
+] as const;
+const sexualityOptions = [
+  "Straight",
+  "Gay",
+  "Lesbian",
+  "Bisexual",
+  "Pansexual",
+  "Queer",
+  "Questioning",
+  "Prefer Not to Say",
+] as const;
+const maritalStatusOptions = [
+  "Single",
+  "Dating",
+  "Engaged",
+  "Married",
+  "Separated",
+  "Divorced",
+  "Widowed",
+  "Prefer Not to Say",
+] as const;
+const politicsOptions = [
+  "Liberal",
+  "Moderate",
+  "Conservative",
+  "Independent",
+  "Apolitical",
+  "Other",
+  "Prefer Not to Say",
+] as const;
+const religionOptions = [
+  "Christian",
+  "Muslim",
+  "Jewish",
+  "Hindu",
+  "Buddhist",
+  "Spiritual",
+  "Agnostic",
+  "Atheist",
+  "Other",
+  "Prefer Not to Say",
+] as const;
+const kidsOptions = ["Have Kids", "Do Not Have Kids", "Prefer Not to Say"];
+const wantsKidsOptions = [
+  "Want Kids",
+  "Open to Kids",
+  "Do Not Want Kids",
+  "Not Sure",
+  "Prefer Not to Say",
+] as const;
+const interestedInOptions = ["women", "men", "couples", "friends", "groups"];
+const lookingForOptions = [
+  "A relationship",
+  "Intentional dating",
+  "Casual dates",
+  "New friends",
+  "Double dates",
+  "Group hangs",
+  "Not sure yet",
+] as const;
 
 const scenarioToHistory = (scenario: DateScenario): DateHistoryItem => ({
   acceptedMatchId: scenario.acceptedMatchId ?? "",
@@ -407,7 +487,8 @@ export function MePage({
 
   const isFullView =
     activeTab === "chats" ||
-    (activeTab === "matches" && selectedDateHistoryId !== null) ||
+    activeTab === "calendar" ||
+    activeTab === "matches" ||
     activeTab === "profile";
   const isSidebarCollapsed = isFullView || userCollapsedSidebar;
   const showRightSidebar = !isFullView;
@@ -2207,6 +2288,19 @@ export function MePage({
                         ) : null}
                         <Check className="size-4 text-primary fill-primary/10 rounded-full" />
                       </h3>
+                      {profile?.username ? (
+                        <p className="font-semibold text-primary text-xs">
+                          @{profile.username}
+                        </p>
+                      ) : (
+                        <button
+                          className="w-fit font-semibold text-primary text-xs underline-offset-4 hover:underline"
+                          onClick={() => setProfileMode("edit")}
+                          type="button"
+                        >
+                          Add username
+                        </button>
+                      )}
                       {profile?.occupation && (
                         <p className="text-xs font-semibold text-muted-foreground">
                           {profile.occupation}
@@ -2286,17 +2380,6 @@ export function MePage({
                   {/* Profile Sub-tab Content */}
                   <div className="p-5">
                     <div className="flex flex-col gap-6">
-                      <Link
-                        className={buttonVariants({
-                          className:
-                            "w-full rounded-full border border-dashed border-primary/45 bg-primary/5 font-bold text-primary hover:bg-primary/10",
-                        })}
-                        to={canDate ? "/date/new" : "/onboarding"}
-                      >
-                        <CalendarHeart className="size-4" />
-                        Book a Date to Capture a Recap
-                      </Link>
-
                       {/* Add Recap Form Dialog */}
                       {showAddRecap && (
                         <Card className="border-2 border-primary/30 p-5 mt-2 rounded-2xl bg-card/60">
@@ -2400,7 +2483,24 @@ export function MePage({
                         </Card>
                       )}
 
-                      <DateRecapFeed initialItems={userRecaps} />
+                      <DateRecapFeed
+                        emptyAction={
+                          <Link
+                            className={buttonVariants({
+                              className:
+                                "rounded-full font-bold shadow-sm shadow-primary/15",
+                              size: "sm",
+                            })}
+                            to={canDate ? "/date/new" : "/onboarding"}
+                          >
+                            <CalendarHeart className="size-4" />
+                            {canDate
+                              ? "Book a Date to Capture a Recap"
+                              : "Finish Profile Setup"}
+                          </Link>
+                        }
+                        initialItems={userRecaps}
+                      />
                     </div>
                   </div>
                 </>
@@ -2930,10 +3030,60 @@ function ProfileEditPanel({
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const usernameCheck = useUsernameChecker(formData.username);
+  const normalizedUsername = formData.username.trim().toLowerCase();
+  const usernameWasUnchanged = normalizedUsername === (profile?.username ?? "");
+  const usernameStatus = usernameWasUnchanged
+    ? "available"
+    : usernameCheck.status;
+  const usernameMessage =
+    usernameStatus === "available"
+      ? usernameWasUnchanged
+        ? "Current username"
+        : "Username is available"
+      : usernameStatus === "checking"
+        ? "Checking username..."
+        : usernameStatus === "taken"
+          ? "That username is taken"
+          : usernameStatus === "invalid"
+            ? "Use 3+ letters, numbers, or underscores"
+            : "Enter a username";
+  const formErrors = useMemo(() => {
+    const errors: string[] = [];
+    if (!normalizedUsername) {
+      errors.push("Username is required.");
+    } else if (usernameStatus === "invalid" || usernameStatus === "taken") {
+      errors.push(usernameMessage);
+    }
+    if (!formData.name.trim()) errors.push("Display name is required.");
+    if (!formData.area.trim()) errors.push("Location is required.");
+    if (!formData.birthday) errors.push("Birthday is required.");
+    if (!formData.sex) errors.push("Sex is required.");
+    if (!formData.sexuality) errors.push("Sexuality is required.");
+    if (!formData.maritalStatus)
+      errors.push("Relationship status is required.");
+    if (!formData.kids) errors.push("Kids status is required.");
+    if (!formData.wantsKids) errors.push("Future kids preference is required.");
+    if (!formData.politics) errors.push("Politics is required.");
+    if (!formData.religion) errors.push("Religion is required.");
+    if (formData.interestedIn.length === 0) {
+      errors.push("Select at least one interested-in option.");
+    }
+    if (formData.lookingFor.length === 0) {
+      errors.push("Select at least one looking-for option.");
+    }
+    if (formData.ageRangeMin < 18) {
+      errors.push("Minimum match age must be 18 or older.");
+    }
+    if (formData.ageRangeMax < formData.ageRangeMin) {
+      errors.push("Maximum match age must be greater than minimum match age.");
+    }
+    return errors;
+  }, [formData, normalizedUsername, usernameMessage, usernameStatus]);
 
   const handleSave = async () => {
-    if (!formData.username.trim()) {
-      toast.error("Username is required to complete your profile.");
+    if (formErrors.length > 0) {
+      toast.error(formErrors[0]);
       return;
     }
 
@@ -2956,7 +3106,7 @@ function ProfileEditPanel({
           sexuality: formData.sexuality,
           trustedContacts: [],
         }),
-        username: formData.username.trim().toLowerCase(),
+        username: normalizedUsername,
         name: formData.name.trim() || undefined,
         bio: formData.bio.trim() || undefined,
         birthday: formData.birthday,
@@ -2987,6 +3137,17 @@ function ProfileEditPanel({
           },
         ],
       };
+
+      if (!usernameWasUnchanged) {
+        const { error: usernameError } = await authClient.updateUser({
+          username: normalizedUsername,
+        });
+        if (usernameError) {
+          throw new Error(
+            usernameError.message ?? "That username is taken. Pick another one."
+          );
+        }
+      }
 
       await datingApi.saveProfile(updatedPayload);
       toast.success("Profile settings updated successfully!");
@@ -3043,14 +3204,40 @@ function ProfileEditPanel({
                 @
               </span>
               <Input
-                className="rounded-full pl-7"
+                aria-describedby="profile-username-status"
+                aria-invalid={
+                  usernameStatus === "invalid" || usernameStatus === "taken"
+                }
+                className={cn(
+                  "rounded-full pl-7",
+                  usernameStatus === "available" &&
+                    "border-emerald-500 focus-visible:ring-emerald-500/35",
+                  (usernameStatus === "invalid" ||
+                    usernameStatus === "taken") &&
+                    "border-destructive focus-visible:ring-destructive/35"
+                )}
                 placeholder="username"
                 value={formData.username}
                 onChange={(e) =>
-                  setFormData({ ...formData, username: e.target.value })
+                  setFormData({
+                    ...formData,
+                    username: e.target.value.toLowerCase(),
+                  })
                 }
               />
             </div>
+            <p
+              className={cn(
+                "text-[11px]",
+                usernameStatus === "available" && "text-emerald-600",
+                usernameStatus === "checking" && "text-muted-foreground",
+                (usernameStatus === "invalid" || usernameStatus === "taken") &&
+                  "text-destructive"
+              )}
+              id="profile-username-status"
+            >
+              {usernameMessage}
+            </p>
           </Field>
 
           <Field className="gap-1">
@@ -3118,27 +3305,19 @@ function ProfileEditPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Sex</FieldLabel>
-            <Input
-              className="rounded-full"
-              value={formData.sex}
-              onChange={(e) =>
-                setFormData({ ...formData, sex: e.target.value })
-              }
-            />
-          </Field>
+          <SettingsSelectField
+            label="Sex"
+            onChange={(sex) => setFormData({ ...formData, sex })}
+            options={sexOptions}
+            value={formData.sex}
+          />
 
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Sexuality</FieldLabel>
-            <Input
-              className="rounded-full"
-              value={formData.sexuality}
-              onChange={(e) =>
-                setFormData({ ...formData, sexuality: e.target.value })
-              }
-            />
-          </Field>
+          <SettingsSelectField
+            label="Sexuality"
+            onChange={(sexuality) => setFormData({ ...formData, sexuality })}
+            options={sexualityOptions}
+            value={formData.sexuality}
+          />
 
           <Field className="gap-1">
             <FieldLabel className="text-xs font-bold">Height</FieldLabel>
@@ -3164,40 +3343,28 @@ function ProfileEditPanel({
             />
           </Field>
 
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">
-              Marital Status
-            </FieldLabel>
-            <Input
-              className="rounded-full"
-              value={formData.maritalStatus}
-              onChange={(e) =>
-                setFormData({ ...formData, maritalStatus: e.target.value })
-              }
-            />
-          </Field>
+          <SettingsSelectField
+            label="Relationship Status"
+            onChange={(maritalStatus) =>
+              setFormData({ ...formData, maritalStatus })
+            }
+            options={maritalStatusOptions}
+            value={formData.maritalStatus}
+          />
 
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Kids</FieldLabel>
-            <Input
-              className="rounded-full"
-              value={formData.kids}
-              onChange={(e) =>
-                setFormData({ ...formData, kids: e.target.value })
-              }
-            />
-          </Field>
+          <SettingsSelectField
+            label="Kids"
+            onChange={(kids) => setFormData({ ...formData, kids })}
+            options={kidsOptions}
+            value={formData.kids}
+          />
 
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Wants Kids</FieldLabel>
-            <Input
-              className="rounded-full"
-              value={formData.wantsKids}
-              onChange={(e) =>
-                setFormData({ ...formData, wantsKids: e.target.value })
-              }
-            />
-          </Field>
+          <SettingsSelectField
+            label="Future Kids"
+            onChange={(wantsKids) => setFormData({ ...formData, wantsKids })}
+            options={wantsKidsOptions}
+            value={formData.wantsKids}
+          />
 
           <Field className="gap-1">
             <FieldLabel className="text-xs font-bold">Occupation</FieldLabel>
@@ -3211,27 +3378,19 @@ function ProfileEditPanel({
             />
           </Field>
 
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Religion</FieldLabel>
-            <Input
-              className="rounded-full"
-              value={formData.religion}
-              onChange={(e) =>
-                setFormData({ ...formData, religion: e.target.value })
-              }
-            />
-          </Field>
+          <SettingsSelectField
+            label="Religion"
+            onChange={(religion) => setFormData({ ...formData, religion })}
+            options={religionOptions}
+            value={formData.religion}
+          />
 
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Politics</FieldLabel>
-            <Input
-              className="rounded-full"
-              value={formData.politics}
-              onChange={(e) =>
-                setFormData({ ...formData, politics: e.target.value })
-              }
-            />
-          </Field>
+          <SettingsSelectField
+            label="Politics"
+            onChange={(politics) => setFormData({ ...formData, politics })}
+            options={politicsOptions}
+            value={formData.politics}
+          />
         </CardContent>
       </Card>
 
@@ -3247,63 +3406,44 @@ function ProfileEditPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Interested In</FieldLabel>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {["Female", "Male", "Everyone"].map((option) => {
-                const active = formData.interestedIn.includes(option);
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => {
-                      const next = active
-                        ? formData.interestedIn.filter((i) => i !== option)
-                        : [...formData.interestedIn, option];
-                      setFormData({ ...formData, interestedIn: next });
-                    }}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
-                      active
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {option}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
+          <SettingsMultiPillField
+            label="Interested In"
+            onChange={(interestedIn) =>
+              setFormData({ ...formData, interestedIn })
+            }
+            options={interestedInOptions}
+            value={formData.interestedIn}
+          />
 
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Looking For</FieldLabel>
-            <div className="flex flex-wrap gap-2 pt-1">
-              {["Relationship", "Marriage", "Dating", "Casual", "Friends"].map(
-                (option) => {
-                  const active = formData.lookingFor.includes(option);
-                  return (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => {
-                        const next = active
-                          ? formData.lookingFor.filter((i) => i !== option)
-                          : [...formData.lookingFor, option];
-                        setFormData({ ...formData, lookingFor: next });
-                      }}
-                      className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
-                        active
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {option}
-                    </button>
-                  );
-                }
-              )}
-            </div>
-          </Field>
+          <SettingsMultiPillField
+            label="Looking For"
+            onChange={(lookingFor) => setFormData({ ...formData, lookingFor })}
+            options={lookingForOptions}
+            value={formData.lookingFor}
+          />
+
+          <div className="sm:col-span-2">
+            <SettingsMultiPillField
+              label="Date Styles"
+              onChange={(datingModes) =>
+                setFormData({ ...formData, datingModes })
+              }
+              options={[
+                "solo",
+                "eat",
+                "drink",
+                "play",
+                "move",
+                "watch",
+                "talk",
+              ]}
+              value={formData.datingModes}
+            />
+            <FieldDescription className="mt-2 text-xs">
+              These mirror onboarding interests and date modes used for
+              matching.
+            </FieldDescription>
+          </div>
 
           <Field className="gap-1">
             <FieldLabel className="text-xs font-bold">
@@ -3383,6 +3523,21 @@ function ProfileEditPanel({
         </CardContent>
       </Card>
 
+      {formErrors.length > 0 ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-destructive text-xs">
+          <p className="font-bold">Fix these before saving</p>
+          <ul className="mt-2 grid gap-1">
+            {formErrors.slice(0, 4).map((error) => (
+              <li key={error}>{error}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-emerald-600 text-xs">
+          Profile settings look ready to save.
+        </div>
+      )}
+
       {/* ACTIONS */}
       <div className="flex items-center justify-between gap-4 pt-2">
         <Button
@@ -3395,7 +3550,7 @@ function ProfileEditPanel({
         </Button>
         <Button
           className="rounded-full font-bold px-8 shadow-lg shadow-primary/20"
-          disabled={isSaving}
+          disabled={isSaving || usernameStatus === "checking"}
           onClick={handleSave}
           type="button"
         >
@@ -3403,6 +3558,88 @@ function ProfileEditPanel({
         </Button>
       </div>
     </div>
+  );
+}
+
+function SettingsSelectField({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  value: string;
+}) {
+  return (
+    <Field className="gap-1">
+      <FieldLabel className="font-bold text-xs">{label}</FieldLabel>
+      <Select
+        onValueChange={(nextValue) => {
+          if (nextValue) onChange(nextValue);
+        }}
+        value={value}
+      >
+        <SelectTrigger className="h-10 w-full rounded-full border border-border bg-background px-4 text-sm">
+          <SelectValue placeholder={`Select ${label.toLowerCase()}`} />
+        </SelectTrigger>
+        <SelectContent className="max-h-60 overflow-y-auto rounded-2xl border border-border bg-popover p-1 shadow-xl">
+          {options.map((option) => (
+            <SelectItem
+              className="cursor-pointer rounded-xl px-3 py-2 text-xs focus:bg-primary/10 focus:text-primary"
+              key={option}
+              value={option}
+            >
+              {formatLabel(option)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+function SettingsMultiPillField({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: string[]) => void;
+  options: readonly string[];
+  value: string[];
+}) {
+  return (
+    <Field className="gap-1">
+      <FieldLabel className="font-bold text-xs">{label}</FieldLabel>
+      <div className="flex flex-wrap gap-2 pt-1">
+        {options.map((option) => {
+          const active = value.includes(option);
+          return (
+            <button
+              className={cn(
+                "rounded-full px-3 py-1.5 font-bold text-xs transition",
+                active
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              )}
+              key={option}
+              onClick={() => {
+                const next = active
+                  ? value.filter((item) => item !== option)
+                  : [...value, option];
+                onChange(next);
+              }}
+              type="button"
+            >
+              {formatLabel(option)}
+            </button>
+          );
+        })}
+      </div>
+    </Field>
   );
 }
 
@@ -3777,17 +4014,15 @@ function DateHistoryDetail({
   );
 
   const [activeCardStep, setActiveCardStep] = useState<
-    "request" | "matcher" | "chat" | "choice" | "date"
-  >(() => {
-    return currentDate.acceptedMatchId ? "choice" : "matcher";
-  });
+    "request" | "matcher" | "choice" | "date"
+  >("request");
 
   const [activeChatMatchId, setActiveChatMatchId] = useState<string | null>(
     null
   );
 
   const activeChatCandidate = currentDate.matches.find(
-    (m) => m.id === activeChatMatchId
+    (match) => match.id === activeChatMatchId
   );
 
   const handleChoosePartner = (matchId: string) => {
@@ -3838,89 +4073,85 @@ function DateHistoryDetail({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* 4 Interactive Status Cards Header matching screenshot_1784489419.png */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {/* Card 1: Request */}
-        <button
-          type="button"
-          onClick={() => setActiveCardStep("request")}
-          className={cn(
-            "flex flex-col gap-1 p-3.5 rounded-xl border text-left transition select-none cursor-pointer",
-            activeCardStep === "request"
-              ? "border-emerald-500/50 bg-emerald-500/10 shadow-sm"
-              : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
-          )}
-        >
-          <div className="flex items-center gap-1.5 text-emerald-500 font-bold text-xs">
-            <span className="size-2 rounded-full bg-emerald-500" />
-            <span>Request</span>
-          </div>
-          <span className="text-[11px] text-muted-foreground mt-0.5 truncate">
-            {currentDate.places.length || 3} spots selected
-          </span>
-        </button>
-
-        {/* Card 2: Matcher */}
-        <button
-          type="button"
-          onClick={() => setActiveCardStep("matcher")}
-          className={cn(
-            "flex flex-col gap-1 p-3.5 rounded-xl border text-left transition select-none cursor-pointer",
-            activeCardStep === "matcher" || activeCardStep === "chat"
-              ? "border-emerald-500/50 bg-emerald-500/10 shadow-sm"
-              : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
-          )}
-        >
-          <div className="flex items-center gap-1.5 text-emerald-500 font-bold text-xs">
-            <span className="size-2 rounded-full bg-emerald-500" />
-            <span>Matcher</span>
-          </div>
-          <span className="text-[11px] text-muted-foreground mt-0.5 truncate">
-            {currentDate.matches.length} candidates reviewed
-          </span>
-        </button>
-
-        {/* Card 3: Choice */}
-        <button
-          type="button"
-          onClick={() => setActiveCardStep("choice")}
-          className={cn(
-            "flex flex-col gap-1 p-3.5 rounded-xl border text-left transition select-none cursor-pointer",
-            activeCardStep === "choice"
-              ? "border-emerald-500/50 bg-emerald-500/10 shadow-sm"
-              : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
-          )}
-        >
-          <div className="flex items-center gap-1.5 text-emerald-500 font-bold text-xs">
-            <span className="size-2 rounded-full bg-emerald-500" />
-            <span>Choice</span>
-          </div>
-          <span className="text-[11px] text-muted-foreground mt-0.5 truncate">
-            {acceptedMatch
-              ? `${acceptedMatch.displayName} accepted`
-              : "Pending partner"}
-          </span>
-        </button>
-
-        {/* Card 4: Date */}
-        <button
-          type="button"
-          onClick={() => setActiveCardStep("date")}
-          className={cn(
-            "flex flex-col gap-1 p-3.5 rounded-xl border text-left transition select-none cursor-pointer",
-            activeCardStep === "date"
-              ? "border-amber-500/50 bg-amber-500/10 shadow-sm"
-              : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
-          )}
-        >
-          <div className="flex items-center gap-1.5 text-amber-500 font-bold text-xs">
-            <span className="size-2 rounded-full bg-amber-500" />
-            <span>Date</span>
-          </div>
-          <span className="text-[11px] text-muted-foreground mt-0.5 truncate">
-            {isGeofenceScanned ? "Live · Memories open" : "Review + recap open"}
-          </span>
-        </button>
+      <div
+        aria-label="Date request steps"
+        className="-mx-5 flex gap-2 overflow-x-auto border-b border-border/70 px-5 pb-4 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:border-b-0 sm:px-0 sm:pb-0"
+        role="tablist"
+      >
+        {[
+          {
+            description: `${currentDate.places.length || 3} spots selected`,
+            key: "request" as const,
+            label: "Request",
+            tone: "done" as const,
+          },
+          {
+            description: activeChatCandidate
+              ? `Room with ${activeChatCandidate.displayName}`
+              : `${currentDate.matches.length} candidate rooms`,
+            key: "matcher" as const,
+            label: "Matcher",
+            tone: "live" as const,
+          },
+          {
+            description: acceptedMatch
+              ? `${acceptedMatch.displayName} chosen`
+              : "Pending partner",
+            key: "choice" as const,
+            label: "Choice",
+            tone: acceptedMatch ? ("done" as const) : ("muted" as const),
+          },
+          {
+            description: isGeofenceScanned
+              ? "Live + memories open"
+              : "After confirmation",
+            key: "date" as const,
+            label: "Date",
+            tone: isGeofenceScanned ? ("live" as const) : ("muted" as const),
+          },
+        ].map((item) => {
+          const active = activeCardStep === item.key;
+          return (
+            <button
+              aria-selected={active}
+              className={cn(
+                "min-w-[9.25rem] rounded-lg border p-3 text-left transition sm:min-w-0",
+                active
+                  ? "border-primary/40 bg-primary/10 shadow-sm"
+                  : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
+              )}
+              key={item.key}
+              onClick={() => {
+                setActiveCardStep(item.key);
+                if (item.key !== "matcher") setActiveChatMatchId(null);
+              }}
+              role="tab"
+              type="button"
+            >
+              <span
+                className={cn(
+                  "flex items-center gap-1.5 font-bold text-xs",
+                  item.tone === "done" && "text-emerald-600",
+                  item.tone === "live" && "text-primary",
+                  item.tone === "muted" && "text-muted-foreground"
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    item.tone === "done" && "bg-emerald-500",
+                    item.tone === "live" && "bg-primary",
+                    item.tone === "muted" && "bg-muted-foreground/60"
+                  )}
+                />
+                {item.label}
+              </span>
+              <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+                {item.description}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* CARD 1: REQUEST SUMMARY VIEW */}
@@ -3929,10 +4160,10 @@ function DateHistoryDetail({
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle className="text-base">{currentDate.title}</CardTitle>
+                <CardTitle className="text-base">Request summary</CardTitle>
                 <CardDescription>
-                  {currentDate.searchArea} ·{" "}
-                  {new Date(currentDate.scheduledAt).toLocaleString()}
+                  This is the simplified version of onboarding that creates the
+                  date request.
                 </CardDescription>
               </div>
               <Badge className="rounded-full bg-amber-500/10 text-amber-600 border-0">
@@ -3940,40 +4171,99 @@ function DateHistoryDetail({
               </Badge>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-4">
-            {currentDate.timeline.map((item) => (
-              <div
-                className="flex flex-col gap-1 rounded-lg border border-border bg-background/50 p-3"
-                key={item.label}
-              >
-                <span
-                  className={cn(
-                    "size-2 rounded-full",
-                    item.tone === "done" && "bg-emerald-500",
-                    item.tone === "live" && "bg-amber-500",
-                    item.tone !== "done" &&
-                      item.tone !== "live" &&
-                      "bg-muted-foreground"
-                  )}
-                />
-                <span className="text-xs font-bold">{item.label}</span>
-                <span className="text-[10px] text-muted-foreground">
-                  {item.value}
+          <CardContent className="flex flex-col gap-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-border bg-background/50 p-3">
+                <span className="text-[10px] font-bold uppercase text-muted-foreground">
+                  Activity
                 </span>
+                <p className="mt-1 font-bold text-sm">
+                  {currentDate.what.map(formatLabel).join(" + ")}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {currentDate.title}
+                </p>
               </div>
-            ))}
+              <div className="rounded-lg border border-border bg-background/50 p-3">
+                <span className="text-[10px] font-bold uppercase text-muted-foreground">
+                  When
+                </span>
+                <p className="mt-1 font-bold text-sm">
+                  {new Date(currentDate.scheduledAt).toLocaleDateString([], {
+                    day: "numeric",
+                    month: "short",
+                    weekday: "short",
+                  })}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {new Date(currentDate.scheduledAt).toLocaleTimeString([], {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-background/50 p-3">
+                <span className="text-[10px] font-bold uppercase text-muted-foreground">
+                  Area
+                </span>
+                <p className="mt-1 font-bold text-sm">
+                  {currentDate.searchArea}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Solo request · Dutch split
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-3">
+              {currentDate.places.map((place) => (
+                <div
+                  className="rounded-lg border border-border/80 bg-background/50 p-3"
+                  key={place.placeId}
+                >
+                  <div className="flex items-start gap-2">
+                    <MapPin className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <p className="truncate font-bold text-xs">{place.name}</p>
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                        {place.address ?? currentDate.searchArea}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/8 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-bold text-sm">Ready for matching</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Each match opens as a date room first. Those rooms become
+                  regular chats after a friend or keep-chatting choice.
+                </p>
+              </div>
+              <Button
+                className="rounded-full text-xs sm:self-center"
+                onClick={() => setActiveCardStep("matcher")}
+                size="sm"
+                type="button"
+              >
+                Review matches
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
 
       {/* CARD 2: MATCHER CANDIDATES DIRECTORY */}
-      {activeCardStep === "matcher" && (
+      {activeCardStep === "matcher" && !activeChatCandidate && (
         <Card className="rounded-xl border-border bg-card/45">
           <CardHeader>
-            <CardTitle className="text-base">Match candidates</CardTitle>
+            <CardTitle className="text-base">Matcher rooms</CardTitle>
             <CardDescription>
-              Requesters can review candidates, watch intro reels, and chat in
-              private date rooms.
+              Open a candidate room inside this date request until you make a
+              choice.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -3985,7 +4275,6 @@ function DateHistoryDetail({
                 onShowChats={onShowChats}
                 onOpenChat={(id) => {
                   setActiveChatMatchId(id);
-                  setActiveCardStep("chat");
                 }}
               />
             ))}
@@ -3994,7 +4283,7 @@ function DateHistoryDetail({
       )}
 
       {/* CANDIDATE CHAT / DATE ROOM VIEW */}
-      {activeCardStep === "chat" && activeChatCandidate && (
+      {activeCardStep === "matcher" && activeChatCandidate && (
         <div className="flex flex-col gap-3">
           <div className="flex items-center">
             <Button
@@ -4007,7 +4296,7 @@ function DateHistoryDetail({
               className="text-xs text-muted-foreground hover:text-foreground h-8 rounded-full px-3 flex items-center gap-1 hover:bg-muted"
             >
               <ArrowLeft className="size-3.5" />
-              Back to Candidates
+              Back to rooms
             </Button>
           </div>
           <DateChat
@@ -4034,19 +4323,29 @@ function DateHistoryDetail({
               setActiveChatMatchId(null);
             }}
             onBlock={handleDeclinePartner}
-            onContinue={() => {
-              toast.success("Keep chatting — text and voice unlocked.");
-              onShowChats();
+            onContinue={(matchId) => {
+              setCurrentDate((prev) => ({
+                ...prev,
+                matches: prev.matches.map((match) =>
+                  match.id === matchId
+                    ? { ...match, status: "saved" as const }
+                    : match
+                ),
+              }));
+              toast.success(
+                "Keep chatting unlocked. This room can move to Chats."
+              );
             }}
             onFriend={(matchId) => {
               setCurrentDate((prev) => ({
                 ...prev,
-                matches: prev.matches.map((m) =>
-                  m.id === matchId ? { ...m, status: "friended" as const } : m
+                matches: prev.matches.map((match) =>
+                  match.id === matchId
+                    ? { ...match, status: "friended" as const }
+                    : match
                 ),
               }));
-              toast.success("Added as a friend — room moved to Chats.");
-              onShowChats();
+              toast.success("Added as a friend. This room can move to Chats.");
             }}
             onPick={handleChoosePartner}
             onSwitchCandidate={(id) => setActiveChatMatchId(id)}
@@ -4087,7 +4386,7 @@ function DateHistoryDetail({
           }}
           onOpenChat={() => {
             setActiveChatMatchId(acceptedMatch.id);
-            setActiveCardStep("chat");
+            setActiveCardStep("matcher");
           }}
           onReschedule={(nextIso) => {
             setCurrentDate((prev) => ({
@@ -4284,7 +4583,7 @@ function DateHistoryMatchRow({
           ))}
         </div>
       </div>
-      {match.status === "friended" ? (
+      {match.status === "friended" || match.status === "saved" ? (
         <Button
           className="rounded-full text-xs animate-none"
           onClick={onShowChats}
@@ -4322,7 +4621,7 @@ function MatchStatusBadge({ status }: { status: DateHistoryMatchStatus }) {
     accepted: "Accepted",
     declined: "Rejected",
     friended: "Friend",
-    saved: "Saved",
+    saved: "Chat",
     suggested: "Suggested",
   }[status];
   const className =

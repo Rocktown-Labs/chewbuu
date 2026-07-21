@@ -1392,7 +1392,7 @@ export const buildGooglePlacesTextQuery = (input: PlaceSuggestionInput) => {
     .join(" ");
   const descriptors = [filters, categoryIntent].filter(Boolean).join(" ");
 
-  return `${descriptors} in ${input.area}`;
+  return `${descriptors} near ${input.area}`;
 };
 
 export const normalizeGooglePlaces = (

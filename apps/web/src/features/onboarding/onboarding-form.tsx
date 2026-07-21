@@ -1015,38 +1015,47 @@ export function OnboardingForm() {
 }
 
 function UsernameInput({ field }: { field: any }) {
-  const { status, isInstantBloom } = useUsernameChecker(
-    field.state.value || ""
-  );
+  const { status } = useUsernameChecker(field.state.value || "");
+  const inputStateClass =
+    status === "available"
+      ? "border-emerald-500 focus-visible:ring-emerald-500/35"
+      : status === "taken" || status === "invalid"
+        ? "border-destructive focus-visible:ring-destructive/35"
+        : "";
   return (
     <Field>
       <FieldLabel htmlFor={field.name}>Username</FieldLabel>
       <div className="relative">
         <Input
-          className="rounded-full h-10 px-4 text-sm pr-32"
+          aria-invalid={status === "taken" || status === "invalid"}
+          className={`h-10 rounded-full px-4 text-sm ${inputStateClass}`}
           id={field.name}
           onBlur={field.handleBlur}
           onChange={(event) => field.handleChange(event.target.value)}
           placeholder="e.g. alex_vibe"
           value={field.state.value || ""}
         />
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] font-bold">
-          {status === "checking" && (
-            <span className="text-amber-500 animate-pulse">Checking...</span>
-          )}
-          {status === "available" && (
-            <Badge className="bg-emerald-500/10 text-emerald-600 border-0 px-2 py-0.5 rounded-full text-[10px]">
-              {isInstantBloom ? "✓ Bloom Available" : "✓ Available"}
-            </Badge>
-          )}
-          {status === "taken" && (
-            <span className="text-destructive font-bold">✕ Taken</span>
-          )}
-        </div>
       </div>
-      <FieldDescription className="text-[10px]">
-        Validated with Bloom Filter + TanStack Pacer
-      </FieldDescription>
+      {status === "checking" ? (
+        <FieldDescription className="text-[10px]">
+          Checking availability...
+        </FieldDescription>
+      ) : null}
+      {status === "available" ? (
+        <FieldDescription className="text-[10px] text-emerald-600">
+          Username is available.
+        </FieldDescription>
+      ) : null}
+      {status === "taken" ? (
+        <FieldDescription className="text-[10px] text-destructive">
+          Username is not available.
+        </FieldDescription>
+      ) : null}
+      {status === "invalid" ? (
+        <FieldDescription className="text-[10px] text-destructive">
+          Use at least 3 letters, numbers, or underscores.
+        </FieldDescription>
+      ) : null}
     </Field>
   );
 }
@@ -1730,10 +1739,11 @@ function InterestsStepContent({
   const [placesByQuery, setPlacesByQuery] = useState<
     Record<string, DatePlace[]>
   >({});
-  const [activePlaceQuery, setActivePlaceQuery] = useState("");
+  const [searchedPlaceQueries, setSearchedPlaceQueries] = useState<string[]>(
+    []
+  );
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [placeSearch, setPlaceSearch] = useState("");
-  const [placePage, setPlacePage] = useState(1);
 
   const active = useMemo(
     () =>
@@ -1757,11 +1767,10 @@ function InterestsStepContent({
   );
   const placeCacheKey = (query: string) =>
     `${active.label}:${area}:${query.trim().toLowerCase()}`;
-  const activePlaceResults = activePlaceQuery
-    ? (placesByQuery[placeCacheKey(activePlaceQuery)] ?? [])
-    : [];
-  const visiblePlaces = activePlaceResults.slice(0, placePage * 5);
-  const hasMorePlaces = visiblePlaces.length < activePlaceResults.length;
+  const searchedPlaceSections = searchedPlaceQueries.map((query) => ({
+    places: placesByQuery[placeCacheKey(query)] ?? [],
+    query,
+  }));
 
   const toggleValue = (value: string) => {
     const nextValues = selected.includes(value)
@@ -1784,11 +1793,11 @@ function InterestsStepContent({
       return;
     }
 
-    setActivePlaceQuery(trimmedQuery);
-    setPlacePage(1);
-
     const cacheKey = placeCacheKey(trimmedQuery);
     if (placesByQuery[cacheKey]) {
+      setSearchedPlaceQueries((current) =>
+        current.includes(trimmedQuery) ? current : [...current, trimmedQuery]
+      );
       return;
     }
 
@@ -1805,9 +1814,51 @@ function InterestsStepContent({
         ...current,
         [cacheKey]: res.places || [],
       }));
+      setSearchedPlaceQueries((current) =>
+        current.includes(trimmedQuery) ? current : [...current, trimmedQuery]
+      );
     } catch (error) {
       console.error("Failed to suggest places:", error);
       toast.error("Could not find local spots for that interest.");
+    } finally {
+      setIsLoadingPlaces(false);
+    }
+  };
+
+  const fetchPlacesForSelected = async () => {
+    const queries = selected.filter((item) => item.trim().length > 0);
+    if (queries.length === 0) {
+      toast.message("Choose at least one interest first.");
+      return;
+    }
+
+    setIsLoadingPlaces(true);
+    try {
+      const entries = await Promise.all(
+        queries.map(async (query) => {
+          const cacheKey = placeCacheKey(query);
+          if (placesByQuery[cacheKey]) {
+            return [cacheKey, placesByQuery[cacheKey]] as const;
+          }
+          const res = await datingApi.suggestPlaces({
+            area,
+            filters: [query],
+            latitude: (form.state.values.latitude as string) || undefined,
+            longitude: (form.state.values.longitude as string) || undefined,
+            what: [active.label.toLowerCase() as DateWhat],
+          });
+          return [cacheKey, res.places || []] as const;
+        })
+      );
+
+      setPlacesByQuery((current) => ({
+        ...current,
+        ...Object.fromEntries(entries),
+      }));
+      setSearchedPlaceQueries(queries);
+    } catch (error) {
+      console.error("Failed to suggest places:", error);
+      toast.error("Could not find local spots for those interests.");
     } finally {
       setIsLoadingPlaces(false);
     }
@@ -1843,8 +1894,7 @@ function InterestsStepContent({
               onClick={() => {
                 setActiveCategory(category.label);
                 setPlaceSearch("");
-                setActivePlaceQuery("");
-                setPlacePage(1);
+                setSearchedPlaceQueries([]);
               }}
               className={`rounded-full px-4 py-2 border text-sm font-semibold transition-all duration-200 ${
                 isActive
@@ -1916,34 +1966,40 @@ function InterestsStepContent({
           <div className="mt-4 border-t border-border pt-4">
             <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
               <MapPin className="size-4 text-primary" />
-              Find favorite local {active.label.toLowerCase()} spots in {area}
+              Favorite local {active.label.toLowerCase()} spots
             </h4>
             <p className="mb-3 text-muted-foreground text-xs/relaxed">
-              Pick or add the foods, drinks, activities, or movement styles you
-              like first. Then search one signal at a time so we do not burn
-              through Places calls while you are still deciding.
+              Pick the signals you like, then find places around {area}. You can
+              also search a specific spot, city, or state when a favorite is a
+              little outside your usual area.
             </p>
             {selected.length > 0 ? (
-              <div className="mb-3 flex flex-wrap gap-2">
-                {selected.map((item) => (
-                  <Button
-                    className="rounded-full"
-                    disabled={isLoadingPlaces}
-                    key={item}
-                    onClick={() => void fetchPlacesForQuery(item)}
-                    size="sm"
-                    type="button"
-                    variant={activePlaceQuery === item ? "default" : "outline"}
-                  >
-                    {placesByQuery[placeCacheKey(item)] ? "Show" : "Find"}{" "}
-                    {item}
-                  </Button>
-                ))}
+              <div className="mb-3 flex flex-col gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {selected.map((item) => (
+                    <Badge
+                      className="rounded-full px-2.5 py-1 text-[10px]"
+                      key={item}
+                      variant="secondary"
+                    >
+                      {item}
+                    </Badge>
+                  ))}
+                </div>
+                <Button
+                  className="w-fit rounded-full"
+                  disabled={isLoadingPlaces}
+                  onClick={() => void fetchPlacesForSelected()}
+                  size="sm"
+                  type="button"
+                >
+                  Search selected {active.label.toLowerCase()} signals
+                </Button>
               </div>
             ) : (
               <p className="mb-3 rounded-2xl border border-dashed border-border bg-muted/20 p-3 text-muted-foreground text-xs">
-                No local spot search yet. Select a chip above or add a custom
-                interest, then search for places that match it.
+                Select a chip above or add your own signal, then search for
+                local places that match it.
               </p>
             )}
             <div className="flex flex-col gap-2 mb-3 sm:flex-row">
@@ -1956,7 +2012,7 @@ function InterestsStepContent({
                     void fetchPlacesForQuery(placeSearch);
                   }
                 }}
-                placeholder={`Search a specific local ${active.label.toLowerCase()} idea...`}
+                placeholder='Search a spot, city, or idea. Try "Purple Onion Cabot AR"...'
                 value={placeSearch}
               />
               <Button
@@ -1973,58 +2029,63 @@ function InterestsStepContent({
               <p className="text-xs text-muted-foreground animate-pulse">
                 Searching near you...
               </p>
-            ) : !activePlaceQuery ? (
+            ) : searchedPlaceSections.length === 0 ? (
               <p className="text-xs text-muted-foreground italic">
-                Choose an interest above to load local places.
-              </p>
-            ) : activePlaceResults.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">
-                No spots found for {activePlaceQuery}. Try a different signal.
+                Search selected signals or type a specific place idea to see
+                local results.
               </p>
             ) : (
-              <div className="flex flex-col gap-3">
-                <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
-                  {visiblePlaces.map((place) => {
-                    const isFav = activeFavoritePlaces.includes(place.name);
-                    return (
-                      <button
-                        className={`flex items-center justify-between p-3 rounded-xl border text-left text-xs transition duration-250 ${
-                          isFav
-                            ? "border-primary bg-primary/5 text-primary-foreground font-medium"
-                            : "border-border bg-card text-foreground hover:border-border-hover"
-                        }`}
-                        key={place.placeId}
-                        onClick={() => togglePlaceFavorite(place.name)}
-                        type="button"
-                      >
-                        <div>
-                          <p className="font-bold text-foreground">
-                            {place.name}
-                          </p>
-                          {place.address && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {place.address}
-                            </p>
-                          )}
-                        </div>
-                        <Heart
-                          className={`size-4 ml-2 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-                {hasMorePlaces && (
-                  <Button
-                    className="w-fit rounded-full"
-                    onClick={() => setPlacePage((current) => current + 1)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    Show next 5
-                  </Button>
-                )}
+              <div className="flex flex-col gap-5">
+                {searchedPlaceSections.map(({ places, query }) => (
+                  <section className="flex flex-col gap-2" key={query}>
+                    <div className="flex items-center justify-between gap-3">
+                      <h5 className="font-bold text-xs">{query}</h5>
+                      <Badge className="rounded-full text-[10px]">
+                        {places.length} result{places.length === 1 ? "" : "s"}
+                      </Badge>
+                    </div>
+                    {places.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-border bg-muted/15 p-3 text-muted-foreground text-xs">
+                        No spots found for {query}. Try a named place, nearby
+                        city, or broader search.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                        {places.slice(0, 6).map((place) => {
+                          const isFav = activeFavoritePlaces.includes(
+                            place.name
+                          );
+                          return (
+                            <button
+                              className={`flex items-center justify-between rounded-xl border p-3 text-left text-xs transition duration-250 ${
+                                isFav
+                                  ? "border-primary bg-primary/5 font-medium text-primary-foreground"
+                                  : "border-border bg-card text-foreground hover:border-border-hover"
+                              }`}
+                              key={`${query}-${place.placeId}`}
+                              onClick={() => togglePlaceFavorite(place.name)}
+                              type="button"
+                            >
+                              <div>
+                                <p className="font-bold text-foreground">
+                                  {place.name}
+                                </p>
+                                {place.address ? (
+                                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                    {place.address}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <Heart
+                                className={`ml-2 size-4 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                ))}
               </div>
             )}
           </div>
