@@ -24,6 +24,12 @@ export default function Header() {
 
   const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
 
+  const handleLogoClick = () => {
+    if (session && typeof window !== "undefined" && window.innerWidth < 1024) {
+      window.dispatchEvent(new CustomEvent("chewbuu:toggle-mobile-menu"));
+    }
+  };
+
   return (
     <header className="border-border/70 border-b bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4">
@@ -31,6 +37,7 @@ export default function Header() {
           <Link
             className="flex items-center gap-2 font-semibold text-foreground"
             to={session ? "/me" : "/"}
+            onClick={handleLogoClick}
           >
             <img
               src="/brand/chewbuu-logo-500.png"

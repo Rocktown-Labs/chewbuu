@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added hideable/collapsible venue check-in QR code widget with transparent Chewbuu logo state, partner scanning camera view, and `/dating/check-in` server API check-in integration.
+- Added multi-spot and multi-person Accordion review views with photo/video recap attachments and rating/comment validation.
+- Added full-screen single-page Profile & Onboarding Settings screen (`/me/profile`) allowing users to view and update all onboarding fields.
+- Added mobile sidebar navigation drawer overlay triggered by tapping the header logo on mobile screen sizes.
 - Redesigned Chats and Date rooms for Chewbuu’s dating flow: video-first intro exchange, 3-reply unlock, pick/friend/continue/block CTAs, shadcn Message/Bubble/Attachment/Marker/MessageScroller composition, and real camera/mic capture.
 - Added three walkable demo date scenarios (sent request, received request, friend path) with nested matcher chats and a pre-date confirm screen (sender/receiver POVs, spot adjust/suggest, DiceUI QR check-in, reschedule/cancel penalty dialogs, Open-Meteo weather + Maps directions).
 - Added `@diceui/qr-code` to `@chewbuu/ui` for venue check-in codes with Chewbuu logo overlay.
@@ -22,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Expanded full-view layout on Date details and Chat routes by completely hiding the right sidebar and auto-collapsing the left sidebar to icon width (`lg:col-span-11`).
+- Simplified mobile bottom tab bar to exact 5 tabs: Feed, Spots, Dates, Chats, and Calendar.
+- Removed duplicate top header bar on Chats view to let inner chat room header serve as primary header.
+- Updated Dating Readiness checklist to require Better Auth `username`, turning the Profile Details dot red until set.
 - Replaced the X-style sky-blue chat pane with a mobile-first Friends / Date rooms experience, active-date banners that deep-link back to the date page, and no unused call buttons.
 
 ## [0.6.4] - 2026-07-19

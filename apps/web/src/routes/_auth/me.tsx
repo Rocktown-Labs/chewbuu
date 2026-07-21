@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@chewbuu/ui/components/dialog";
+import { Field, FieldLabel } from "@chewbuu/ui/components/field";
 import { Input } from "@chewbuu/ui/components/input";
 import { Progress } from "@chewbuu/ui/components/progress";
 import { Textarea } from "@chewbuu/ui/components/textarea";
@@ -50,16 +51,17 @@ import {
   Menu,
   MessageCircle,
   MessageSquare,
-  MoreHorizontal,
   PanelLeft,
   Play,
   Plus,
   Search,
   Settings,
   ShieldCheck,
+  Sparkles,
   Star,
   User,
   UserPlus,
+  X,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -382,10 +384,33 @@ export function MePage({
     () => getDaysInMonth(currentMonth),
     [currentMonth]
   );
+  const [userCollapsedSidebar, setUserCollapsedSidebar] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dashboardChatsComponent, setDashboardChatsComponent] =
     useState<DashboardChatsComponent | null>(null);
-  const [userCollapsedSidebar, setUserCollapsedSidebar] = useState(false);
-  const isSidebarCollapsed = activeTab === "chats" || userCollapsedSidebar;
+
+  useEffect(() => {
+    const handleToggleMobileMenu = () => {
+      setMobileMenuOpen((prev) => !prev);
+    };
+    window.addEventListener(
+      "chewbuu:toggle-mobile-menu",
+      handleToggleMobileMenu
+    );
+    return () => {
+      window.removeEventListener(
+        "chewbuu:toggle-mobile-menu",
+        handleToggleMobileMenu
+      );
+    };
+  }, []);
+
+  const isFullView =
+    activeTab === "chats" ||
+    (activeTab === "matches" && selectedDateHistoryId !== null) ||
+    activeTab === "profile";
+  const isSidebarCollapsed = isFullView || userCollapsedSidebar;
+  const showRightSidebar = !isFullView;
 
   // Local state for user's own uploaded date recaps (persisted to localStorage)
   const [userRecaps, setUserRecaps] = useState<DateRecap[]>([]);
@@ -534,6 +559,7 @@ export function MePage({
   ];
   const age = profile?.birthday ? getAge(profile.birthday) : null;
   const profileComplete = Boolean(
+    profile?.username &&
     profile?.bio &&
     profile?.area &&
     profile?.birthday &&
@@ -1087,7 +1113,16 @@ export function MePage({
         </aside>
 
         {/* MAIN MIDDLE COLUMN (FEED / SPOTS / MATCHES / CHATS / PROFILE) */}
-        <main className="lg:col-span-6 border-r border-border/80 min-h-screen pb-24 lg:pb-6">
+        <main
+          className={cn(
+            "border-r border-border/80 min-h-screen pb-24 lg:pb-6 transition-all duration-200",
+            showRightSidebar
+              ? "lg:col-span-6"
+              : isSidebarCollapsed
+                ? "lg:col-span-11"
+                : "lg:col-span-9"
+          )}
+        >
           {/* FEED SUB-VIEW */}
           {activeTab === "feed" && (
             <div className="flex flex-col">
@@ -1479,17 +1514,10 @@ export function MePage({
           {/* CHATS SUB-VIEW (Stream) */}
           {activeTab === "chats" && (
             <div className="flex flex-col">
-              <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
-                <h2 className="text-xl font-bold">Chats</h2>
-                <p className="mt-1 text-muted-foreground text-xs">
-                  Your regular friend DMs stay here. Date requests also create
-                  match rooms until you choose, friend, or decline each person.
-                </p>
-              </div>
               {ChatView ? (
                 <ChatView
                   activeChannelId={initialChatId}
-                  onOpenDate={(dateId) => openDateHistory(dateId)}
+                  onOpenDate={(dateId: string) => openDateHistory(dateId)}
                 />
               ) : (
                 <div className="p-5">
@@ -2464,7 +2492,12 @@ export function MePage({
         </main>
 
         {/* RIGHT SIDEBAR WIDGETS */}
-        <aside className="hidden lg:flex lg:col-span-3 p-5 flex-col gap-6 sticky top-0 h-screen overflow-y-auto">
+        <aside
+          className={cn(
+            "p-5 flex-col gap-6 sticky top-0 h-screen overflow-y-auto",
+            showRightSidebar ? "hidden lg:flex lg:col-span-3" : "hidden"
+          )}
+        >
           <DashboardWidgets
             circleMembers={circleMembers}
             pendingCircleInvites={pendingCircleInvites}
@@ -2488,9 +2521,128 @@ export function MePage({
           {canDate ? "Plan" : "Finish"}
         </Link>
 
-        {/* MOBILE BOTTOM TAB BAR */}
+        {/* MOBILE SIDEBAR DRAWER OVERLAY */}
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm lg:hidden flex justify-start">
+            <div className="w-4/5 max-w-xs bg-card border-r border-border h-full p-5 flex flex-col justify-between shadow-2xl">
+              <div className="flex flex-col gap-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold text-lg text-primary">
+                    <img
+                      src="/brand/chewbuu-logo-500.png"
+                      alt="Chewbuu"
+                      className="size-7 rounded-full border border-border"
+                    />
+                    Chewbuu Navigation
+                  </div>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="rounded-full"
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+                <nav className="flex flex-col gap-2">
+                  {[
+                    { icon: Home, label: "Feed", tab: "feed" },
+                    { icon: MapPin, label: "Spots", tab: "spots" },
+                    {
+                      icon: Heart,
+                      label: "Dates",
+                      tab: "matches",
+                      badge: unreadRequestCount,
+                    },
+                    {
+                      icon: MessageCircle,
+                      label: "Chats",
+                      tab: "chats",
+                      badge: chatBadgeCount,
+                    },
+                    {
+                      icon: CalendarCheck,
+                      label: "Calendar",
+                      tab: "calendar",
+                      badge: calendarBadgeCount,
+                    },
+                    {
+                      icon: Bell,
+                      label: "Notifications",
+                      tab: "notifications",
+                      badge: notificationBadgeCount,
+                    },
+                    { icon: User, label: "My Profile", tab: "profile" },
+                  ].map((item) => (
+                    <button
+                      key={item.tab}
+                      type="button"
+                      onClick={() => {
+                        if (item.tab === "profile") {
+                          openProfileMode("profile");
+                        } else {
+                          setDashboardTab(item.tab as any);
+                        }
+                        setMobileMenuOpen(false);
+                      }}
+                      className={cn(
+                        "flex items-center justify-between px-4 py-3 rounded-full text-sm font-bold transition cursor-pointer",
+                        activeTab === item.tab
+                          ? "bg-primary/15 text-primary"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <item.icon className="size-5" />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.badge && item.badge > 0 ? (
+                        <Badge className="rounded-full px-2 py-0.5 text-[10px]">
+                          {item.badge}
+                        </Badge>
+                      ) : null}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+
+              <div className="pt-4 border-t border-border flex flex-col gap-3">
+                <Button
+                  variant="outline"
+                  className="w-full rounded-full gap-2 font-bold justify-start"
+                  onClick={() => {
+                    openProfileMode("edit");
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <ClipboardList className="size-4" />
+                  Edit Profile Settings
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full rounded-full gap-2 font-bold justify-start text-red-500 hover:text-red-600"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    authClient.signOut();
+                  }}
+                >
+                  <LogOut className="size-4" />
+                  Sign Out
+                </Button>
+              </div>
+            </div>
+            <button
+              aria-label="Close mobile menu backdrop"
+              className="flex-1 border-0 bg-transparent cursor-default"
+              onClick={() => setMobileMenuOpen(false)}
+              type="button"
+            />
+          </div>
+        )}
+
+        {/* MOBILE BOTTOM TAB BAR (Exact 5 Tabs: Feed, Spots, Dates, Chats, Calendar) */}
         <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border/80 bg-background/90 backdrop-blur-md lg:hidden">
-          <div className="grid grid-cols-6">
+          <div className="grid grid-cols-5">
             {(
               [
                 { icon: Home, label: "Feed", tab: "feed" },
@@ -2498,7 +2650,6 @@ export function MePage({
                 { icon: Heart, label: "Dates", tab: "matches" },
                 { icon: MessageCircle, label: "Chats", tab: "chats" },
                 { icon: CalendarCheck, label: "Calendar", tab: "calendar" },
-                { icon: MoreHorizontal, label: "More", tab: "profile" },
               ] as const
             ).map((item) => (
               <button
@@ -2509,11 +2660,7 @@ export function MePage({
                     : "text-muted-foreground hover:text-foreground"
                 }`}
                 key={item.tab}
-                onClick={() =>
-                  item.tab === "profile"
-                    ? openProfileMore()
-                    : setDashboardTab(item.tab)
-                }
+                onClick={() => setDashboardTab(item.tab)}
                 type="button"
               >
                 <span className="relative">
@@ -2747,62 +2894,514 @@ function ProfileEditPanel({
   setProfileMode: (mode: ProfileMode) => void;
   tier: string;
 }) {
-  const shownBadges = [
-    ...(profile?.lookingFor ?? []).slice(0, 4),
-    profile?.kids,
-    profile?.wantsKids,
-  ].filter(Boolean);
+  const [formData, setFormData] = useState({
+    username: profile?.username ?? "",
+    name: profile?.name ?? "",
+    bio: profile?.bio ?? "",
+    birthday: profile?.birthday ?? "1998-05-15",
+    area: profile?.area ?? "Nashville, TN",
+    sex: profile?.sex ?? "Female",
+    sexuality: profile?.sexuality ?? "Straight",
+    height: profile?.height ?? "5'7\"",
+    weight: profile?.weight ?? "135 lbs",
+    maritalStatus: profile?.maritalStatus ?? "Single",
+    kids: profile?.kids ?? "No kids",
+    wantsKids: profile?.wantsKids ?? "Open to kids",
+    occupation: profile?.occupation ?? "Designer",
+    religion: profile?.religion ?? "Spiritual",
+    politics: profile?.politics ?? "Moderate",
+    interestedIn: profile?.interestedIn ?? ["Male"],
+    ageRangeMin: profile?.ageRangeMin ?? 21,
+    ageRangeMax: profile?.ageRangeMax ?? 38,
+    distanceMiles: profile?.distanceMiles ?? 25,
+    lookingFor: profile?.lookingFor ?? ["Relationship", "Dating"],
+    datingModes: profile?.datingModes ?? ["eat", "drink", "talk"],
+    favoriteThings: profile?.favoriteThings ?? [
+      "Live Music",
+      "Matcha",
+      "Coffee",
+      "Hiking",
+    ],
+    safetyOptIn: profile?.safetyOptIn ?? true,
+    trustedContactName: profile?.trustedContacts?.[0]?.name ?? "Sarah Jenkins",
+    trustedContactPhone: profile?.trustedContacts?.[0]?.phone ?? "615-555-0199",
+    trustedContactEmail:
+      profile?.trustedContacts?.[0]?.email ?? "sarah@example.com",
+  });
+
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!formData.username.trim()) {
+      toast.error("Username is required to complete your profile.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const updatedPayload: DatingProfilePayload = {
+        ...(profile ?? {
+          area: formData.area,
+          birthday: formData.birthday,
+          datingModes: formData.datingModes,
+          favoriteThings: formData.favoriteThings,
+          friendInvites: [],
+          interestDetails: {},
+          interestedIn: formData.interestedIn,
+          interests: [],
+          lookingFor: formData.lookingFor,
+          media: [],
+          safetyOptIn: formData.safetyOptIn,
+          sex: formData.sex,
+          sexuality: formData.sexuality,
+          trustedContacts: [],
+        }),
+        username: formData.username.trim().toLowerCase(),
+        name: formData.name.trim() || undefined,
+        bio: formData.bio.trim() || undefined,
+        birthday: formData.birthday,
+        area: formData.area,
+        sex: formData.sex,
+        sexuality: formData.sexuality,
+        height: formData.height,
+        weight: formData.weight,
+        maritalStatus: formData.maritalStatus,
+        kids: formData.kids,
+        wantsKids: formData.wantsKids,
+        occupation: formData.occupation,
+        religion: formData.religion,
+        politics: formData.politics,
+        interestedIn: formData.interestedIn,
+        ageRangeMin: formData.ageRangeMin,
+        ageRangeMax: formData.ageRangeMax,
+        distanceMiles: formData.distanceMiles,
+        lookingFor: formData.lookingFor,
+        datingModes: formData.datingModes,
+        favoriteThings: formData.favoriteThings,
+        safetyOptIn: formData.safetyOptIn,
+        trustedContacts: [
+          {
+            name: formData.trustedContactName,
+            phone: formData.trustedContactPhone,
+            email: formData.trustedContactEmail,
+          },
+        ],
+      };
+
+      await datingApi.saveProfile(updatedPayload);
+      toast.success("Profile settings updated successfully!");
+      setProfileMode("profile");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update profile settings."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
-    <div className="grid gap-4 p-5">
-      <Card className="rounded-2xl border-border bg-card/45">
+    <div className="flex flex-col gap-6 p-5 max-w-3xl mx-auto w-full">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xl font-extrabold tracking-tight">
+            Profile & Onboarding Settings
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Manage all your onboarding responses, dating criteria, and account
+            details in one place.
+          </p>
+        </div>
+        <Badge
+          className="rounded-full uppercase text-[10px] px-3 py-1"
+          variant="secondary"
+        >
+          {tier} Tier
+        </Badge>
+      </div>
+
+      {/* SECTION 1: USERNAME & BASIC IDENTITY */}
+      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-base">Public Profile</CardTitle>
-          <CardDescription>
-            Profile editing is being split out from onboarding. For now this
-            shows the fields that will become editable here.
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <User className="size-4 text-primary" />
+            1. Identity & Username
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Your unique @username is required for matching and date circle tags.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
-          <Input
-            className="rounded-full"
-            defaultValue={profile?.occupation ?? ""}
-            placeholder="Occupation"
-          />
-          <Textarea
-            className="min-h-24 rounded-2xl"
-            defaultValue={profile?.bio ?? ""}
-            placeholder="Bio"
-          />
-          <div className="grid gap-2">
-            <p className="font-semibold text-sm">Visible badges</p>
-            <div className="flex flex-wrap gap-2">
-              {shownBadges.map((badge) => (
-                <Badge
-                  className="rounded-full bg-primary px-2.5 text-[10px] text-primary-foreground"
-                  key={badge}
-                >
-                  {formatLabel(String(badge))}
-                </Badge>
-              ))}
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">
+              Username <span className="text-red-500">*</span>
+            </FieldLabel>
+            <div className="relative">
+              <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">
+                @
+              </span>
+              <Input
+                className="rounded-full pl-7"
+                placeholder="username"
+                value={formData.username}
+                onChange={(e) =>
+                  setFormData({ ...formData, username: e.target.value })
+                }
+              />
             </div>
-            <p className="text-muted-foreground text-xs">
-              Badge visibility should stay limited so profiles do not become a
-              wall of labels.
-            </p>
-          </div>
-          <Badge className="w-fit rounded-full text-[10px] uppercase">
-            {tier} member
-          </Badge>
-          <Button
-            className="w-fit rounded-full"
-            onClick={() => setProfileMode("profile")}
-            type="button"
-          >
-            Done
-          </Button>
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Display Name</FieldLabel>
+            <Input
+              className="rounded-full"
+              placeholder="First Last"
+              value={formData.name}
+              onChange={(e) =>
+                setFormData({ ...formData, name: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="sm:col-span-2 gap-1">
+            <FieldLabel className="text-xs font-bold">Bio</FieldLabel>
+            <Textarea
+              className="rounded-2xl bg-background/80"
+              placeholder="Tell dates a bit about yourself..."
+              value={formData.bio}
+              onChange={(e) =>
+                setFormData({ ...formData, bio: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">
+              Location (City, State)
+            </FieldLabel>
+            <Input
+              className="rounded-full"
+              placeholder="Nashville, TN"
+              value={formData.area}
+              onChange={(e) =>
+                setFormData({ ...formData, area: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Birthday</FieldLabel>
+            <Input
+              type="date"
+              className="rounded-full"
+              value={formData.birthday}
+              onChange={(e) =>
+                setFormData({ ...formData, birthday: e.target.value })
+              }
+            />
+          </Field>
         </CardContent>
       </Card>
+
+      {/* SECTION 2: PHYSICAL & PERSONAL DETAILS */}
+      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <Sparkles className="size-4 text-primary" />
+            2. Personal Details & Lifestyle
+          </CardTitle>
+          <CardDescription className="text-xs">
+            These onboarding wizard fields help filter matches and display badge
+            details.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Sex</FieldLabel>
+            <Input
+              className="rounded-full"
+              value={formData.sex}
+              onChange={(e) =>
+                setFormData({ ...formData, sex: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Sexuality</FieldLabel>
+            <Input
+              className="rounded-full"
+              value={formData.sexuality}
+              onChange={(e) =>
+                setFormData({ ...formData, sexuality: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Height</FieldLabel>
+            <Input
+              className="rounded-full"
+              placeholder="5'10&quot;"
+              value={formData.height}
+              onChange={(e) =>
+                setFormData({ ...formData, height: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Weight</FieldLabel>
+            <Input
+              className="rounded-full"
+              placeholder="165 lbs"
+              value={formData.weight}
+              onChange={(e) =>
+                setFormData({ ...formData, weight: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">
+              Marital Status
+            </FieldLabel>
+            <Input
+              className="rounded-full"
+              value={formData.maritalStatus}
+              onChange={(e) =>
+                setFormData({ ...formData, maritalStatus: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Kids</FieldLabel>
+            <Input
+              className="rounded-full"
+              value={formData.kids}
+              onChange={(e) =>
+                setFormData({ ...formData, kids: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Wants Kids</FieldLabel>
+            <Input
+              className="rounded-full"
+              value={formData.wantsKids}
+              onChange={(e) =>
+                setFormData({ ...formData, wantsKids: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Occupation</FieldLabel>
+            <Input
+              className="rounded-full"
+              placeholder="Engineer, Designer..."
+              value={formData.occupation}
+              onChange={(e) =>
+                setFormData({ ...formData, occupation: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Religion</FieldLabel>
+            <Input
+              className="rounded-full"
+              value={formData.religion}
+              onChange={(e) =>
+                setFormData({ ...formData, religion: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Politics</FieldLabel>
+            <Input
+              className="rounded-full"
+              value={formData.politics}
+              onChange={(e) =>
+                setFormData({ ...formData, politics: e.target.value })
+              }
+            />
+          </Field>
+        </CardContent>
+      </Card>
+
+      {/* SECTION 3: DATING PREFERENCES & CRITERIA */}
+      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <Heart className="size-4 text-primary" />
+            3. Dating Preferences & Match Criteria
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Configure who you want to meet and what date styles you prefer.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Interested In</FieldLabel>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {["Female", "Male", "Everyone"].map((option) => {
+                const active = formData.interestedIn.includes(option);
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      const next = active
+                        ? formData.interestedIn.filter((i) => i !== option)
+                        : [...formData.interestedIn, option];
+                      setFormData({ ...formData, interestedIn: next });
+                    }}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Looking For</FieldLabel>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {["Relationship", "Marriage", "Dating", "Casual", "Friends"].map(
+                (option) => {
+                  const active = formData.lookingFor.includes(option);
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => {
+                        const next = active
+                          ? formData.lookingFor.filter((i) => i !== option)
+                          : [...formData.lookingFor, option];
+                        setFormData({ ...formData, lookingFor: next });
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
+                        active
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">
+              Age Range Min ({formData.ageRangeMin})
+            </FieldLabel>
+            <Input
+              type="number"
+              className="rounded-full"
+              value={formData.ageRangeMin}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  ageRangeMin: Number(e.target.value),
+                })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">
+              Age Range Max ({formData.ageRangeMax})
+            </FieldLabel>
+            <Input
+              type="number"
+              className="rounded-full"
+              value={formData.ageRangeMax}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  ageRangeMax: Number(e.target.value),
+                })
+              }
+            />
+          </Field>
+        </CardContent>
+      </Card>
+
+      {/* SECTION 4: SAFETY CONTACT */}
+      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <ShieldCheck className="size-4 text-primary" />
+            4. Safety & Emergency Contact
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Trusted contacts receive live date safety check-ins and emergency
+            alerts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Contact Name</FieldLabel>
+            <Input
+              className="rounded-full"
+              placeholder="Friend / Family Member"
+              value={formData.trustedContactName}
+              onChange={(e) =>
+                setFormData({ ...formData, trustedContactName: e.target.value })
+              }
+            />
+          </Field>
+
+          <Field className="gap-1">
+            <FieldLabel className="text-xs font-bold">Contact Phone</FieldLabel>
+            <Input
+              className="rounded-full"
+              placeholder="Phone number"
+              value={formData.trustedContactPhone}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  trustedContactPhone: e.target.value,
+                })
+              }
+            />
+          </Field>
+        </CardContent>
+      </Card>
+
+      {/* ACTIONS */}
+      <div className="flex items-center justify-between gap-4 pt-2">
+        <Button
+          variant="outline"
+          className="rounded-full font-bold px-6"
+          onClick={() => setProfileMode("profile")}
+          type="button"
+        >
+          Cancel
+        </Button>
+        <Button
+          className="rounded-full font-bold px-8 shadow-lg shadow-primary/20"
+          disabled={isSaving}
+          onClick={handleSave}
+          type="button"
+        >
+          {isSaving ? "Saving Settings..." : "Save All Profile Settings"}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
 } from "@chewbuu/ui/components/dropdown-menu";
 import { Skeleton } from "@chewbuu/ui/components/skeleton";
 import { useNavigate } from "@tanstack/react-router";
+import { User } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
@@ -83,12 +84,30 @@ export default function UserMenu() {
           </AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="bg-card">
+      <DropdownMenuContent
+        align="end"
+        className="bg-card w-56 rounded-2xl p-2 shadow-lg"
+      >
         <DropdownMenuGroup>
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuLabel className="font-bold text-xs">
+            {profile?.name || session.user.name || "My Account"}
+          </DropdownMenuLabel>
+          <div className="px-2 pb-1.5 text-[11px] text-muted-foreground truncate">
+            {profile?.username ? `@${profile.username}` : session.user.email}
+          </div>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>{session.user.email}</DropdownMenuItem>
           <DropdownMenuItem
+            className="cursor-pointer rounded-xl font-semibold gap-2 py-2"
+            onClick={() => {
+              void navigate({ to: "/me/profile" });
+            }}
+          >
+            <User className="size-4 text-primary" />
+            My Profile Settings
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="cursor-pointer rounded-xl font-semibold gap-2 py-2 text-red-500 hover:text-red-600"
             variant="destructive"
             onClick={() => {
               authClient.signOut({

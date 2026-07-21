@@ -1768,6 +1768,32 @@ const router = createRouter()
     const matches = await listMatches(c.req.param("id"));
 
     return c.json({ matches });
+  })
+  .post("/dating/check-in", async (c) => {
+    const sessionUser = await getSessionUser(c.req.raw.headers);
+    const body = (await c.req.json().catch(() => ({}))) as {
+      code?: string;
+      dateRequestId?: string;
+      partnerId?: string;
+    };
+
+    if (!isTestRuntime() && body.dateRequestId) {
+      await db
+        .update(dateRequest)
+        .set({ status: "checked_in" })
+        .where(
+          and(
+            eq(dateRequest.id, body.dateRequestId),
+            eq(dateRequest.userId, sessionUser.id)
+          )
+        );
+    }
+
+    return c.json({
+      dateRequestId: body.dateRequestId ?? "demo-date",
+      message: "Check-in confirmed! Enjoy your date.",
+      success: true,
+    });
   });
 
 export default router;

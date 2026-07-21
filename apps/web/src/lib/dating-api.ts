@@ -253,6 +253,15 @@ export const datingApi = {
       body,
       method: "POST",
     }),
+  checkIn: (body: {
+    code?: string;
+    dateRequestId?: string;
+    partnerId?: string;
+  }) =>
+    apiFetch<{ dateRequestId: string; message: string; success: boolean }>(
+      "/dating/check-in",
+      { body, method: "POST" }
+    ),
 };
 
 export const pricingApi = {

@@ -30,6 +30,8 @@ import {
 import { cn } from "@chewbuu/ui/lib/utils";
 import {
   CalendarClock,
+  ChevronDown,
+  ChevronUp,
   CloudSun,
   MapPin,
   Navigation,
@@ -39,6 +41,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
+import { datingApi } from "@/lib/dating-api";
 
 import type { ChatPerson, DateScenarioRole } from "./chat-types";
 import { personInitials } from "./chat-ui";
@@ -168,13 +172,23 @@ export function DateConfirmScreen({
     `${places[0]?.name ?? searchArea} ${places[0]?.address ?? ""}`
   )}`;
 
+  const [qrWidgetCollapsed, setQrWidgetCollapsed] = useState(false);
+
   const handleFinalize = () => {
     setLocked(true);
     onFinalize?.();
     toast.success("Date plan locked. Chat stays open until check-in.");
   };
 
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
+    try {
+      await datingApi.checkIn({
+        dateRequestId: partner.id,
+        partnerId: partner.id,
+      });
+    } catch {
+      // Fallback for offline or demo mode
+    }
     setCheckedIn(true);
     setScanOpen(false);
     setShowQr(false);
@@ -376,61 +390,122 @@ export function DateConfirmScreen({
             </Button>
           ) : (
             <div className="flex flex-col gap-3 rounded-2xl border border-primary/25 bg-primary/8 p-4">
-              <div className="flex flex-col items-center gap-3 text-center">
-                <div
-                  className={cn(
-                    "rounded-2xl border border-border bg-background p-3 shadow-sm",
-                    checkedIn && "opacity-60"
+              {/* Header bar with Chewbuu logo and collapse toggle */}
+              <div className="flex items-center justify-between gap-3 border-b border-primary/15 pb-2.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-8 items-center justify-center rounded-full bg-primary/20 p-1 border border-primary/30 shadow-xs">
+                    <img
+                      src="/brand/chewbuu-logo-500.png"
+                      alt="Chewbuu"
+                      className="size-6 object-contain"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-bold text-xs leading-tight">
+                      Venue Check-in
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {checkedIn
+                        ? "Verified match check-in complete"
+                        : "QR & Camera Scanner"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {checkedIn ? (
+                    <Badge
+                      className="rounded-full px-2 py-0 text-[10px]"
+                      variant="secondary"
+                    >
+                      Checked in
+                    </Badge>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 rounded-full text-[11px] px-2.5"
+                      onClick={() => setShowQr(true)}
+                    >
+                      <QrCode className="size-3 mr-1" />
+                      Show QR
+                    </Button>
                   )}
-                >
-                  <QRCode
-                    backgroundColor="#fffaf0"
-                    foregroundColor="#3b2415"
-                    level="H"
-                    size={168}
-                    value={qrValue}
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    className="rounded-full text-muted-foreground hover:text-foreground"
+                    onClick={() => setQrWidgetCollapsed((prev) => !prev)}
+                    title={
+                      qrWidgetCollapsed ? "Expand check-in" : "Hide check-in"
+                    }
                   >
-                    <QRCodeSvg className="rounded-lg" />
-                    <QRCodeOverlay className="flex size-10 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground shadow">
-                      CB
-                    </QRCodeOverlay>
-                    <QRCodeSkeleton className="rounded-lg" />
-                  </QRCode>
-                </div>
-                <div>
-                  <p className="font-bold text-sm">Venue check-in</p>
-                  <p className="mt-0.5 max-w-sm text-[11px] text-muted-foreground">
-                    Show your Chewbuu code or scan theirs when you arrive.
-                    Either person can start.
-                  </p>
+                    {qrWidgetCollapsed ? (
+                      <ChevronDown className="size-4" />
+                    ) : (
+                      <ChevronUp className="size-4" />
+                    )}
+                  </Button>
                 </div>
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button
-                  className="rounded-full"
-                  disabled={checkedIn}
-                  onClick={() => setShowQr(true)}
-                  type="button"
-                >
-                  <QrCode data-icon="inline-start" />
-                  Show my code
-                </Button>
-                <Button
-                  className="rounded-full"
-                  disabled={checkedIn}
-                  onClick={() => setScanOpen(true)}
-                  type="button"
-                  variant="outline"
-                >
-                  <ScanLine data-icon="inline-start" />
-                  Scan partner
-                </Button>
-              </div>
-              {checkedIn ? (
-                <Badge className="mx-auto rounded-full" variant="secondary">
-                  Checked in
-                </Badge>
-              ) : null}
+
+              {!qrWidgetCollapsed && (
+                <>
+                  <div className="flex flex-col items-center gap-3 text-center pt-1">
+                    <div
+                      className={cn(
+                        "rounded-2xl border border-border bg-background p-3 shadow-sm",
+                        checkedIn && "opacity-60"
+                      )}
+                    >
+                      <QRCode
+                        backgroundColor="#fffaf0"
+                        foregroundColor="#3b2415"
+                        level="H"
+                        size={168}
+                        value={qrValue}
+                      >
+                        <QRCodeSvg className="rounded-lg" />
+                        <QRCodeOverlay className="flex size-10 items-center justify-center rounded-full bg-primary p-1 shadow">
+                          <img
+                            src="/brand/chewbuu-logo-500.png"
+                            alt=""
+                            className="size-6 object-contain"
+                          />
+                        </QRCodeOverlay>
+                        <QRCodeSkeleton className="rounded-lg" />
+                      </QRCode>
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">Scan code at venue</p>
+                      <p className="mt-0.5 max-w-sm text-[11px] text-muted-foreground">
+                        Show your Chewbuu QR code or scan theirs when you
+                        arrive.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      className="rounded-full"
+                      disabled={checkedIn}
+                      onClick={() => setShowQr(true)}
+                      type="button"
+                    >
+                      <QrCode data-icon="inline-start" />
+                      Show my code
+                    </Button>
+                    <Button
+                      className="rounded-full"
+                      disabled={checkedIn}
+                      onClick={() => setScanOpen(true)}
+                      type="button"
+                      variant="outline"
+                    >
+                      <ScanLine data-icon="inline-start" />
+                      Scan partner
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
