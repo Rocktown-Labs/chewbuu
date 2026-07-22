@@ -171,7 +171,7 @@ type DashboardChatsComponent = ComponentType<{
   onOpenDate?: (dateId: string) => void;
 }>;
 type ProfileMode = "edit" | "menu" | "profile" | "settings";
-type ProfileStatTarget = "circles" | "friends" | "recaps";
+type ProfileStatTarget = "circles" | "friends" | "recaps" | "reviews";
 type ProfileMediaItem = {
   kind: "intro_video" | "photo" | "profile_photo";
   label: string;
@@ -717,18 +717,23 @@ export function MePage({
   ];
   const age = profile?.birthday ? getAge(profile.birthday) : null;
   const profileComplete = Boolean(
-    profile?.username &&
-    profile?.bio &&
-    profile?.area &&
-    profile?.birthday &&
-    profile?.lookingFor?.length &&
-    profile?.politics &&
-    profile?.religion &&
-    profile?.kids &&
-    profile?.wantsKids
+    summary?.readiness.onboarded ||
+    (profile?.username &&
+      profile?.bio &&
+      profile?.area &&
+      profile?.birthday &&
+      profile?.lookingFor?.length &&
+      profile?.politics &&
+      profile?.religion &&
+      profile?.kids &&
+      profile?.wantsKids)
   );
   const readinessItems = [
-    { checked: profileComplete, hash: "basics", label: "Profile Details" },
+    {
+      checked: profileComplete,
+      hash: "basics",
+      label: "Profile Details",
+    },
     { checked: !!profilePhoto, hash: "media", label: "Verified Photo" },
     { checked: !!introVideo, hash: "media", label: "Verified Video" },
     { checked: !!profile?.area, hash: "basics", label: "Dating Location" },
@@ -751,6 +756,15 @@ export function MePage({
   const chatBadgeCount = pendingRequests.length;
   const notificationBadgeCount =
     unreadRequestCount + (summary?.readiness.pendingReviews ?? 0);
+  const profileRating = 4.8;
+  const profileReviewCount = Math.max(
+    3,
+    allRecaps.filter((recap) => recap.personName || recap.caption).length
+  );
+  const anonymousReviewNotes = [
+    "Clear communicator and easy to plan with.",
+    "Showed up on time and kept the date comfortable.",
+  ];
 
   const confirmedDates = useMemo(() => {
     return [...demoDateHistories, ...pendingRequests].filter((req) => {
@@ -874,20 +888,21 @@ export function MePage({
     return "/me";
   };
 
-  const pushMePath = (path: string) => {
+  const syncMePath = (path: string) => {
     window.history.pushState(null, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   };
 
   const setSpotCategory = (category: SpotCategory) => {
     setSpotsCategory(category);
     if (activeTab === "spots") {
-      pushMePath(`/me/spots/${category}`);
+      syncMePath(`/me/spots/${category}`);
     }
   };
 
   const setDashboardTab = (tab: DashboardTab) => {
     setActiveTab(tab);
-    pushMePath(routeForTab(tab));
+    syncMePath(routeForTab(tab));
     if (tab !== "profile") {
       setProfileStatTarget(null);
     }
@@ -908,20 +923,20 @@ export function MePage({
     setActiveTab("profile");
     setProfileMode("menu");
     setProfileStatTarget(null);
-    pushMePath("/me/profile");
+    syncMePath("/me/profile");
   };
 
   const openProfileMode = (mode: ProfileMode) => {
     setActiveTab("profile");
     setProfileMode(mode);
     setProfileStatTarget(null);
-    pushMePath("/me/profile");
+    syncMePath("/me/profile");
   };
 
   const openDateHistory = (dateId: string) => {
     setActiveTab("matches");
     setSelectedDateHistoryId(dateId);
-    pushMePath(`/me/dates/${dateId}`);
+    syncMePath(`/me/dates/${dateId}`);
   };
 
   const handleSignOut = async () => {
@@ -1375,7 +1390,7 @@ export function MePage({
                       onClick={() => {
                         setDashboardTab("matches");
                         setSelectedDateHistoryId(request.id);
-                        pushMePath(`/me/dates/${request.id}`);
+                        syncMePath(`/me/dates/${request.id}`);
                       }}
                       type="button"
                     >
@@ -1533,7 +1548,7 @@ export function MePage({
                       className="mt-0.5 rounded-full"
                       onClick={() => {
                         setSelectedDateHistoryId(null);
-                        pushMePath("/me/dates");
+                        syncMePath("/me/dates");
                       }}
                       size="icon-sm"
                       type="button"
@@ -2178,7 +2193,7 @@ export function MePage({
                     key={request.id}
                     onClick={() => {
                       setDashboardTab("matches");
-                      pushMePath(`/me/dates/${request.id}`);
+                      syncMePath(`/me/dates/${request.id}`);
                     }}
                     type="button"
                   >
@@ -2287,6 +2302,7 @@ export function MePage({
               {profileMode === "edit" && (
                 <ProfileEditPanel
                   profile={profile}
+                  setProfile={setProfile}
                   setProfileMode={setProfileMode}
                   tier={tier}
                 />
@@ -2310,7 +2326,7 @@ export function MePage({
                           </AvatarFallback>
                         </Avatar>
                       </button>
-                      <div className="flex-1 grid grid-cols-3 gap-2 text-center">
+                      <div className="flex-1 grid grid-cols-4 gap-2 text-center">
                         <button
                           className="flex flex-col rounded-xl px-2 py-1 transition hover:bg-card/60"
                           onClick={() => setProfileStatTarget("recaps")}
@@ -2328,7 +2344,7 @@ export function MePage({
                           </span>
                         </button>
                         <button
-                          className="flex flex-col border-x border-border/80 px-2 py-1 transition hover:bg-card/60"
+                          className="flex flex-col border-l border-border/80 px-2 py-1 transition hover:bg-card/60"
                           onClick={() => setProfileStatTarget("friends")}
                           type="button"
                         >
@@ -2340,7 +2356,7 @@ export function MePage({
                           </span>
                         </button>
                         <button
-                          className="flex flex-col rounded-xl px-2 py-1 transition hover:bg-card/60"
+                          className="flex flex-col border-x border-border/80 px-2 py-1 transition hover:bg-card/60"
                           onClick={() => setProfileStatTarget("circles")}
                           type="button"
                         >
@@ -2349,6 +2365,19 @@ export function MePage({
                           </span>
                           <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider mt-0.5">
                             Circles
+                          </span>
+                        </button>
+                        <button
+                          className="flex flex-col rounded-xl px-2 py-1 transition hover:bg-card/60"
+                          onClick={() => setProfileStatTarget("reviews")}
+                          type="button"
+                        >
+                          <span className="flex items-center justify-center gap-1 font-extrabold text-lg text-foreground md:text-xl">
+                            <Star className="size-4 fill-primary text-primary" />
+                            {profileRating.toFixed(1)}
+                          </span>
+                          <span className="mt-0.5 font-bold text-[10px] text-muted-foreground uppercase tracking-wider">
+                            Reviews
                           </span>
                         </button>
                       </div>
@@ -2429,13 +2458,35 @@ export function MePage({
                           </Badge>
                         )}
                       </div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                        {profile?.interestDetails
+                          ? Object.entries(profile.interestDetails)
+                              .filter(
+                                ([category, values]) =>
+                                  !category.endsWith("_places") &&
+                                  values.length > 0
+                              )
+                              .slice(0, 3)
+                              .map(([category, values]) => (
+                                <span
+                                  className="rounded-full bg-muted px-2.5 py-1"
+                                  key={category}
+                                >
+                                  {category}: {values.slice(0, 2).join(", ")}
+                                </span>
+                              ))
+                          : null}
+                      </div>
                     </div>
                     <ProfileMediaRail
                       media={profileMediaItems}
                       onOpen={setMediaViewer}
                     />
                     <ProfileStatPanel
+                      anonymousReviewNotes={anonymousReviewNotes}
                       circleGroups={circleGroups}
+                      profileRating={profileRating}
+                      reviewCount={profileReviewCount}
                       recapsCount={
                         allRecaps.filter((r) => r.userName === displayName)
                           .length
@@ -3064,10 +3115,12 @@ function ProfileSettingsPanel({
 
 function ProfileEditPanel({
   profile,
+  setProfile,
   setProfileMode,
   tier,
 }: {
   profile: DatingProfilePayload | null;
+  setProfile: (profile: DatingProfilePayload) => void;
   setProfileMode: (mode: ProfileMode) => void;
   tier: string;
 }) {
@@ -3275,6 +3328,7 @@ function ProfileEditPanel({
       }
 
       await datingApi.saveProfile(updatedPayload);
+      setProfile(updatedPayload);
       toast.success("Profile settings updated successfully!");
       setProfileMode("profile");
     } catch (error) {
@@ -3852,16 +3906,22 @@ function ProfileMediaRail({
 }
 
 function ProfileStatPanel({
+  anonymousReviewNotes,
   circleGroups,
+  profileRating,
+  reviewCount,
   recapsCount,
   target,
 }: {
+  anonymousReviewNotes: string[];
   circleGroups: {
     id: string;
     members: CircleInvite[];
     name: string;
     pending: CircleInvite[];
   }[];
+  profileRating: number;
+  reviewCount: number;
   recapsCount: number;
   target: ProfileStatTarget | null;
 }) {
@@ -3900,6 +3960,35 @@ function ProfileStatPanel({
               No friends have joined yet.
             </p>
           )}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (target === "reviews") {
+    return (
+      <Card className="rounded-2xl border-border bg-card/45">
+        <CardContent className="grid gap-3 p-4">
+          <div className="flex items-center gap-2">
+            <Badge className="rounded-full">
+              <Star className="size-3 fill-current" />
+              {profileRating.toFixed(1)}
+            </Badge>
+            <span className="text-muted-foreground text-xs">
+              {reviewCount} anonymous date review
+              {reviewCount === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="grid gap-2">
+            {anonymousReviewNotes.map((note) => (
+              <p
+                className="rounded-2xl border border-border bg-background/40 p-3 text-sm"
+                key={note}
+              >
+                {note}
+              </p>
+            ))}
+          </div>
         </CardContent>
       </Card>
     );

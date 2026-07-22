@@ -108,12 +108,14 @@ const profilePayloadSchema = z
     longitude: z.string().optional(),
     maritalStatus: z.string().optional(),
     media: z.array(mediaSchema).max(7).default([]),
+    name: z.string().optional(),
     politics: z.string().optional(),
     religion: z.string().optional(),
     safetyOptIn: z.boolean().default(false),
     sex: requiredString,
     sexuality: requiredString,
     trustedContacts: z.array(trustedContactSchema).max(2).default([]),
+    username: z.string().optional(),
     weight: z.string().optional(),
     wantsKids: z.string().optional(),
     phone: z.string().optional(),
@@ -194,12 +196,14 @@ const profileDraftPayloadSchema = z.object({
   longitude: z.string().optional(),
   maritalStatus: z.string().optional(),
   media: z.array(mediaSchema).max(7).default([]),
+  name: z.string().optional(),
   politics: z.string().optional(),
   religion: z.string().optional(),
   safetyOptIn: z.boolean().default(false),
   sex: z.string().optional(),
   sexuality: z.string().optional(),
   trustedContacts: z.array(trustedContactDraftSchema).max(2).default([]),
+  username: z.string().optional(),
   weight: z.string().optional(),
   wantsKids: z.string().optional(),
   phone: z.string().optional(),
@@ -672,7 +676,11 @@ const buildReferralRows = (inviteRows: StoredInvite[]) =>
 const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
   const mediaState = hasRequiredMedia(input.media);
   const { canDate } = mediaState;
-  const hasUsername = !!(sessionUser.username || sessionUser.displayUsername);
+  const hasUsername = !!(
+    input.username ||
+    sessionUser.username ||
+    sessionUser.displayUsername
+  );
   const hasSafetyContact = !!(
     input.safetyOptIn || input.trustedContacts.length > 0
   );
@@ -1264,7 +1272,15 @@ const syncCircleJoins = async (
 
 const getProfile = async (sessionUser: SessionUser) => {
   if (isTestRuntime()) {
-    return memory.profiles.get(sessionUser.id) ?? null;
+    const storedProfile = memory.profiles.get(sessionUser.id);
+    return storedProfile
+      ? {
+          ...storedProfile,
+          email: sessionUser.email,
+          name: storedProfile.name ?? sessionUser.name,
+          username: sessionUser.username ?? sessionUser.displayUsername ?? "",
+        }
+      : null;
   }
 
   const [storedProfile] = await db
@@ -1288,9 +1304,12 @@ const getProfile = async (sessionUser: SessionUser) => {
   return storedProfile
     ? {
         ...storedProfile,
+        email: sessionUser.email,
         friendInvites: invites,
         media,
+        name: sessionUser.name,
         trustedContacts: contacts,
+        username: sessionUser.username ?? sessionUser.displayUsername ?? "",
       }
     : null;
 };
@@ -1693,7 +1712,10 @@ const router = createRouter()
     }
     const body = parsed.data;
     const savedProfile = await saveProfile(sessionUser, body);
-    const readiness = await getReadiness(sessionUser);
+    const readiness = await getReadiness({
+      ...sessionUser,
+      username: body.username ?? sessionUser.username,
+    });
 
     return c.json({ profile: savedProfile, readiness });
   })

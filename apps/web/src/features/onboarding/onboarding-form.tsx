@@ -16,6 +16,7 @@ import {
 } from "@chewbuu/ui/components/field";
 import { Input } from "@chewbuu/ui/components/input";
 import { Progress } from "@chewbuu/ui/components/progress";
+import { ScrollArea, ScrollBar } from "@chewbuu/ui/components/scroll-area";
 import {
   Select,
   SelectContent,
@@ -410,6 +411,17 @@ const cleanUploadFileName = (name: string) =>
 const getUploadType = (file: File, kind: DatingMedia["kind"]) => {
   if (kind === "intro_video") {
     return file.type.includes("mp4") ? "video/mp4" : "video/webm";
+  }
+
+  if (file.type === "image/svg+xml") {
+    throw new Error("SVG images are not supported. Use a JPG, PNG, or WebP.");
+  }
+
+  if (
+    file.type &&
+    !["image/jpeg", "image/png", "image/webp"].includes(file.type)
+  ) {
+    throw new Error("Use a JPG, PNG, or WebP image.");
   }
 
   return file.type || "image/jpeg";
@@ -1366,8 +1378,8 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
                 <div>
                   <h3 className="font-semibold text-lg">Real photo slots</h3>
                   <p className="text-muted-foreground text-sm">
-                    Add up to six more photos from your camera roll to enrich
-                    your profile.
+                    Add up to six more photos from your camera roll or camera to
+                    enrich your profile.
                   </p>
                 </div>
                 <Button
@@ -1976,6 +1988,9 @@ function InterestsStepContent({
             <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
               <MapPin className="size-4 text-primary" />
               Favorite local {active.label.toLowerCase()} spots
+              <span className="font-semibold text-muted-foreground">
+                (Optional)
+              </span>
             </h4>
             <p className="mb-3 text-muted-foreground text-xs/relaxed">
               Pick the signals you like, then find places around {area}. You can
@@ -2050,7 +2065,7 @@ function InterestsStepContent({
                     <div className="flex items-center justify-between gap-3">
                       <h5 className="font-bold text-xs">Results for {query}</h5>
                       <Badge className="rounded-full text-[10px]">
-                        {places.length} result{places.length === 1 ? "" : "s"}
+                        Showing {Math.min(places.length, 6)} of {places.length}
                       </Badge>
                     </div>
                     {places.length === 0 ? (
@@ -2059,39 +2074,42 @@ function InterestsStepContent({
                         city, or broader search.
                       </p>
                     ) : (
-                      <div className="grid auto-cols-[minmax(15rem,1fr)] grid-flow-col grid-rows-2 gap-2 overflow-x-auto pb-2 md:auto-cols-[minmax(18rem,0.48fr)]">
-                        {places.map((place) => {
-                          const isFav = activeFavoritePlaces.includes(
-                            place.name
-                          );
-                          return (
-                            <button
-                              className={`flex items-center justify-between rounded-xl border p-3 text-left text-xs transition duration-250 ${
-                                isFav
-                                  ? "border-primary bg-primary/5 font-medium text-primary-foreground"
-                                  : "border-border bg-card text-foreground hover:border-border-hover"
-                              }`}
-                              key={`${query}-${place.placeId}`}
-                              onClick={() => togglePlaceFavorite(place.name)}
-                              type="button"
-                            >
-                              <div>
-                                <p className="font-bold text-foreground">
-                                  {place.name}
-                                </p>
-                                {place.address ? (
-                                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                                    {place.address}
+                      <ScrollArea className="w-full pb-3">
+                        <div className="flex w-max gap-2">
+                          {places.slice(0, 6).map((place) => {
+                            const isFav = activeFavoritePlaces.includes(
+                              place.name
+                            );
+                            return (
+                              <button
+                                className={`flex h-20 w-64 shrink-0 items-center justify-between rounded-xl border p-3 text-left text-xs transition duration-250 sm:w-72 ${
+                                  isFav
+                                    ? "border-primary bg-primary/5 font-medium text-primary-foreground"
+                                    : "border-border bg-card text-foreground hover:border-border-hover"
+                                }`}
+                                key={`${query}-${place.placeId}`}
+                                onClick={() => togglePlaceFavorite(place.name)}
+                                type="button"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate font-bold text-foreground">
+                                    {place.name}
                                   </p>
-                                ) : null}
-                              </div>
-                              <Heart
-                                className={`ml-2 size-4 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
-                              />
-                            </button>
-                          );
-                        })}
-                      </div>
+                                  {place.address ? (
+                                    <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
+                                      {place.address}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <Heart
+                                  className={`ml-2 size-4 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <ScrollBar orientation="horizontal" />
+                      </ScrollArea>
                     )}
                   </section>
                 ))}
@@ -2852,6 +2870,16 @@ function MediaSlot({
               <Upload className="size-3.5 mr-1 inline" />
               {isUploading ? "Uploading" : "Upload Photo"}
             </Button>
+            <Button
+              className="rounded-full font-semibold"
+              disabled={isUploading}
+              onClick={() => setIsCaptureOpen(true)}
+              size="sm"
+              type="button"
+            >
+              <Camera className="size-3.5 mr-1 inline" />
+              Take Photo
+            </Button>
           </>
         ) : (
           <Button
@@ -3134,6 +3162,22 @@ function LiveCaptureDialog({
     void getDevices();
   }, [isOpen, selectedDeviceId]);
 
+  const refreshVideoDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter((d) => d.kind === "videoinput");
+      setVideoDevices(videoInputs);
+      if (videoInputs.length > 0 && !selectedDeviceId) {
+        const activeTrackDeviceId = streamRef.current
+          ?.getVideoTracks()[0]
+          ?.getSettings().deviceId;
+        setSelectedDeviceId(activeTrackDeviceId ?? videoInputs[0].deviceId);
+      }
+    } catch (error) {
+      console.error("Error refreshing camera devices:", error);
+    }
+  }, [selectedDeviceId]);
+
   const startCamera = useCallback(async () => {
     try {
       setError(null);
@@ -3163,6 +3207,7 @@ function LiveCaptureDialog({
 
       streamRef.current = mediaStream;
       setStream(mediaStream);
+      await refreshVideoDevices();
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
@@ -3172,7 +3217,7 @@ function LiveCaptureDialog({
         "Camera and Microphone access are required. Please check your browser permissions."
       );
     }
-  }, [clearTimer, mode, selectedDeviceId, stopStream]);
+  }, [clearTimer, mode, refreshVideoDevices, selectedDeviceId, stopStream]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -3328,7 +3373,7 @@ function LiveCaptureDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative mt-4 aspect-square md:aspect-video w-full rounded-2xl bg-black overflow-hidden border border-border flex items-center justify-center">
+        <div className="relative mx-auto mt-4 aspect-[3/4] w-full max-w-80 overflow-hidden rounded-2xl border border-border bg-black flex items-center justify-center">
           {error ? (
             <div className="p-4 text-center text-sm text-destructive font-medium">
               {error}

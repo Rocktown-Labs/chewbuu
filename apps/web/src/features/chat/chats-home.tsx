@@ -14,7 +14,7 @@ import {
 } from "@chewbuu/ui/components/tabs";
 import { cn } from "@chewbuu/ui/lib/utils";
 import { Heart, MessageCircle, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import type {
@@ -53,7 +53,7 @@ export function DashboardChats({
   const [threads, setThreads] = useState<ChatThread[]>(() =>
     buildInitialThreads()
   );
-  const [tab, setTab] = useState<"friends" | "date_rooms">("date_rooms");
+  const [tab, setTab] = useState<"friends" | "date_rooms">("friends");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(
     activeChannelId ?? null
@@ -70,6 +70,14 @@ export function DashboardChats({
     threads.find((thread) => thread.id === selectedId) ??
     activeList[0] ??
     threads[0];
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const activeThread = threads.find((thread) => thread.id === selectedId);
+    if (activeThread) {
+      setTab(activeThread.kind === "friend" ? "friends" : "date_rooms");
+    }
+  }, [selectedId, threads]);
 
   const peopleById = useMemo(() => {
     const map: Record<string, ChatPerson> = {};
@@ -234,17 +242,17 @@ export function DashboardChats({
           value={tab}
         >
           <TabsList className="mx-3 mt-3 grid w-auto grid-cols-2 rounded-full">
-            <TabsTrigger className="rounded-full text-xs" value="date_rooms">
-              <Heart data-icon="inline-start" />
-              Date rooms
-            </TabsTrigger>
             <TabsTrigger className="rounded-full text-xs" value="friends">
               <MessageCircle data-icon="inline-start" />
               Friends
             </TabsTrigger>
+            <TabsTrigger className="rounded-full text-xs" value="date_rooms">
+              <Heart data-icon="inline-start" />
+              Date rooms
+            </TabsTrigger>
           </TabsList>
 
-          {(["date_rooms", "friends"] as const).map((tabValue) => (
+          {(["friends", "date_rooms"] as const).map((tabValue) => (
             <TabsContent
               className="mt-0 min-h-0 flex-1 overflow-y-auto p-2"
               key={tabValue}

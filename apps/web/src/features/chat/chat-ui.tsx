@@ -250,6 +250,38 @@ function MediaAttachmentBubble({
   );
 }
 
+function VoiceWaveformPreview({
+  elapsedSec,
+  isRecording,
+}: {
+  elapsedSec: number;
+  isRecording: boolean;
+}) {
+  const bars = [18, 30, 46, 26, 54, 34, 22, 42, 58, 28, 48, 36];
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <div className="flex h-10 items-center gap-1 overflow-hidden rounded-full bg-background/70 px-3">
+        {bars.map((height, index) => (
+          <span
+            className={cn(
+              "w-1 shrink-0 rounded-full bg-primary/70",
+              isRecording && "animate-pulse"
+            )}
+            key={`${height}-${index}`}
+            style={{ height: `${height}%` }}
+          />
+        ))}
+      </div>
+      <p className="line-clamp-1 text-[11px] text-muted-foreground">
+        {isRecording
+          ? `Listening... ${formatDuration(elapsedSec)}`
+          : "Voice note ready. Playback and transcription will live here."}
+      </p>
+    </div>
+  );
+}
+
 function LinkPreviewBubble({
   align,
   text,
@@ -728,6 +760,8 @@ export function ChatComposer({
   const [mode, setMode] = useState<"text" | "video" | "voice">(
     dateMode && isDateRoomLockedToVideo(phase) ? "video" : "text"
   );
+  const [pendingRecorderStart, setPendingRecorderStart] = useState(false);
+  const [recorderRequested, setRecorderRequested] = useState(false);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -739,10 +773,34 @@ export function ChatComposer({
     maxSeconds: 120,
     mode: mode === "voice" ? "voice" : "video",
   });
+  const {
+    clip: recorderClip,
+    requestStream,
+    start: startRecorder,
+    status: recorderStatus,
+  } = recorder;
 
   useEffect(() => {
     if (lockedToVideo) setMode("video");
   }, [lockedToVideo]);
+
+  useEffect(() => {
+    if (
+      (mode === "video" || mode === "voice") &&
+      recorderRequested &&
+      recorderStatus === "idle" &&
+      !recorderClip
+    ) {
+      void requestStream();
+    }
+  }, [mode, recorderClip, recorderRequested, recorderStatus, requestStream]);
+
+  useEffect(() => {
+    if (pendingRecorderStart && recorderStatus === "ready") {
+      setPendingRecorderStart(false);
+      void startRecorder();
+    }
+  }, [pendingRecorderStart, recorderStatus, startRecorder]);
 
   useEffect(() => {
     const el = videoPreviewRef.current;
@@ -812,6 +870,33 @@ export function ChatComposer({
         </div>
       ) : null}
 
+      {!lockedToVideo ? (
+        <div className="mb-2 flex items-center gap-1.5 px-1">
+          {(["text", "video", "voice"] as const).map((nextMode) => (
+            <Button
+              className="h-7 rounded-full px-3 text-[11px]"
+              disabled={nextMode === "text" && !textUnlocked}
+              key={nextMode}
+              onClick={() => {
+                setMode(nextMode);
+                if (nextMode !== "text") {
+                  setRecorderRequested(true);
+                }
+              }}
+              size="sm"
+              type="button"
+              variant={mode === nextMode ? "default" : "outline"}
+            >
+              {nextMode === "text"
+                ? "Text"
+                : nextMode === "video"
+                  ? "Video"
+                  : "Voice"}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+
       {(mode === "video" || mode === "voice") &&
       (recorder.status === "ready" ||
         recorder.status === "recording" ||
@@ -852,12 +937,18 @@ export function ChatComposer({
             <div className="flex items-center justify-between gap-3 px-4 py-5">
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <Mic />
-                {recorder.status === "recording"
-                  ? `Recording ${formatDuration(recorder.elapsedSec)}`
-                  : recorder.clip
-                    ? `Voice note ${formatDuration(recorder.clip.durationSec)}`
-                    : "Ready to record"}
+                <span className="sr-only">
+                  {recorder.status === "recording"
+                    ? `Recording ${formatDuration(recorder.elapsedSec)}`
+                    : recorder.clip
+                      ? `Voice note ${formatDuration(recorder.clip.durationSec)}`
+                      : "Ready to record"}
+                </span>
               </div>
+              <VoiceWaveformPreview
+                elapsedSec={recorder.clip?.durationSec ?? recorder.elapsedSec}
+                isRecording={recorder.status === "recording"}
+              />
             </div>
           )}
 
@@ -924,7 +1015,7 @@ export function ChatComposer({
               className="rounded-full"
               onClick={() => {
                 setMode("video");
-                void recorder.requestStream();
+                setRecorderRequested(true);
               }}
               size="icon-sm"
               type="button"
@@ -937,7 +1028,7 @@ export function ChatComposer({
               className="rounded-full"
               onClick={() => {
                 setMode("voice");
-                void recorder.requestStream();
+                setRecorderRequested(true);
               }}
               size="icon-sm"
               type="button"
@@ -974,7 +1065,7 @@ export function ChatComposer({
             className="rounded-full"
             onClick={() => {
               setMode("video");
-              void recorder.requestStream();
+              setRecorderRequested(true);
             }}
             size="icon-sm"
             type="button"
@@ -992,7 +1083,13 @@ export function ChatComposer({
           disabled={!textUnlocked || mode !== "text"}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter") handleSendText();
+            if (event.key === "Enter") {
+              event.preventDefault();
+              handleSendText();
+            }
+          }}
+          onFocus={() => {
+            if (textUnlocked) setMode("text");
           }}
           placeholder={
             lockedToVideo
@@ -1009,6 +1106,11 @@ export function ChatComposer({
           onClick={() => {
             if (lockedToVideo || mode === "video") {
               setMode("video");
+              setRecorderRequested(true);
+              if (recorder.status !== "ready") {
+                setPendingRecorderStart(true);
+                return;
+              }
               void recorder.start();
               return;
             }
@@ -1017,6 +1119,11 @@ export function ChatComposer({
               return;
             }
             setMode("voice");
+            setRecorderRequested(true);
+            if (recorder.status !== "ready") {
+              setPendingRecorderStart(true);
+              return;
+            }
             void recorder.start();
           }}
           size="icon-sm"
