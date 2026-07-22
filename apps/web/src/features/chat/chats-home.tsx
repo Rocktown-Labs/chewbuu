@@ -62,8 +62,15 @@ export function DashboardChats({
     Boolean(activeChannelId)
   );
 
-  const friendThreads = threads.filter((thread) => thread.kind === "friend");
-  const dateThreads = threads.filter((thread) => thread.kind === "date_room");
+  const visibleThreads = threads.filter(
+    (thread) => !thread.archived || thread.id === selectedId
+  );
+  const friendThreads = visibleThreads.filter(
+    (thread) => thread.kind === "friend"
+  );
+  const dateThreads = visibleThreads.filter(
+    (thread) => thread.kind === "date_room"
+  );
   const activeList = tab === "friends" ? friendThreads : dateThreads;
 
   const selected =
@@ -154,22 +161,52 @@ export function DashboardChats({
       return;
     }
 
+    if (decision === "pick") {
+      const activeDateId = thread.activeDate?.dateId;
+      setThreads((prev) =>
+        prev.map((item) => {
+          if (item.id === thread.id) {
+            return {
+              ...item,
+              activeDate: item.activeDate
+                ? { ...item.activeDate, status: "pending_confirm" }
+                : item.activeDate,
+              lastMessage: result.messages.at(-1)?.text ?? item.lastMessage,
+              messages: result.messages,
+              phase: result.phase,
+              time: "Now",
+            };
+          }
+          if (
+            activeDateId &&
+            item.kind === "date_room" &&
+            item.activeDate?.dateId === activeDateId
+          ) {
+            return {
+              ...item,
+              archived: true,
+              lastMessage: "Archived after another choice was confirmed.",
+              phase: "blocked" as DateRoomPhase,
+              unreadCount: 0,
+            };
+          }
+          return item;
+        })
+      );
+      toast.success(`Picked ${person.name} — open the date page to confirm`);
+      if (thread.activeDate && onOpenDate) onOpenDate(thread.activeDate.dateId);
+      return;
+    }
+
     updateThread(thread.id, (item) => ({
       ...item,
-      activeDate:
-        decision === "pick" && item.activeDate
-          ? { ...item.activeDate, status: "pending_confirm" }
-          : item.activeDate,
       lastMessage: result.messages.at(-1)?.text ?? item.lastMessage,
       messages: result.messages,
       phase: result.phase,
       time: "Now",
     }));
 
-    if (decision === "pick") {
-      toast.success(`Picked ${person.name} — open the date page to confirm`);
-      if (thread.activeDate && onOpenDate) onOpenDate(thread.activeDate.dateId);
-    } else if (decision === "continue") {
+    if (decision === "continue") {
       toast.success("Text and voice unlocked");
     } else {
       toast.message(`${person.name} blocked`);
@@ -320,10 +357,18 @@ export function DashboardChats({
                           <span className="mt-0.5 flex items-center gap-1.5">
                             {thread.kind === "date_room" ? (
                               <Badge
-                                className="rounded-full px-1.5 py-0 text-[9px]"
-                                variant="outline"
+                                className={cn(
+                                  "rounded-full px-1.5 py-0 text-[9px]",
+                                  thread.phase === "picked" &&
+                                    "border-primary/40 bg-primary/10 text-primary"
+                                )}
+                                variant={
+                                  thread.phase === "picked"
+                                    ? "secondary"
+                                    : "outline"
+                                }
                               >
-                                Date
+                                {thread.phase === "picked" ? "Chosen" : "Date"}
                               </Badge>
                             ) : null}
                             <span className="truncate text-[11px] text-muted-foreground">
@@ -403,6 +448,7 @@ export function DashboardChats({
                     : undefined
                 }
                 phase={selected.kind === "date_room" ? phase : "continued"}
+                threadId={selected.id}
                 videoProgress={
                   selected.kind === "date_room"
                     ? {

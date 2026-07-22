@@ -30,16 +30,16 @@ import {
 import { cn } from "@chewbuu/ui/lib/utils";
 import {
   CalendarClock,
+  Camera,
   ChevronDown,
   ChevronUp,
   CloudSun,
   MapPin,
   Navigation,
   QrCode,
-  ScanLine,
   Star,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { datingApi } from "@/lib/dating-api";
@@ -134,15 +134,17 @@ export function DateConfirmScreen({
 }: DateConfirmScreenProps) {
   const [places, setPlaces] = useState(initialPlaces);
   const [locked, setLocked] = useState(false);
-  const [showQr, setShowQr] = useState(false);
-  const [scanOpen, setScanOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [checkInMode, setCheckInMode] = useState<"brand" | "qr" | "scan">(
+    "brand"
+  );
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [suggestion, setSuggestion] = useState("");
   const rescheduleTokensLeft = "2";
   const cancelStrikeCount = "0";
   const [weather, setWeather] = useState<WeatherDay | null>(null);
   const [checkedIn, setCheckedIn] = useState(false);
+  const scanPreviewRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -174,6 +176,36 @@ export function DateConfirmScreen({
 
   const [qrWidgetCollapsed, setQrWidgetCollapsed] = useState(false);
 
+  useEffect(() => {
+    if (checkInMode !== "scan" || checkedIn) return;
+    let stream: MediaStream | null = null;
+    let active = true;
+    const previewEl = scanPreviewRef.current;
+
+    const openCamera = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+        if (!active || !previewEl) return;
+        previewEl.srcObject = stream;
+        await previewEl.play();
+      } catch {
+        toast.error("Camera access is needed to scan a partner code.");
+      }
+    };
+
+    void openCamera();
+
+    return () => {
+      active = false;
+      for (const track of stream?.getTracks() ?? []) {
+        track.stop();
+      }
+      if (previewEl) previewEl.srcObject = null;
+    };
+  }, [checkedIn, checkInMode]);
+
   const handleFinalize = () => {
     setLocked(true);
     onFinalize?.();
@@ -190,8 +222,7 @@ export function DateConfirmScreen({
       // Fallback for offline or demo mode
     }
     setCheckedIn(true);
-    setScanOpen(false);
-    setShowQr(false);
+    setCheckInMode("brand");
     onCheckedIn?.();
     toast.success("Checked in — live date unlocked.");
   };
@@ -354,27 +385,46 @@ export function DateConfirmScreen({
               </div>
             ))}
 
-            {!locked && role === "receiver" ? (
+            {!locked ? (
               <div className="flex gap-2">
                 <Input
                   className="h-9 rounded-full text-xs"
                   onChange={(event) => setSuggestion(event.target.value)}
-                  placeholder="Suggest a different spot…"
+                  placeholder={
+                    role === "sender"
+                      ? "Add or edit a spot from chat…"
+                      : "Suggest a different spot…"
+                  }
                   value={suggestion}
                 />
                 <Button
                   className="rounded-full text-xs"
                   onClick={() => {
-                    if (!suggestion.trim()) return;
-                    onSuggestPlace?.(suggestion.trim());
-                    toast.success("Suggestion sent to the requester");
+                    const nextSuggestion = suggestion.trim();
+                    if (!nextSuggestion) return;
+                    if (role === "sender") {
+                      setPlaces((prev) => [
+                        ...prev,
+                        {
+                          address: searchArea,
+                          name: nextSuggestion,
+                          placeId: `suggested-${Date.now()}`,
+                        },
+                      ]);
+                    }
+                    onSuggestPlace?.(nextSuggestion);
+                    toast.success(
+                      role === "sender"
+                        ? "Spot edit added to the plan"
+                        : "Suggestion sent to the requester"
+                    );
                     setSuggestion("");
                   }}
                   size="sm"
                   type="button"
                   variant="outline"
                 >
-                  Suggest
+                  {role === "sender" ? "Add" : "Suggest"}
                 </Button>
               </div>
             ) : null}
@@ -419,17 +469,7 @@ export function DateConfirmScreen({
                     >
                       Checked in
                     </Badge>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 rounded-full text-[11px] px-2.5"
-                      onClick={() => setShowQr(true)}
-                    >
-                      <QrCode className="size-3 mr-1" />
-                      Show QR
-                    </Button>
-                  )}
+                  ) : null}
                   <Button
                     size="icon-sm"
                     variant="ghost"
@@ -453,33 +493,61 @@ export function DateConfirmScreen({
                   <div className="flex flex-col items-center gap-3 text-center pt-1">
                     <div
                       className={cn(
-                        "rounded-2xl border border-border bg-background p-3 shadow-sm",
+                        "grid min-h-48 min-w-48 place-items-center overflow-hidden rounded-2xl border border-border bg-background p-3 shadow-sm",
                         checkedIn && "opacity-60"
                       )}
                     >
-                      <QRCode
-                        backgroundColor="#fffaf0"
-                        foregroundColor="#3b2415"
-                        level="H"
-                        size={168}
-                        value={qrValue}
-                      >
-                        <QRCodeSvg className="rounded-lg" />
-                        <QRCodeOverlay className="flex size-10 items-center justify-center rounded-full bg-primary p-1 shadow">
+                      {checkInMode === "qr" ? (
+                        <QRCode
+                          backgroundColor="#fffaf0"
+                          foregroundColor="#3b2415"
+                          level="H"
+                          size={168}
+                          value={qrValue}
+                        >
+                          <QRCodeSvg className="rounded-lg" />
+                          <QRCodeOverlay className="flex size-10 items-center justify-center rounded-full bg-primary p-1 shadow">
+                            <img
+                              src="/brand/chewbuu-logo-500.png"
+                              alt=""
+                              className="size-6 object-contain"
+                            />
+                          </QRCodeOverlay>
+                          <QRCodeSkeleton className="rounded-lg" />
+                        </QRCode>
+                      ) : checkInMode === "scan" ? (
+                        <div className="relative aspect-square w-44 overflow-hidden rounded-xl bg-black">
+                          <video
+                            autoPlay
+                            className="size-full object-cover"
+                            muted
+                            playsInline
+                            ref={scanPreviewRef}
+                          >
+                            <track kind="captions" />
+                          </video>
+                          <span className="pointer-events-none absolute inset-6 rounded-xl border border-primary/80" />
+                        </div>
+                      ) : (
+                        <div className="grid size-32 place-items-center rounded-full border border-primary/25 bg-primary/10 p-4">
                           <img
                             src="/brand/chewbuu-logo-500.png"
-                            alt=""
-                            className="size-6 object-contain"
+                            alt="Chewbuu"
+                            className="size-24 object-contain"
                           />
-                        </QRCodeOverlay>
-                        <QRCodeSkeleton className="rounded-lg" />
-                      </QRCode>
+                        </div>
+                      )}
                     </div>
                     <div>
-                      <p className="font-bold text-sm">Scan code at venue</p>
+                      <p className="font-bold text-sm">
+                        {checkInMode === "qr"
+                          ? "Show your code"
+                          : checkInMode === "scan"
+                            ? "Scan partner code"
+                            : "Venue check-in"}
+                      </p>
                       <p className="mt-0.5 max-w-sm text-[11px] text-muted-foreground">
-                        Show your Chewbuu QR code or scan theirs when you
-                        arrive.
+                        Use your code or scan theirs when you both arrive.
                       </p>
                     </div>
                   </div>
@@ -487,8 +555,9 @@ export function DateConfirmScreen({
                     <Button
                       className="rounded-full"
                       disabled={checkedIn}
-                      onClick={() => setShowQr(true)}
+                      onClick={() => setCheckInMode("qr")}
                       type="button"
+                      variant={checkInMode === "qr" ? "default" : "outline"}
                     >
                       <QrCode data-icon="inline-start" />
                       Show my code
@@ -496,14 +565,24 @@ export function DateConfirmScreen({
                     <Button
                       className="rounded-full"
                       disabled={checkedIn}
-                      onClick={() => setScanOpen(true)}
+                      onClick={() => setCheckInMode("scan")}
                       type="button"
-                      variant="outline"
+                      variant={checkInMode === "scan" ? "default" : "outline"}
                     >
-                      <ScanLine data-icon="inline-start" />
+                      <Camera data-icon="inline-start" />
                       Scan partner
                     </Button>
                   </div>
+                  {checkInMode !== "brand" && !checkedIn ? (
+                    <Button
+                      className="rounded-full"
+                      onClick={handleCheckIn}
+                      type="button"
+                      variant="secondary"
+                    >
+                      Simulate successful check-in
+                    </Button>
+                  ) : null}
                 </>
               )}
             </div>
@@ -529,67 +608,6 @@ export function DateConfirmScreen({
           </div>
         </CardContent>
       </Card>
-
-      <Dialog open={showQr} onOpenChange={setShowQr}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Your check-in code</DialogTitle>
-            <DialogDescription>
-              Have {partner.name.split(" ")[0]} scan this at the venue.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-center py-2">
-            <QRCode
-              backgroundColor="#fffaf0"
-              foregroundColor="#3b2415"
-              level="H"
-              size={220}
-              value={qrValue}
-            >
-              <QRCodeSvg className="rounded-xl" />
-              <QRCodeOverlay className="flex size-12 items-center justify-center rounded-full bg-primary text-xs font-black text-primary-foreground">
-                CB
-              </QRCodeOverlay>
-              <QRCodeSkeleton className="rounded-xl" />
-            </QRCode>
-          </div>
-          <DialogFooter>
-            <Button
-              className="w-full rounded-full"
-              onClick={handleCheckIn}
-              type="button"
-            >
-              Simulate successful scan
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={scanOpen} onOpenChange={setScanOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Scan partner code</DialogTitle>
-            <DialogDescription>
-              Point your camera at their Chewbuu QR when you arrive.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-border bg-muted/40">
-            <div className="flex flex-col items-center gap-2 text-muted-foreground">
-              <ScanLine className="size-10" />
-              <p className="text-xs">Camera preview (demo)</p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              className="w-full rounded-full"
-              onClick={handleCheckIn}
-              type="button"
-            >
-              Simulate scan success
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
         <DialogContent className="max-w-md">

@@ -117,6 +117,7 @@ type DashboardTab =
 type SpotCategory = "all" | "eat" | "drink" | "play";
 type DateHistoryMatchStatus =
   | "accepted"
+  | "archived"
   | "declined"
   | "friended"
   | "saved"
@@ -323,6 +324,30 @@ const settingsInterestCategories = [
   },
 ] as const;
 
+const formatLabel = (value: string) =>
+  value
+    .split("_")
+    .join(" ")
+    .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
+
+const getDateIntentTitle = (what: string[]) =>
+  what.length > 0 ? `${what.map(formatLabel).join(", ")} date` : "Date";
+
+const getCalendarDateTitle = (request: {
+  places?: { name?: string }[];
+  theirName?: string;
+  what?: string[];
+}) => {
+  const placeNames = request.places
+    ?.map((place) => place.name)
+    .filter(Boolean)
+    .slice(0, 2);
+  const activity = placeNames?.length
+    ? placeNames.join(" and ")
+    : getDateIntentTitle(request.what ?? []);
+  return request.theirName ? `${activity} with ${request.theirName}` : activity;
+};
+
 const scenarioToHistory = (scenario: DateScenario): DateHistoryItem => ({
   acceptedMatchId: scenario.acceptedMatchId ?? "",
   chatSummary: [
@@ -369,7 +394,10 @@ const scenarioToHistory = (scenario: DateScenario): DateHistoryItem => ({
     { label: "Choice", tone: "muted", value: "Pending partner" },
     { label: "Date", tone: "muted", value: "After confirm + check-in" },
   ],
-  title: scenario.title,
+  title:
+    scenario.role === "sender"
+      ? getDateIntentTitle(scenario.what)
+      : scenario.title,
   what: scenario.what,
 });
 
@@ -396,12 +424,6 @@ const getAge = (birthdayString: string) => {
 
   return age;
 };
-
-const formatLabel = (value: string) =>
-  value
-    .split("_")
-    .join(" ")
-    .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
 
 const getAcceptedMatchForRequest = (request: any) => {
   const demo = demoDateHistoryById[request.id as string];
@@ -820,7 +842,7 @@ export function MePage({
       places: request.places,
       scheduledAt: request.scheduledAt,
       status: request.status,
-      title: `${request.what.map(formatLabel).join(", ")} request`,
+      title: getDateIntentTitle(request.what),
     })),
     ...demoDateHistories.map((date) => ({
       area: date.searchArea,
@@ -1385,7 +1407,7 @@ export function MePage({
                   </div>
                   {pendingRequests.slice(0, 3).map((request) => (
                     <button
-                      className="flex w-full items-start gap-3 rounded-2xl border border-primary/25 bg-primary/10 p-4 text-left transition hover:border-primary/45 hover:bg-primary/15"
+                      className="flex w-full items-start gap-3 rounded-2xl border border-sky-500/45 bg-sky-500/10 p-4 text-left transition hover:border-sky-500/70 hover:bg-sky-500/15"
                       key={request.id}
                       onClick={() => {
                         setDashboardTab("matches");
@@ -1399,13 +1421,24 @@ export function MePage({
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col gap-1">
                         <span className="flex items-center gap-2 font-bold text-sm">
-                          {request.what.map(formatLabel).join(", ")} request
-                          <Badge className="rounded-full bg-background/70 text-[9px] text-foreground">
-                            Date request
+                          {getDateIntentTitle(request.what)}
+                          <Badge className="rounded-full bg-sky-500/15 text-[9px] text-sky-500">
+                            You sent
                           </Badge>
                           {!readRequestIds.includes(request.id) && (
                             <span className="size-2 rounded-full bg-primary" />
                           )}
+                        </span>
+                        <span className="mt-1 flex flex-wrap gap-1.5">
+                          {request.what.map((item) => (
+                            <Badge
+                              className="rounded-full text-[10px]"
+                              key={item}
+                              variant="outline"
+                            >
+                              {formatLabel(item)}
+                            </Badge>
+                          ))}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           Matching around {request.searchArea} for{" "}
@@ -2001,8 +2034,13 @@ export function MePage({
                                     <CalendarHeart className="size-3 text-current/80 shrink-0" />
                                   )}
                                   <span className="truncate">
-                                    {match ? match.displayName : "Matching"} ·{" "}
-                                    {mealType}
+                                    {match
+                                      ? getCalendarDateTitle({
+                                          places: req.places,
+                                          theirName: match.displayName,
+                                          what: "what" in req ? req.what : [],
+                                        })
+                                      : `${getDateIntentTitle("what" in req ? req.what : [])} · ${mealType}`}
                                   </span>
                                 </div>
                               );
@@ -2108,9 +2146,14 @@ export function MePage({
                               <div className="min-w-0 flex flex-col gap-1.5">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <h4 className="font-bold text-base text-foreground truncate">
-                                    {acceptedMatch
-                                      ? acceptedMatch.displayName
-                                      : "Matching..."}
+                                    {getCalendarDateTitle({
+                                      places,
+                                      theirName: acceptedMatch?.displayName,
+                                      what:
+                                        "what" in request
+                                          ? request.what
+                                          : undefined,
+                                    })}
                                   </h4>
 
                                   <Badge
@@ -4215,11 +4258,23 @@ function DateHistoryNotification({
 
   return (
     <button
-      className="flex w-full items-start gap-3 rounded-lg border border-primary/25 bg-primary/10 p-4 text-left transition hover:border-primary/50 hover:bg-primary/15"
+      className={cn(
+        "flex w-full items-start gap-3 rounded-lg border p-4 text-left transition",
+        date.requesterView
+          ? "border-sky-500/45 bg-sky-500/10 hover:border-sky-500/70 hover:bg-sky-500/15"
+          : "border-primary/25 bg-primary/10 hover:border-primary/50 hover:bg-primary/15"
+      )}
       onClick={onOpen}
       type="button"
     >
-      <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+      <span
+        className={cn(
+          "mt-0.5 grid size-10 shrink-0 place-items-center rounded-full",
+          date.requesterView
+            ? "bg-sky-500/10 text-sky-500"
+            : "bg-primary/10 text-primary"
+        )}
+      >
         <CalendarHeart className="size-5" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-2">
@@ -4227,6 +4282,16 @@ function DateHistoryNotification({
           <span className="font-bold text-sm">{date.title}</span>
           <Badge className="rounded-full bg-background/80 text-[10px] text-foreground">
             {date.status}
+          </Badge>
+          <Badge
+            className={cn(
+              "rounded-full border-0 text-[10px]",
+              date.requesterView
+                ? "bg-sky-500/15 text-sky-500"
+                : "bg-primary/15 text-primary"
+            )}
+          >
+            {date.requesterView ? "You sent" : "Received"}
           </Badge>
         </span>
         <span className="text-xs text-muted-foreground">
@@ -4289,7 +4354,7 @@ function DateHistoryDetail({
         if (m.id === matchId) {
           return { ...m, status: "accepted" as const };
         }
-        return m;
+        return { ...m, status: "archived" as const };
       });
       return {
         ...prev,
@@ -4559,7 +4624,7 @@ function DateHistoryDetail({
           </div>
           <DateChat
             allCandidates={currentDate.matches
-              .filter((m) => m.status !== "declined")
+              .filter((m) => m.status !== "declined" && m.status !== "archived")
               .map(
                 (match): ChatPerson => ({
                   avatar: match.photoUrl ?? "",
@@ -4851,14 +4916,14 @@ function DateHistoryMatchRow({
           <MessageCircle className="size-4" />
           Chat
         </Button>
-      ) : match.status === "declined" ? (
+      ) : match.status === "declined" || match.status === "archived" ? (
         <Button
           className="rounded-full text-xs animate-none"
           disabled
           size="sm"
           variant="ghost"
         >
-          Declined
+          {match.status === "archived" ? "Archived" : "Declined"}
         </Button>
       ) : (
         <Button
@@ -4877,13 +4942,14 @@ function DateHistoryMatchRow({
 function MatchStatusBadge({ status }: { status: DateHistoryMatchStatus }) {
   const label = {
     accepted: "Accepted",
+    archived: "Archived",
     declined: "Rejected",
     friended: "Friend",
     saved: "Chat",
     suggested: "Suggested",
   }[status];
   const className =
-    status === "declined"
+    status === "declined" || status === "archived"
       ? "bg-muted text-muted-foreground"
       : status === "friended" || status === "accepted"
         ? "bg-emerald-500/10 text-emerald-600"

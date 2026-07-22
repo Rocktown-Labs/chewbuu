@@ -49,7 +49,6 @@ import {
   ImagePlus,
   Mic,
   MoreHorizontal,
-  Play,
   Send,
   SkipForward,
   Square,
@@ -177,14 +176,14 @@ function MediaAttachmentBubble({
   align,
   durationSec,
   kind,
-  onOpen,
+  mediaUrl,
   thumb,
   title,
 }: {
   align: "end" | "start";
   durationSec?: number;
   kind: "photo" | "video" | "voice";
-  onOpen: () => void;
+  mediaUrl?: string;
   thumb?: string;
   title?: string;
 }) {
@@ -199,51 +198,63 @@ function MediaAttachmentBubble({
     <Bubble align={align} variant="ghost">
       <BubbleContent className="overflow-hidden rounded-2xl p-0">
         {kind === "voice" ? (
-          <button
-            aria-label={label}
-            className="flex min-w-36 items-center gap-3 rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-left"
-            onClick={onOpen}
-            type="button"
-          >
-            <span className="grid size-9 place-items-center rounded-full bg-background/80 text-foreground">
-              <Mic className="size-4" />
-            </span>
-            <span className="flex flex-col">
-              <span className="font-bold text-xs">Voice note</span>
-              <span className="text-[10px] text-muted-foreground">
-                {durationSec ? formatDuration(durationSec) : "Tap to play"}
+          <div className="flex min-w-56 flex-col gap-2 rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-left">
+            <div className="flex items-center gap-3">
+              <span className="grid size-9 place-items-center rounded-full bg-background/80 text-foreground">
+                <Mic className="size-4" />
               </span>
-            </span>
-          </button>
+              <span className="flex flex-col">
+                <span className="font-bold text-xs">Voice note</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {durationSec ? formatDuration(durationSec) : "Tap to play"}
+                </span>
+              </span>
+            </div>
+            {mediaUrl ? (
+              <audio className="h-8 w-full" controls src={mediaUrl}>
+                <track kind="captions" />
+              </audio>
+            ) : null}
+          </div>
+        ) : kind === "video" ? (
+          <div className="relative block max-w-44 overflow-hidden rounded-2xl border border-border/70 bg-black text-left sm:max-w-52">
+            {mediaUrl ? (
+              <video
+                className="aspect-[3/4] w-full object-cover"
+                controls
+                playsInline
+                poster={thumb}
+                src={mediaUrl}
+              >
+                <track kind="captions" />
+              </video>
+            ) : (
+              <span className="block aspect-[3/4] w-40 bg-muted" />
+            )}
+            {durationSec ? (
+              <span className="pointer-events-none absolute right-2 bottom-2 rounded-full bg-black/70 px-1.5 py-0.5 font-semibold text-[10px] text-white">
+                {formatDuration(durationSec)}
+              </span>
+            ) : null}
+          </div>
         ) : (
-          <button
+          <a
             aria-label={label}
             className="relative block max-w-52 overflow-hidden rounded-2xl border border-border/70 bg-muted/30 text-left sm:max-w-60"
-            onClick={onOpen}
-            type="button"
+            href={mediaUrl ?? thumb}
+            rel="noreferrer"
+            target="_blank"
           >
-            {thumb ? (
+            {thumb || mediaUrl ? (
               <img
                 alt={label}
                 className="aspect-[3/4] w-full object-cover"
-                src={thumb}
+                src={thumb ?? mediaUrl}
               />
             ) : (
               <span className="block aspect-[3/4] w-40 bg-muted" />
             )}
-            {kind === "video" ? (
-              <span className="absolute inset-0 flex items-center justify-center bg-black/25">
-                <span className="flex size-10 items-center justify-center rounded-full bg-background/90 text-foreground shadow">
-                  <Play className="fill-current" />
-                </span>
-              </span>
-            ) : null}
-            {durationSec ? (
-              <span className="absolute right-2 bottom-2 rounded-full bg-black/70 px-1.5 py-0.5 font-semibold text-[10px] text-white">
-                {formatDuration(durationSec)}
-              </span>
-            ) : null}
-          </button>
+          </a>
         )}
       </BubbleContent>
     </Bubble>
@@ -312,16 +323,10 @@ function LinkPreviewBubble({
 
 export function ChatMessageRow({
   message,
-  onOpenMedia,
   peopleById,
   showAvatar = true,
 }: {
   message: ChatMessage;
-  onOpenMedia: (media: {
-    kind: "photo" | "video" | "voice";
-    title?: string;
-    url: string;
-  }) => void;
   peopleById: Record<string, ChatPerson>;
   showAvatar?: boolean;
 }) {
@@ -377,19 +382,7 @@ export function ChatMessageRow({
                     ? "voice"
                     : "video"
             }
-            onOpen={() => {
-              if (!message.mediaUrl) return;
-              onOpenMedia({
-                kind:
-                  message.kind === "photo"
-                    ? "photo"
-                    : message.kind === "voice"
-                      ? "voice"
-                      : "video",
-                title: message.text,
-                url: message.mediaUrl,
-              });
-            }}
+            mediaUrl={message.mediaUrl}
             thumb={message.mediaThumb ?? message.mediaUrl}
             title={
               message.kind === "intro_video"
@@ -419,12 +412,6 @@ export function ChatThreadBody({
   peopleById: Record<string, ChatPerson>;
   topSlot?: ReactNode;
 }) {
-  const [media, setMedia] = useState<null | {
-    kind: "photo" | "video" | "voice";
-    title?: string;
-    url: string;
-  }>(null);
-
   const introMessages = messages.filter((m) => m.kind === "intro_video");
   const restMessages = messages.filter((m) => m.kind !== "intro_video");
 
@@ -455,7 +442,6 @@ export function ChatThreadBody({
                     >
                       <ChatMessageRow
                         message={message}
-                        onOpenMedia={setMedia}
                         peopleById={peopleById}
                       />
                     </MessageScrollerItem>
@@ -477,11 +463,7 @@ export function ChatThreadBody({
                     index === restMessages.length - 1
                   }
                 >
-                  <ChatMessageRow
-                    message={message}
-                    onOpenMedia={setMedia}
-                    peopleById={peopleById}
-                  />
+                  <ChatMessageRow message={message} peopleById={peopleById} />
                 </MessageScrollerItem>
               ))}
             </MessageScrollerContent>
@@ -490,7 +472,6 @@ export function ChatThreadBody({
         </MessageScroller>
       </MessageScrollerProvider>
       {footer}
-      <MediaLightbox media={media} onClose={() => setMedia(null)} />
     </div>
   );
 }
@@ -742,6 +723,7 @@ export function ChatComposer({
   onSendText,
   onSkipTheirReply,
   phase = "continued",
+  threadId,
   videoProgress,
 }: {
   dateMode?: boolean;
@@ -754,6 +736,7 @@ export function ChatComposer({
   onSendText: (text: string) => void;
   onSkipTheirReply?: () => void;
   phase?: DateRoomPhase;
+  threadId?: string;
   videoProgress?: { mine: number; theirs: number; limit: number };
 }) {
   const [text, setText] = useState("");
@@ -775,14 +758,25 @@ export function ChatComposer({
   });
   const {
     clip: recorderClip,
+    cancel: cancelRecorder,
     requestStream,
+    reset: resetRecorder,
     start: startRecorder,
     status: recorderStatus,
+    stop: stopRecorder,
   } = recorder;
 
   useEffect(() => {
     if (lockedToVideo) setMode("video");
   }, [lockedToVideo]);
+
+  useEffect(() => {
+    setText("");
+    setMode(lockedToVideo ? "video" : "text");
+    setPendingRecorderStart(false);
+    setRecorderRequested(false);
+    cancelRecorder();
+  }, [cancelRecorder, lockedToVideo, threadId]);
 
   useEffect(() => {
     if (
@@ -825,6 +819,24 @@ export function ChatComposer({
     setText("");
   };
 
+  const toggleRecorder = (nextMode: "video" | "voice") => {
+    if (blocked) return;
+    if (mode === nextMode && recorderStatus === "recording") {
+      stopRecorder();
+      return;
+    }
+    if (mode !== nextMode) {
+      cancelRecorder();
+    }
+    setMode(nextMode);
+    setRecorderRequested(true);
+    if (mode === nextMode && recorderStatus === "ready") {
+      void startRecorder();
+      return;
+    }
+    setPendingRecorderStart(true);
+  };
+
   const handleSendClip = () => {
     if (!recorder.clip) return;
     onSendMedia({
@@ -833,7 +845,7 @@ export function ChatComposer({
       mediaUrl: recorder.clip.objectUrl,
       thumbUrl: recorder.clip.thumbUrl,
     });
-    recorder.reset();
+    resetRecorder();
     if (!lockedToVideo) setMode("text");
   };
 
@@ -870,33 +882,6 @@ export function ChatComposer({
         </div>
       ) : null}
 
-      {!lockedToVideo ? (
-        <div className="mb-2 flex items-center gap-1.5 px-1">
-          {(["text", "video", "voice"] as const).map((nextMode) => (
-            <Button
-              className="h-7 rounded-full px-3 text-[11px]"
-              disabled={nextMode === "text" && !textUnlocked}
-              key={nextMode}
-              onClick={() => {
-                setMode(nextMode);
-                if (nextMode !== "text") {
-                  setRecorderRequested(true);
-                }
-              }}
-              size="sm"
-              type="button"
-              variant={mode === nextMode ? "default" : "outline"}
-            >
-              {nextMode === "text"
-                ? "Text"
-                : nextMode === "video"
-                  ? "Video"
-                  : "Voice"}
-            </Button>
-          ))}
-        </div>
-      ) : null}
-
       {(mode === "video" || mode === "voice") &&
       (recorder.status === "ready" ||
         recorder.status === "recording" ||
@@ -905,7 +890,7 @@ export function ChatComposer({
         recorder.status === "error") ? (
         <div className="mb-3 overflow-hidden rounded-2xl border border-border bg-card">
           {mode === "video" ? (
-            <div className="relative aspect-[3/4] max-h-72 w-full bg-black">
+            <div className="relative mx-auto aspect-[3/4] max-h-[22rem] w-48 max-w-full bg-black sm:w-56">
               {recorder.status === "stopped" && recorder.clip ? (
                 <video
                   className="size-full object-cover"
@@ -962,7 +947,7 @@ export function ChatComposer({
             <Button
               className="rounded-full"
               onClick={() => {
-                recorder.cancel();
+                cancelRecorder();
                 if (!lockedToVideo) setMode("text");
               }}
               size="sm"
@@ -984,7 +969,7 @@ export function ChatComposer({
             ) : recorder.status === "recording" ? (
               <Button
                 className="rounded-full"
-                onClick={() => recorder.stop()}
+                onClick={stopRecorder}
                 size="sm"
                 type="button"
                 variant="destructive"
@@ -995,11 +980,17 @@ export function ChatComposer({
             ) : (
               <Button
                 className="rounded-full"
-                onClick={() => void recorder.start()}
+                onClick={() =>
+                  toggleRecorder(mode === "voice" ? "voice" : "video")
+                }
                 size="sm"
                 type="button"
               >
-                <Camera data-icon="inline-start" />
+                {mode === "voice" ? (
+                  <Mic data-icon="inline-start" />
+                ) : (
+                  <Camera data-icon="inline-start" />
+                )}
                 {mode === "voice" ? "Record voice" : "Record video"}
               </Button>
             )}
@@ -1012,29 +1003,41 @@ export function ChatComposer({
           <>
             <Button
               aria-label="Record video"
-              className="rounded-full"
-              onClick={() => {
-                setMode("video");
-                setRecorderRequested(true);
-              }}
+              className={cn(
+                "rounded-full",
+                mode === "video" &&
+                  recorderStatus === "recording" &&
+                  "text-primary"
+              )}
+              onClick={() => toggleRecorder("video")}
               size="icon-sm"
               type="button"
               variant="ghost"
             >
-              <Camera />
+              {mode === "video" && recorderStatus === "recording" ? (
+                <Square />
+              ) : (
+                <Camera />
+              )}
             </Button>
             <Button
               aria-label="Voice note"
-              className="rounded-full"
-              onClick={() => {
-                setMode("voice");
-                setRecorderRequested(true);
-              }}
+              className={cn(
+                "rounded-full",
+                mode === "voice" &&
+                  recorderStatus === "recording" &&
+                  "text-primary"
+              )}
+              onClick={() => toggleRecorder("voice")}
               size="icon-sm"
               type="button"
               variant="ghost"
             >
-              <Mic />
+              {mode === "voice" && recorderStatus === "recording" ? (
+                <Square />
+              ) : (
+                <Mic />
+              )}
             </Button>
             <Button
               aria-label="Add photo"
@@ -1047,13 +1050,14 @@ export function ChatComposer({
               <ImagePlus />
             </Button>
             <input
-              accept="image/*"
+              accept="image/*,video/*"
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (!file) return;
                 const url = URL.createObjectURL(file);
-                onSendMedia({ kind: "photo", mediaUrl: url, thumbUrl: url });
+                const kind = file.type.startsWith("video/") ? "video" : "photo";
+                onSendMedia({ kind, mediaUrl: url, thumbUrl: url });
                 event.target.value = "";
               }}
               ref={fileInputRef}
@@ -1063,15 +1067,12 @@ export function ChatComposer({
         ) : (
           <Button
             className="rounded-full"
-            onClick={() => {
-              setMode("video");
-              setRecorderRequested(true);
-            }}
+            onClick={() => toggleRecorder("video")}
             size="icon-sm"
             type="button"
             variant="outline"
           >
-            <Camera />
+            {recorderStatus === "recording" ? <Square /> : <Camera />}
           </Button>
         )}
 
@@ -1089,7 +1090,9 @@ export function ChatComposer({
             }
           }}
           onFocus={() => {
-            if (textUnlocked) setMode("text");
+            if (textUnlocked && recorderStatus !== "recording") {
+              setMode("text");
+            }
           }}
           placeholder={
             lockedToVideo
@@ -1105,31 +1108,22 @@ export function ChatComposer({
           className="size-10 rounded-full"
           onClick={() => {
             if (lockedToVideo || mode === "video") {
-              setMode("video");
-              setRecorderRequested(true);
-              if (recorder.status !== "ready") {
-                setPendingRecorderStart(true);
-                return;
-              }
-              void recorder.start();
+              toggleRecorder("video");
               return;
             }
             if (text.trim()) {
               handleSendText();
               return;
             }
-            setMode("voice");
-            setRecorderRequested(true);
-            if (recorder.status !== "ready") {
-              setPendingRecorderStart(true);
-              return;
-            }
-            void recorder.start();
+            toggleRecorder("voice");
           }}
           size="icon-sm"
           type="button"
         >
-          {text.trim() && textUnlocked ? (
+          {(mode === "voice" || mode === "video") &&
+          recorderStatus === "recording" ? (
+            <Square />
+          ) : text.trim() && textUnlocked ? (
             <Send />
           ) : lockedToVideo ? (
             <Video />

@@ -5,7 +5,7 @@ import {
 } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { cn } from "@chewbuu/ui/lib/utils";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import type {
@@ -117,6 +117,11 @@ export function DateChat({
   const [phase, setPhase] = useState<DateRoomPhase>(
     initialPhase ?? derivePhaseFromMessages(initialMessages)
   );
+
+  useEffect(() => {
+    setMessages(initialMessages);
+    setPhase(initialPhase ?? derivePhaseFromMessages(initialMessages));
+  }, [initialMessages, initialPhase, person.id]);
 
   const peopleById = useMemo(() => {
     const map: Record<string, ChatPerson> = { [person.id]: person };
@@ -272,6 +277,7 @@ export function DateChat({
                 onSendText={(value) => appendMine(createTextMessage(value))}
                 onSkipTheirReply={handleSkipTheirReply}
                 phase={phase}
+                threadId={person.id}
                 videoProgress={{
                   limit: VIDEO_EXCHANGE_LIMIT,
                   mine: myVideos,
