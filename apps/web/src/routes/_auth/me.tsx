@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@chewbuu/ui/components/select";
+import { Switch } from "@chewbuu/ui/components/switch";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { cn } from "@chewbuu/ui/lib/utils";
 import {
@@ -59,7 +60,6 @@ import {
   Home,
   LogOut,
   MapPin,
-  Menu,
   MessageCircle,
   MessageSquare,
   PanelLeft,
@@ -74,7 +74,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import type { ComponentType } from "react";
+import type { ComponentType, FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -144,6 +144,13 @@ interface DateHistoryItem {
   matches: DateHistoryMatch[];
   places: DatePlace[];
   requesterView: boolean;
+  requester: {
+    avatar?: string;
+    bio: string;
+    compatibility?: number;
+    name: string;
+    tags: string[];
+  };
   scheduledAt: string;
   searchArea: string;
   status: string;
@@ -247,10 +254,13 @@ const lookingForOptions = [
   "Not sure yet",
 ] as const;
 const dateRequestCategoryOptions = ["eat", "drink", "play"] as const;
+const profileVisibleChipsKey = "__profile_visible_chips";
 const sanitizeDateRequestCategories = (values: string[] = []) =>
   values.filter((value) =>
     dateRequestCategoryOptions.some((option) => option === value)
   );
+const profileChipValue = (group: string, value: string) => `${group}:${value}`;
+const profileChipLabel = (chip: string) => chip.split(":").at(1) ?? chip;
 const settingsInterestCategories = [
   {
     label: "Eat",
@@ -382,6 +392,24 @@ const scenarioToHistory = (scenario: DateScenario): DateHistoryItem => ({
     types: [] as string[],
   })),
   requesterView: scenario.role === "sender",
+  requester:
+    scenario.role === "receiver"
+      ? {
+          avatar: scenario.matches[0]?.avatar,
+          bio:
+            scenario.matches[0]?.note ??
+            "Wants to meet after a quick intro exchange.",
+          compatibility: scenario.matches[0]?.compatibility,
+          name: scenario.theirName,
+          tags: scenario.matches[0]?.tags ?? [],
+        }
+      : {
+          avatar: undefined,
+          bio: "You sent this request. Matches can open candidate rooms before a choice is made.",
+          compatibility: undefined,
+          name: "You",
+          tags: ["Requester"],
+        },
   scheduledAt: scenario.scheduledAt,
   searchArea: scenario.searchArea,
   status: scenario.status,
@@ -557,6 +585,7 @@ export function MePage({
   const [spotsQuery, setSpotsQuery] = useState("");
   const [isLoadingSpots, setIsLoadingSpots] = useState(false);
   const [readRequestIds, setReadRequestIds] = useState<string[]>([]);
+  const [receivingDateRequests, setReceivingDateRequests] = useState(true);
   const [selectedDateHistoryId, setSelectedDateHistoryId] = useState<
     null | string
   >(initialDateId ?? null);
@@ -776,6 +805,14 @@ export function MePage({
   const selectedDateHistory = selectedDateHistoryId
     ? (demoDateHistoryById[selectedDateHistoryId] ?? null)
     : null;
+  const receivedDateHistories = useMemo(
+    () => demoDateHistories.filter((date) => !date.requesterView),
+    []
+  );
+  const sentDateHistories = useMemo(
+    () => demoDateHistories.filter((date) => date.requesterView),
+    []
+  );
   const unreadRequestCount = pendingRequests.filter(
     (request) => !readRequestIds.includes(request.id)
   ).length;
@@ -783,15 +820,41 @@ export function MePage({
   const chatBadgeCount = pendingRequests.length;
   const notificationBadgeCount =
     unreadRequestCount + (summary?.readiness.pendingReviews ?? 0);
-  const profileRating = 4.8;
-  const profileReviewCount = Math.max(
-    3,
-    allRecaps.filter((recap) => recap.personName || recap.caption).length
+  const profileReviewSignals = allRecaps.filter(
+    (recap) => recap.userName === displayName
   );
-  const anonymousReviewNotes = [
-    "Clear communicator and easy to plan with.",
-    "Showed up on time and kept the date comfortable.",
+  const profileReviewCount = profileReviewSignals.length;
+  const profileMediaSignalCount = profileReviewSignals.filter(
+    (recap) => recap.photos.length > 0
+  ).length;
+  const profileRating =
+    profileReviewCount >= 2
+      ? Math.min(5, 4.6 + profileMediaSignalCount * 0.1)
+      : null;
+  const anonymousReviewNotes =
+    profileReviewCount >= 2
+      ? [
+          "Clear communicator and easy to plan with.",
+          "Showed up on time and kept the date comfortable.",
+        ]
+      : [];
+  const profileChipOptions = [
+    ...(profile?.lookingFor ?? []).map((value) =>
+      profileChipValue("looking_for", value)
+    ),
+    ...(profile?.kids ? [profileChipValue("kids", profile.kids)] : []),
+    ...(profile?.wantsKids
+      ? [profileChipValue("future_kids", profile.wantsKids)]
+      : []),
   ];
+  const savedVisibleProfileChips =
+    profile?.interestDetails?.[profileVisibleChipsKey] ?? [];
+  const visibleProfileChips =
+    savedVisibleProfileChips.length > 0
+      ? profileChipOptions.filter((chip) =>
+          savedVisibleProfileChips.includes(chip)
+        )
+      : profileChipOptions;
 
   const confirmedDates = useMemo(() => {
     return [...demoDateHistories, ...pendingRequests].filter((req) => {
@@ -946,13 +1009,6 @@ export function MePage({
     }
   };
 
-  const openProfileMore = () => {
-    setActiveTab("profile");
-    setProfileMode("menu");
-    setProfileStatTarget(null);
-    syncMePath("/me/profile");
-  };
-
   const openProfileMode = (mode: ProfileMode) => {
     setActiveTab("profile");
     setProfileMode(mode);
@@ -976,7 +1032,7 @@ export function MePage({
     }
   };
 
-  const handleCreateRecap = (e: React.FormEvent) => {
+  const handleCreateRecap = (e: FormEvent) => {
     e.preventDefault();
     if (!recapForm.placeName || !recapForm.caption) {
       toast.error("Please fill in the place name and caption.");
@@ -1270,46 +1326,38 @@ export function MePage({
             </Link>
           </div>
 
-          {/* User Account Card */}
-          <div
-            className={cn(
-              "flex items-center justify-between p-2.5 rounded-2xl border bg-card/60 w-full",
-              isSidebarCollapsed && "justify-center"
-            )}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Avatar className="size-9 border border-border shrink-0">
-                {profilePhoto && <AvatarImage src={profilePhoto} />}
-                <AvatarFallback className="font-bold text-xs uppercase bg-primary/10 text-primary">
-                  {displayName.slice(0, 2)}
-                </AvatarFallback>
-              </Avatar>
-              {!isSidebarCollapsed && (
-                <div className="flex flex-col text-left min-w-0">
-                  <span className="font-bold text-xs truncate max-w-24">
+          {!isSidebarCollapsed ? (
+            <div className="flex w-full items-center justify-between rounded-2xl border bg-card/60 p-2.5">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <Avatar className="size-9 shrink-0 border border-border">
+                  {profilePhoto && <AvatarImage src={profilePhoto} />}
+                  <AvatarFallback className="bg-primary/10 font-bold text-primary text-xs uppercase">
+                    {displayName.slice(0, 2)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex min-w-0 flex-col text-left">
+                  <span className="max-w-24 truncate font-bold text-xs">
                     {displayName}
                   </span>
                   <Badge
-                    className="w-fit text-[9px] py-0 px-1 font-bold uppercase mt-0.5"
+                    className="mt-0.5 w-fit px-1 py-0 font-bold text-[9px] uppercase"
                     variant="secondary"
                   >
                     {membershipTier}
                   </Badge>
                 </div>
-              )}
-            </div>
-            {!isSidebarCollapsed && (
+              </div>
               <Button
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => authClient.signOut()}
+                onClick={handleSignOut}
                 title="Sign out"
                 className="rounded-full text-muted-foreground hover:text-foreground"
               >
                 <LogOut className="size-4" />
               </Button>
-            )}
-          </div>
+            </div>
+          ) : null}
         </aside>
 
         {/* MAIN MIDDLE COLUMN (FEED / SPOTS / MATCHES / CHATS / PROFILE) */}
@@ -1578,7 +1626,7 @@ export function MePage({
 
           {activeTab === "matches" && (
             <div className="flex flex-col">
-              <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
+              <div className="sticky top-0 z-30 border-b border-border/80 bg-background/90 px-4 py-4 backdrop-blur-md sm:px-5">
                 {selectedDateHistory ? (
                   <div className="flex items-start gap-3">
                     <Button
@@ -1614,7 +1662,7 @@ export function MePage({
                   </>
                 )}
               </div>
-              <div className="grid gap-4 p-5">
+              <div className="grid gap-4 p-4 sm:p-5">
                 {selectedDateHistory ? (
                   <DateHistoryDetail
                     date={selectedDateHistory}
@@ -1622,14 +1670,62 @@ export function MePage({
                   />
                 ) : (
                   <>
-                    {demoDateHistories.map((date) => (
-                      <DateHistoryNotification
-                        date={date}
-                        key={date.id}
-                        onOpen={() => openDateHistory(date.id)}
-                      />
-                    ))}
-                    {pendingRequests.length === 0 ? (
+                    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/35 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+                      <div>
+                        <h3 className="font-bold text-sm">
+                          Receive date requests
+                        </h3>
+                        <p className="mt-0.5 text-muted-foreground text-xs">
+                          Keep this on when you want incoming Eat, Drink, or
+                          Play requests to show here.
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 sm:justify-end">
+                        <span className="text-muted-foreground text-xs">
+                          {receivingDateRequests ? "Receiving" : "Paused"}
+                        </span>
+                        <Switch
+                          aria-label="Toggle receiving date requests"
+                          checked={receivingDateRequests}
+                          onCheckedChange={setReceivingDateRequests}
+                        />
+                      </div>
+                    </div>
+
+                    {receivedDateHistories.length > 0 ? (
+                      <DateRequestSection
+                        count={receivedDateHistories.length}
+                        description="People who sent you a date request. Open one to review candidate rooms, profile context, and the plan."
+                        title="Received"
+                      >
+                        {receivedDateHistories.map((date) => (
+                          <DateHistoryNotification
+                            date={date}
+                            key={date.id}
+                            onOpen={() => openDateHistory(date.id)}
+                          />
+                        ))}
+                      </DateRequestSection>
+                    ) : null}
+
+                    {sentDateHistories.length > 0 ? (
+                      <DateRequestSection
+                        count={sentDateHistories.length}
+                        description="Requests you started. These use a blue border so they are easy to separate from incoming requests."
+                        title="Sent"
+                      >
+                        {sentDateHistories.map((date) => (
+                          <DateHistoryNotification
+                            date={date}
+                            key={date.id}
+                            onOpen={() => openDateHistory(date.id)}
+                          />
+                        ))}
+                      </DateRequestSection>
+                    ) : null}
+
+                    {pendingRequests.length === 0 &&
+                    demoDateHistories.length === 0 ? (
                       <Card className="rounded-2xl border-border bg-card/45">
                         <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
                           <Heart className="size-8 text-primary" />
@@ -1654,68 +1750,76 @@ export function MePage({
                           </Link>
                         </CardContent>
                       </Card>
-                    ) : (
-                      pendingRequests.map((request) => (
-                        <Card
-                          className="rounded-2xl border-border bg-card/45"
-                          key={request.id}
-                        >
-                          <CardHeader>
-                            <CardTitle className="text-base">
-                              {request.what.map(formatLabel).join(", ")} date
-                            </CardTitle>
-                            <CardDescription>
-                              {new Date(request.scheduledAt).toLocaleString()}{" "}
-                              in {request.searchArea}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent className="flex flex-col gap-3">
-                            <div className="flex flex-wrap gap-2">
-                              {request.places?.length ? (
-                                request.places.map((place) => (
-                                  <Badge
-                                    key={place.placeId}
-                                    variant="secondary"
-                                  >
-                                    {place.name}
+                    ) : null}
+
+                    {pendingRequests.length > 0 ? (
+                      <DateRequestSection
+                        count={pendingRequests.length}
+                        description="Live requests from your account data."
+                        title="Active"
+                      >
+                        {pendingRequests.map((request) => (
+                          <Card
+                            className="rounded-2xl border-border bg-card/45"
+                            key={request.id}
+                          >
+                            <CardHeader>
+                              <CardTitle className="text-base">
+                                {request.what.map(formatLabel).join(", ")} date
+                              </CardTitle>
+                              <CardDescription>
+                                {new Date(request.scheduledAt).toLocaleString()}{" "}
+                                in {request.searchArea}
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-col gap-3">
+                              <div className="flex flex-wrap gap-2">
+                                {request.places?.length ? (
+                                  request.places.map((place) => (
+                                    <Badge
+                                      key={place.placeId}
+                                      variant="secondary"
+                                    >
+                                      {place.name}
+                                    </Badge>
+                                  ))
+                                ) : (
+                                  <Badge variant="secondary">
+                                    Places pending
                                   </Badge>
-                                ))
-                              ) : (
-                                <Badge variant="secondary">
-                                  Places pending
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="grid gap-2 sm:grid-cols-3">
-                              <Button
-                                className="rounded-full"
-                                onClick={() => setDashboardTab("chats")}
-                                size="sm"
-                              >
-                                <MessageSquare className="mr-1.5 size-4" />
-                                Match Rooms
-                              </Button>
-                              <Button
-                                className="rounded-full"
-                                disabled
-                                size="sm"
-                                variant="outline"
-                              >
-                                Save Soon
-                              </Button>
-                              <Button
-                                className="rounded-full"
-                                disabled
-                                size="sm"
-                                variant="ghost"
-                              >
-                                Decline Soon
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))
-                    )}
+                                )}
+                              </div>
+                              <div className="grid gap-2 sm:grid-cols-3">
+                                <Button
+                                  className="rounded-full"
+                                  onClick={() => setDashboardTab("chats")}
+                                  size="sm"
+                                >
+                                  <MessageSquare className="mr-1.5 size-4" />
+                                  Match Rooms
+                                </Button>
+                                <Button
+                                  className="rounded-full"
+                                  disabled
+                                  size="sm"
+                                  variant="outline"
+                                >
+                                  Save Soon
+                                </Button>
+                                <Button
+                                  className="rounded-full"
+                                  disabled
+                                  size="sm"
+                                  variant="ghost"
+                                >
+                                  Decline Soon
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </DateRequestSection>
+                    ) : null}
                   </>
                 )}
               </div>
@@ -2321,15 +2425,6 @@ export function MePage({
                   >
                     {profileMode === "edit" ? "View Profile" : "Edit Profile"}
                   </Button>
-                  <Button
-                    aria-label="Sign out"
-                    className="rounded-full"
-                    onClick={openProfileMore}
-                    size="icon-sm"
-                    variant="ghost"
-                  >
-                    <Menu className="size-4" />
-                  </Button>
                 </div>
               </div>
 
@@ -2421,8 +2516,16 @@ export function MePage({
                           type="button"
                         >
                           <span className="flex items-center justify-center gap-1 font-extrabold text-lg text-foreground md:text-xl">
-                            <Star className="size-4 fill-primary text-primary" />
-                            {profileRating.toFixed(1)}
+                            {profileRating === null ? (
+                              <Badge className="rounded-full text-[10px]">
+                                New
+                              </Badge>
+                            ) : (
+                              <>
+                                <Star className="size-4 fill-primary text-primary" />
+                                {profileRating.toFixed(1)}
+                              </>
+                            )}
                           </span>
                           <span className="mt-0.5 font-bold text-[10px] text-muted-foreground uppercase tracking-wider">
                             Reviews
@@ -2480,31 +2583,23 @@ export function MePage({
                         </p>
                       )}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {profile?.lookingFor?.map((item) => (
+                        {profileReviewCount < 2 ? (
                           <Badge
                             variant="secondary"
                             className="rounded-full bg-primary px-2.5 py-0.5 font-bold text-[10px] text-primary-foreground"
-                            key={item}
                           >
-                            {item}
+                            New dater
+                          </Badge>
+                        ) : null}
+                        {visibleProfileChips.map((chip) => (
+                          <Badge
+                            variant="secondary"
+                            className="rounded-full bg-primary px-2.5 py-0.5 font-bold text-[10px] text-primary-foreground"
+                            key={chip}
+                          >
+                            {profileChipLabel(chip)}
                           </Badge>
                         ))}
-                        {profile?.kids && (
-                          <Badge
-                            variant="secondary"
-                            className="rounded-full bg-primary px-2.5 py-0.5 font-bold text-[10px] text-primary-foreground"
-                          >
-                            {profile.kids}
-                          </Badge>
-                        )}
-                        {profile?.wantsKids && (
-                          <Badge
-                            variant="secondary"
-                            className="rounded-full bg-primary px-2.5 py-0.5 font-bold text-[10px] text-primary-foreground"
-                          >
-                            {profile.wantsKids}
-                          </Badge>
-                        )}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
                         {profile?.interestDetails
@@ -2783,19 +2878,6 @@ export function MePage({
             tier={tier}
           />
         </aside>
-
-        <Link
-          aria-label={canDate ? "Plan a date" : "Finish profile"}
-          className={buttonVariants({
-            className:
-              "fixed right-4 bottom-24 z-40 rounded-full px-4 shadow-lg shadow-primary/20 lg:hidden",
-            size: "sm",
-          })}
-          to={canDate ? "/date/new" : "/onboarding"}
-        >
-          <CalendarHeart className="size-4" />
-          {canDate ? "Plan" : "Finish"}
-        </Link>
 
         {/* MOBILE SIDEBAR DRAWER OVERLAY */}
         {mobileMenuOpen && (
@@ -3172,6 +3254,17 @@ function ProfileEditPanel({
   setProfileMode: (mode: ProfileMode) => void;
   tier: string;
 }) {
+  const initialProfileChipOptions = [
+    ...(profile?.lookingFor ?? []).map((value) =>
+      profileChipValue("looking_for", value)
+    ),
+    ...(profile?.kids ? [profileChipValue("kids", profile.kids)] : []),
+    ...(profile?.wantsKids
+      ? [profileChipValue("future_kids", profile.wantsKids)]
+      : []),
+  ];
+  const savedVisibleProfileChips =
+    profile?.interestDetails?.[profileVisibleChipsKey] ?? [];
   const [formData, setFormData] = useState({
     username: profile?.username ?? "",
     name: profile?.name ?? "",
@@ -3203,6 +3296,10 @@ function ProfileEditPanel({
       "Coffee",
       "Hiking",
     ],
+    visibleProfileChips:
+      savedVisibleProfileChips.length > 0
+        ? savedVisibleProfileChips
+        : initialProfileChipOptions,
     interestDetails: profile?.interestDetails ?? {},
     safetyOptIn: profile?.safetyOptIn ?? true,
     trustedContactName: profile?.trustedContacts?.[0]?.name ?? "Sarah Jenkins",
@@ -3238,6 +3335,18 @@ function ProfileEditPanel({
         )
       : settingsInterestCategories;
   }, [formData.birthday]);
+  const formProfileChipOptions = useMemo(
+    () => [
+      ...formData.lookingFor.map((value) =>
+        profileChipValue("looking_for", value)
+      ),
+      ...(formData.kids ? [profileChipValue("kids", formData.kids)] : []),
+      ...(formData.wantsKids
+        ? [profileChipValue("future_kids", formData.wantsKids)]
+        : []),
+    ],
+    [formData.kids, formData.lookingFor, formData.wantsKids]
+  );
   const toggleInterestDetail = (category: string, value: string) => {
     const currentValues = formData.interestDetails[category] ?? [];
     const nextValues = currentValues.includes(value)
@@ -3247,8 +3356,9 @@ function ProfileEditPanel({
       ...formData.interestDetails,
       [category]: nextValues,
     };
-    const nextFavoriteThings = Object.values(nextInterestDetails)
-      .flat()
+    const nextFavoriteThings = Object.entries(nextInterestDetails)
+      .filter(([key]) => key !== profileVisibleChipsKey)
+      .flatMap(([, values]) => values)
       .slice(0, 20);
 
     setFormData({
@@ -3312,17 +3422,35 @@ function ProfileEditPanel({
 
     setIsSaving(true);
     try {
+      const interestDetailsWithoutProfileChips: Record<string, string[]> =
+        Object.fromEntries(
+          Object.entries(formData.interestDetails).filter(
+            ([key]) => key !== profileVisibleChipsKey
+          )
+        );
+      const nextInterestDetails: Record<string, string[]> = {
+        ...interestDetailsWithoutProfileChips,
+        [profileVisibleChipsKey]: formData.visibleProfileChips.filter((chip) =>
+          formProfileChipOptions.includes(chip)
+        ),
+      };
+      const nextFavoriteThings = Object.entries(nextInterestDetails)
+        .filter(([key]) => key !== profileVisibleChipsKey)
+        .flatMap(([, values]) => values)
+        .slice(0, 20);
+
       const updatedPayload: DatingProfilePayload = {
         ...(profile ?? {
           area: formData.area,
           birthday: formData.birthday,
           datingModes: sanitizeDateRequestCategories(formData.datingModes),
-          favoriteThings: formData.favoriteThings,
+          favoriteThings: nextFavoriteThings,
           friendInvites: [],
-          interestDetails: formData.interestDetails,
+          interestDetails: nextInterestDetails,
           interestedIn: formData.interestedIn,
-          interests: Object.keys(formData.interestDetails).filter(
-            (key) => formData.interestDetails[key]?.length
+          interests: Object.keys(nextInterestDetails).filter(
+            (key) =>
+              key !== profileVisibleChipsKey && nextInterestDetails[key]?.length
           ),
           lookingFor: formData.lookingFor,
           media: [],
@@ -3352,10 +3480,11 @@ function ProfileEditPanel({
         distanceMiles: formData.distanceMiles,
         lookingFor: formData.lookingFor,
         datingModes: sanitizeDateRequestCategories(formData.datingModes),
-        favoriteThings: formData.favoriteThings,
-        interestDetails: formData.interestDetails,
-        interests: Object.keys(formData.interestDetails).filter(
-          (key) => formData.interestDetails[key]?.length
+        favoriteThings: nextFavoriteThings,
+        interestDetails: nextInterestDetails,
+        interests: Object.keys(nextInterestDetails).filter(
+          (key) =>
+            key !== profileVisibleChipsKey && nextInterestDetails[key]?.length
         ),
         safetyOptIn: formData.safetyOptIn,
         trustedContacts: [
@@ -3652,6 +3781,14 @@ function ProfileEditPanel({
             value={formData.lookingFor}
           />
 
+          <ProfileChipVisibilityField
+            onChange={(visibleProfileChips) =>
+              setFormData({ ...formData, visibleProfileChips })
+            }
+            options={formProfileChipOptions}
+            value={formData.visibleProfileChips}
+          />
+
           <div className="sm:col-span-2">
             <SettingsMultiPillField
               label="Date Request Categories"
@@ -3908,6 +4045,56 @@ function SettingsMultiPillField({
   );
 }
 
+function ProfileChipVisibilityField({
+  onChange,
+  options,
+  value,
+}: {
+  onChange: (value: string[]) => void;
+  options: string[];
+  value: string[];
+}) {
+  return (
+    <Field className="gap-1">
+      <FieldLabel className="font-bold text-xs">Shown on Profile</FieldLabel>
+      <FieldDescription className="text-xs">
+        Choose which dating details appear as public profile chips.
+      </FieldDescription>
+      <div className="flex flex-wrap gap-2 pt-1">
+        {options.length > 0 ? (
+          options.map((option) => {
+            const active = value.includes(option);
+            return (
+              <button
+                className={cn(
+                  "rounded-full px-3 py-1.5 font-bold text-xs transition",
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                )}
+                key={option}
+                onClick={() => {
+                  const next = active
+                    ? value.filter((item) => item !== option)
+                    : [...value, option];
+                  onChange(next);
+                }}
+                type="button"
+              >
+                {profileChipLabel(option)}
+              </button>
+            );
+          })
+        ) : (
+          <span className="text-muted-foreground text-xs">
+            Pick looking-for or lifestyle options first.
+          </span>
+        )}
+      </div>
+    </Field>
+  );
+}
+
 function ProfileMediaRail({
   media,
   onOpen,
@@ -3962,7 +4149,7 @@ function ProfileStatPanel({
     name: string;
     pending: CircleInvite[];
   }[];
-  profileRating: number;
+  profileRating: null | number;
   reviewCount: number;
   recapsCount: number;
   target: ProfileStatTarget | null;
@@ -4013,14 +4200,30 @@ function ProfileStatPanel({
         <CardContent className="grid gap-3 p-4">
           <div className="flex items-center gap-2">
             <Badge className="rounded-full">
-              <Star className="size-3 fill-current" />
-              {profileRating.toFixed(1)}
+              {profileRating === null ? (
+                "New dater"
+              ) : (
+                <>
+                  <Star className="size-3 fill-current" />
+                  {profileRating.toFixed(1)}
+                </>
+              )}
             </Badge>
             <span className="text-muted-foreground text-xs">
-              {reviewCount} anonymous date review
-              {reviewCount === 1 ? "" : "s"}
+              {reviewCount < 2
+                ? "Ratings show after 2 review signals."
+                : `${reviewCount} anonymous date review${
+                    reviewCount === 1 ? "" : "s"
+                  }`}
             </span>
           </div>
+          {reviewCount < 2 ? (
+            <p className="rounded-2xl border border-border bg-background/40 p-3 text-muted-foreground text-sm">
+              New profiles start without a public star score. Date reviews,
+              completed recaps, and attached date media build the score once
+              there is enough signal.
+            </p>
+          ) : null}
           <div className="grid gap-2">
             {anonymousReviewNotes.map((note) => (
               <p
@@ -4244,6 +4447,35 @@ function ChecklistItem({
   );
 }
 
+function DateRequestSection({
+  children,
+  count,
+  description,
+  title,
+}: {
+  children: ReactNode;
+  count: number;
+  description: string;
+  title: string;
+}) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h3 className="font-bold text-sm">{title}</h3>
+          <p className="max-w-2xl text-muted-foreground text-xs">
+            {description}
+          </p>
+        </div>
+        <Badge className="w-fit rounded-full text-[10px]" variant="secondary">
+          {count} {count === 1 ? "request" : "requests"}
+        </Badge>
+      </div>
+      <div className="grid gap-3">{children}</div>
+    </section>
+  );
+}
+
 function DateHistoryNotification({
   date,
   onOpen,
@@ -4254,11 +4486,12 @@ function DateHistoryNotification({
   const acceptedMatch = date.matches.find(
     (match) => match.id === date.acceptedMatchId
   );
+  const visibleTags = date.requester.tags.slice(0, 3);
 
   return (
     <button
       className={cn(
-        "flex w-full items-start gap-3 rounded-lg border p-4 text-left transition",
+        "flex w-full min-w-0 flex-col gap-3 rounded-xl border p-3 text-left transition sm:p-4",
         date.requesterView
           ? "border-sky-500/45 bg-sky-500/10 hover:border-sky-500/70 hover:bg-sky-500/15"
           : "border-primary/25 bg-primary/10 hover:border-primary/50 hover:bg-primary/15"
@@ -4266,34 +4499,53 @@ function DateHistoryNotification({
       onClick={onOpen}
       type="button"
     >
-      <span
-        className={cn(
-          "mt-0.5 grid size-10 shrink-0 place-items-center rounded-full",
-          date.requesterView
-            ? "bg-sky-500/10 text-sky-500"
-            : "bg-primary/10 text-primary"
-        )}
-      >
-        <CalendarHeart className="size-5" />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-2">
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="font-bold text-sm">{date.title}</span>
-          <Badge className="rounded-full bg-background/80 text-[10px] text-foreground">
-            {date.status}
-          </Badge>
-          <Badge
-            className={cn(
-              "rounded-full border-0 text-[10px]",
-              date.requesterView
-                ? "bg-sky-500/15 text-sky-500"
-                : "bg-primary/15 text-primary"
-            )}
-          >
-            {date.requesterView ? "You sent" : "Received"}
-          </Badge>
+      <span className="flex min-w-0 items-start gap-3">
+        <Avatar className="size-12 shrink-0 border border-border">
+          {date.requester.avatar ? (
+            <AvatarImage src={date.requester.avatar} />
+          ) : null}
+          <AvatarFallback>
+            {date.requester.name.slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <span className="flex min-w-0 flex-1 flex-col gap-2">
+          <span className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+            <span className="min-w-0 truncate font-bold text-sm">
+              {date.title}
+            </span>
+            <span className="flex flex-wrap gap-1.5">
+              <Badge className="rounded-full bg-background/80 text-[10px] text-foreground">
+                {date.status}
+              </Badge>
+              <Badge
+                className={cn(
+                  "rounded-full border-0 text-[10px]",
+                  date.requesterView
+                    ? "bg-sky-500/15 text-sky-500"
+                    : "bg-primary/15 text-primary"
+                )}
+              >
+                {date.requesterView ? "You sent" : "Received"}
+              </Badge>
+            </span>
+          </span>
+          <span className="text-xs text-foreground">
+            {date.requesterView
+              ? "You are waiting on matches"
+              : `From ${date.requester.name}`}
+            {date.requester.compatibility
+              ? ` · ${date.requester.compatibility}% match`
+              : ""}
+          </span>
+          <span className="line-clamp-2 text-muted-foreground text-xs">
+            {date.requester.bio}
+          </span>
         </span>
-        <span className="text-xs text-muted-foreground">
+        <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
+      </span>
+
+      <span className="flex min-w-0 flex-col gap-2 pl-0 sm:pl-[3.75rem]">
+        <span className="text-muted-foreground text-xs">
           {date.searchArea} · {new Date(date.scheduledAt).toLocaleString()}
         </span>
         <span className="flex flex-wrap gap-1.5">
@@ -4302,14 +4554,34 @@ function DateHistoryNotification({
               {formatLabel(item)}
             </Badge>
           ))}
+          {visibleTags.map((tag) => (
+            <Badge
+              className="rounded-full border-0 text-[10px]"
+              key={tag}
+              variant="secondary"
+            >
+              {tag}
+            </Badge>
+          ))}
           {acceptedMatch ? (
             <Badge className="rounded-full text-[10px]" variant="secondary">
               Kept {acceptedMatch.displayName}
             </Badge>
           ) : null}
         </span>
+        <span className="flex flex-col gap-2 pt-1 sm:flex-row">
+          <span className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-primary px-3 font-semibold text-primary-foreground text-xs sm:w-fit">
+            <MessageSquare className="size-3.5" />
+            Open request
+          </span>
+          {!date.requesterView ? (
+            <span className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-border bg-background/55 px-3 font-semibold text-xs sm:w-fit">
+              <Eye className="size-3.5" />
+              View profile
+            </span>
+          ) : null}
+        </span>
       </span>
-      <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
     </button>
   );
 }
@@ -4397,7 +4669,7 @@ function DateHistoryDetail({
     <div className="flex flex-col gap-5">
       <div
         aria-label="Date request steps"
-        className="-mx-5 flex gap-2 overflow-x-auto border-b border-border/70 px-5 pb-4 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:border-b-0 sm:px-0 sm:pb-0"
+        className="-mx-4 flex gap-2 overflow-x-auto border-b border-border/70 px-4 pb-4 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:border-b-0 sm:px-0 sm:pb-0"
         role="tablist"
       >
         {[
@@ -4760,7 +5032,7 @@ function DateHistoryDetail({
       {activeCardStep === "date" && (
         <Card className="rounded-xl border-border bg-card/45">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle className="text-base">Live Date Screen</CardTitle>
                 <CardDescription>
@@ -4776,7 +5048,7 @@ function DateHistoryDetail({
           <CardContent className="flex flex-col gap-5">
             {/* Media Upload Memories Section */}
             <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-xs font-bold text-foreground">
                   Attach Date Memories (Photos & Videos)
                 </span>
@@ -4792,7 +5064,7 @@ function DateHistoryDetail({
               </div>
 
               {mediaList.length > 0 ? (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {mediaList.map((m) => (
                     <div
                       key={m.id}
@@ -4815,7 +5087,7 @@ function DateHistoryDetail({
             </div>
 
             {/* Safety Menu */}
-            <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-bold text-xs text-foreground">
                   Safety & Location Share
@@ -4839,7 +5111,7 @@ function DateHistoryDetail({
             </div>
 
             {/* End Date CTA */}
-            <div className="border-t border-border/80 pt-4 flex items-center justify-between">
+            <div className="flex flex-col gap-3 border-border/80 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-xs text-muted-foreground">
                 Ready to finish your date?
               </span>

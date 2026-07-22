@@ -409,7 +409,13 @@ export function DashboardChats({
               ) : null}
               <ChatComposer
                 dateMode={selected.kind === "date_room"}
-                onSendMedia={({ durationSec, kind, mediaUrl, thumbUrl }) => {
+                onSendMedia={({
+                  durationSec,
+                  kind,
+                  mediaUrl,
+                  text,
+                  thumbUrl,
+                }) => {
                   appendMessage(
                     selected.id,
                     createMediaMessage({
@@ -417,6 +423,7 @@ export function DashboardChats({
                       kind,
                       mediaThumb: thumbUrl,
                       mediaUrl,
+                      text,
                     })
                   );
                 }}

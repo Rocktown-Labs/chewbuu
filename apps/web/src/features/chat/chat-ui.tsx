@@ -750,6 +750,7 @@ export function ChatComposer({
     kind: "photo" | "video" | "voice";
     mediaUrl: string;
     thumbUrl?: string;
+    text?: string;
   }) => void;
   onSendText: (text: string) => void;
   onSkipTheirReply?: () => void;
@@ -761,6 +762,11 @@ export function ChatComposer({
   const [mode, setMode] = useState<"text" | "video" | "voice">(
     dateMode && isDateRoomLockedToVideo(phase) ? "video" : "text"
   );
+  const [draftAttachment, setDraftAttachment] = useState<null | {
+    kind: "photo" | "video";
+    name: string;
+    url: string;
+  }>(null);
   const [pendingRecorderStart, setPendingRecorderStart] = useState(false);
   const [recorderRequested, setRecorderRequested] = useState(false);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
@@ -791,6 +797,7 @@ export function ChatComposer({
   useEffect(() => {
     setText("");
     setMode(lockedToVideo ? "video" : "text");
+    setDraftAttachment(null);
     setPendingRecorderStart(false);
     setRecorderRequested(false);
     cancelRecorder();
@@ -831,10 +838,24 @@ export function ChatComposer({
     }
   }, [recorder.previewStream]);
 
-  const handleSendText = () => {
-    if (!text.trim() || blocked) return;
-    onSendText(text.trim());
-    setText("");
+  const handleSendComposer = () => {
+    if (blocked) return;
+    const nextText = text.trim();
+    if (draftAttachment) {
+      onSendMedia({
+        kind: draftAttachment.kind,
+        mediaUrl: draftAttachment.url,
+        text: nextText || undefined,
+        thumbUrl: draftAttachment.url,
+      });
+      setDraftAttachment(null);
+      setText("");
+      return;
+    }
+    if (nextText) {
+      onSendText(nextText);
+      setText("");
+    }
   };
 
   const toggleRecorder = (nextMode: "video" | "voice") => {
@@ -1016,6 +1037,47 @@ export function ChatComposer({
         </div>
       ) : null}
 
+      {draftAttachment ? (
+        <div className="mb-3 flex items-center gap-3 rounded-xl border border-border bg-card/75 p-2">
+          <div className="relative size-14 shrink-0 overflow-hidden rounded-lg bg-black">
+            {draftAttachment.kind === "video" ? (
+              <video
+                className="size-full object-cover"
+                muted
+                playsInline
+                src={draftAttachment.url}
+              >
+                <track kind="captions" />
+              </video>
+            ) : (
+              <img
+                alt=""
+                className="size-full object-cover"
+                src={draftAttachment.url}
+              />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold text-xs">
+              {draftAttachment.name}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Add a message, then send.
+            </p>
+          </div>
+          <Button
+            aria-label="Remove attachment"
+            className="rounded-full"
+            onClick={() => setDraftAttachment(null)}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            <X />
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex items-center gap-1.5">
         {!lockedToVideo ? (
           <>
@@ -1075,7 +1137,8 @@ export function ChatComposer({
                 if (!file) return;
                 const url = URL.createObjectURL(file);
                 const kind = file.type.startsWith("video/") ? "video" : "photo";
-                onSendMedia({ kind, mediaUrl: url, thumbUrl: url });
+                setDraftAttachment({ kind, name: file.name, url });
+                setMode("text");
                 event.target.value = "";
               }}
               ref={fileInputRef}
@@ -1104,7 +1167,7 @@ export function ChatComposer({
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
-              handleSendText();
+              handleSendComposer();
             }
           }}
           onFocus={() => {
@@ -1129,8 +1192,8 @@ export function ChatComposer({
               toggleRecorder("video");
               return;
             }
-            if (text.trim()) {
-              handleSendText();
+            if (text.trim() || draftAttachment) {
+              handleSendComposer();
               return;
             }
             toggleRecorder("voice");
@@ -1141,7 +1204,7 @@ export function ChatComposer({
           {(mode === "voice" || mode === "video") &&
           recorderStatus === "recording" ? (
             <Square />
-          ) : text.trim() && textUnlocked ? (
+          ) : (text.trim() || draftAttachment) && textUnlocked ? (
             <Send />
           ) : lockedToVideo ? (
             <Video />

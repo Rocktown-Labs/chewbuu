@@ -335,21 +335,21 @@ export function DateConfirmScreen({
             </div>
             {places.map((place, index) => (
               <div
-                className="flex items-start justify-between gap-3 rounded-xl border border-border bg-background/60 p-3"
+                className="flex flex-col gap-3 rounded-xl border border-border bg-background/60 p-3 sm:flex-row sm:items-start sm:justify-between"
                 key={place.placeId}
               >
-                <div className="flex items-start gap-2">
+                <div className="flex min-w-0 items-start gap-2">
                   <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
-                  <div>
-                    <p className="font-bold text-xs">
+                  <div className="min-w-0">
+                    <p className="truncate font-bold text-xs">
                       {index + 1}. {place.name}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="break-words text-[11px] text-muted-foreground">
                       {place.address}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
                   {place.rating ? (
                     <Badge
                       className="rounded-full text-[10px]"
@@ -386,7 +386,7 @@ export function DateConfirmScreen({
             ))}
 
             {!locked ? (
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   className="h-9 rounded-full text-xs"
                   onChange={(event) => setSuggestion(event.target.value)}
@@ -441,7 +441,7 @@ export function DateConfirmScreen({
           ) : (
             <div className="flex flex-col gap-3 rounded-2xl border border-primary/25 bg-primary/8 p-4">
               {/* Header bar with Chewbuu logo and collapse toggle */}
-              <div className="flex items-center justify-between gap-3 border-b border-primary/15 pb-2.5">
+              <div className="flex flex-col gap-3 border-primary/15 border-b pb-2.5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="flex size-8 items-center justify-center rounded-full bg-primary/20 p-1 border border-primary/30 shadow-xs">
                     <img
@@ -461,7 +461,7 @@ export function DateConfirmScreen({
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 self-end sm:self-auto">
                   {checkedIn ? (
                     <Badge
                       className="rounded-full px-2 py-0 text-[10px]"
@@ -588,7 +588,7 @@ export function DateConfirmScreen({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2 border-t border-border/70 pt-3">
+          <div className="grid gap-2 border-border/70 border-t pt-3 sm:grid-cols-2">
             <Button
               className="rounded-full text-xs"
               onClick={() => setRescheduleOpen(true)}

@@ -263,14 +263,21 @@ export function DateChat({
               ) : null}
               <ChatComposer
                 dateMode
-                onSendMedia={({ durationSec, kind, mediaUrl, thumbUrl }) => {
+                onSendMedia={({
+                  durationSec,
+                  kind,
+                  mediaUrl,
+                  text,
+                  thumbUrl,
+                }) => {
                   appendMine(
                     createMediaMessage({
                       durationSec,
                       kind,
                       mediaThumb: thumbUrl,
                       mediaUrl,
-                      text: kind === "video" ? "Video reply" : undefined,
+                      text:
+                        text ?? (kind === "video" ? "Video reply" : undefined),
                     })
                   );
                 }}
