@@ -12,8 +12,14 @@ export const Route = createFileRoute("/_auth")({
     }
     const { user } = session.data;
     const needsOnboarding = !user.hasCompletedOnboarding;
+    const canViewIncompleteProfile =
+      location.pathname === "/me" || location.pathname === "/me/profile";
 
-    if (needsOnboarding && location.pathname !== "/onboarding") {
+    if (
+      needsOnboarding &&
+      location.pathname !== "/onboarding" &&
+      !canViewIncompleteProfile
+    ) {
       throw redirect({
         to: "/onboarding",
       });

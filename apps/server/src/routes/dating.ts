@@ -229,6 +229,7 @@ const placeSuggestSchema = z.object({
   filters: stringArray,
   latitude: z.string().optional(),
   longitude: z.string().optional(),
+  searchKind: z.enum(["place", "signal"]).default("signal"),
   what: z
     .array(z.enum(["eat", "drink", "play", "move", "watch", "talk"]))
     .min(1),
@@ -262,7 +263,7 @@ type MediaInput = z.infer<typeof mediaSchema>;
 type ProfileDraftInput = z.infer<typeof profileDraftPayloadSchema>;
 type ProfileInput = z.infer<typeof profilePayloadSchema>;
 type RequestInput = z.infer<typeof dateRequestPayloadSchema>;
-type PlaceSuggestionInput = z.infer<typeof placeSuggestSchema>;
+type PlaceSuggestionInput = z.input<typeof placeSuggestSchema>;
 type PlaceSuggestion = z.infer<typeof placeSchema>;
 type GooglePlace = {
   currentOpeningHours?: {
@@ -1297,7 +1298,7 @@ const getProfile = async (sessionUser: SessionUser) => {
 const fallbackPlaceSuggestions = (
   input: PlaceSuggestionInput
 ): PlaceSuggestion[] => {
-  const joined = input.filters.join(", ");
+  const joined = (input.filters ?? []).join(", ");
   const baseTypes = input.what;
   const primaryName = baseTypes.includes("drink")
     ? "The Golden Booth"
@@ -1386,7 +1387,11 @@ const toPlacePhotoProxyUrl = (photoName: string) =>
   `/dating/places/photos?name=${encodeURIComponent(photoName)}`;
 
 export const buildGooglePlacesTextQuery = (input: PlaceSuggestionInput) => {
-  const filters = input.filters.join(" ");
+  const filters = (input.filters ?? []).join(" ");
+  if (input.searchKind === "place" && filters) {
+    return `${filters} near ${input.area}`;
+  }
+
   const categoryIntent = input.what
     .map((item) => CATEGORY_KEYWORDS[item] ?? item)
     .join(" ");

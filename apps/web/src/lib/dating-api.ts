@@ -247,6 +247,7 @@ export const datingApi = {
     filters: string[];
     latitude?: string;
     longitude?: string;
+    searchKind?: "place" | "signal";
     what: DateWhat[];
   }) =>
     apiFetch<{ places: DatePlace[] }>("/dating/places/suggest", {

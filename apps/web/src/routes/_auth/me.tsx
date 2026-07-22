@@ -245,6 +245,83 @@ const lookingForOptions = [
   "Group hangs",
   "Not sure yet",
 ] as const;
+const settingsInterestCategories = [
+  {
+    label: "Eat",
+    suggestions: [
+      "Chicken",
+      "Tacos",
+      "Sushi",
+      "Brunch",
+      "Barbecue",
+      "Pasta",
+      "Dessert",
+    ],
+  },
+  {
+    label: "Drink",
+    suggestions: [
+      "Whiskey",
+      "Coffee",
+      "Wine",
+      "Mocktails",
+      "Craft beer",
+      "Margaritas",
+      "Boba",
+    ],
+  },
+  {
+    label: "Play",
+    suggestions: [
+      "Pool",
+      "Live music",
+      "Comedy",
+      "Bowling",
+      "Karaoke",
+      "Arcade",
+      "Trivia",
+    ],
+  },
+  {
+    label: "Move",
+    suggestions: [
+      "Working out",
+      "Hiking",
+      "Basketball",
+      "Yoga",
+      "Running",
+      "Dancing",
+      "Cycling",
+    ],
+  },
+  {
+    label: "Watch",
+    suggestions: [
+      "Comedy",
+      "Drama",
+      "Thriller",
+      "Action",
+      "Sci-Fi",
+      "Horror",
+      "Documentary",
+      "Anime",
+    ],
+  },
+  {
+    label: "Talk",
+    suggestions: [
+      "Books",
+      "Travel",
+      "Music",
+      "Business",
+      "Faith",
+      "Family",
+      "Art",
+      "Tech",
+      "Philosophy",
+    ],
+  },
+] as const;
 
 const scenarioToHistory = (scenario: DateScenario): DateHistoryItem => ({
   acceptedMatchId: scenario.acceptedMatchId ?? "",
@@ -3022,6 +3099,7 @@ function ProfileEditPanel({
       "Coffee",
       "Hiking",
     ],
+    interestDetails: profile?.interestDetails ?? {},
     safetyOptIn: profile?.safetyOptIn ?? true,
     trustedContactName: profile?.trustedContacts?.[0]?.name ?? "Sarah Jenkins",
     trustedContactPhone: profile?.trustedContacts?.[0]?.phone ?? "615-555-0199",
@@ -3048,6 +3126,33 @@ function ProfileEditPanel({
           : usernameStatus === "invalid"
             ? "Use 3+ letters, numbers, or underscores"
             : "Enter a username";
+  const availableSettingsInterestCategories = useMemo(() => {
+    const age = getAge(formData.birthday);
+    return age !== null && age < 21
+      ? settingsInterestCategories.filter(
+          (category) => category.label !== "Drink"
+        )
+      : settingsInterestCategories;
+  }, [formData.birthday]);
+  const toggleInterestDetail = (category: string, value: string) => {
+    const currentValues = formData.interestDetails[category] ?? [];
+    const nextValues = currentValues.includes(value)
+      ? currentValues.filter((item) => item !== value)
+      : [...currentValues, value];
+    const nextInterestDetails = {
+      ...formData.interestDetails,
+      [category]: nextValues,
+    };
+    const nextFavoriteThings = Object.values(nextInterestDetails)
+      .flat()
+      .slice(0, 20);
+
+    setFormData({
+      ...formData,
+      favoriteThings: nextFavoriteThings,
+      interestDetails: nextInterestDetails,
+    });
+  };
   const formErrors = useMemo(() => {
     const errors: string[] = [];
     if (!normalizedUsername) {
@@ -3072,6 +3177,14 @@ function ProfileEditPanel({
     if (formData.lookingFor.length === 0) {
       errors.push("Select at least one looking-for option.");
     }
+    if (
+      availableSettingsInterestCategories.some((category) => {
+        const values = formData.interestDetails[category.label] ?? [];
+        return values.length === 0;
+      })
+    ) {
+      errors.push("Select at least one interest in each category.");
+    }
     if (formData.ageRangeMin < 18) {
       errors.push("Minimum match age must be 18 or older.");
     }
@@ -3079,7 +3192,13 @@ function ProfileEditPanel({
       errors.push("Maximum match age must be greater than minimum match age.");
     }
     return errors;
-  }, [formData, normalizedUsername, usernameMessage, usernameStatus]);
+  }, [
+    availableSettingsInterestCategories,
+    formData,
+    normalizedUsername,
+    usernameMessage,
+    usernameStatus,
+  ]);
 
   const handleSave = async () => {
     if (formErrors.length > 0) {
@@ -3096,9 +3215,11 @@ function ProfileEditPanel({
           datingModes: formData.datingModes,
           favoriteThings: formData.favoriteThings,
           friendInvites: [],
-          interestDetails: {},
+          interestDetails: formData.interestDetails,
           interestedIn: formData.interestedIn,
-          interests: [],
+          interests: Object.keys(formData.interestDetails).filter(
+            (key) => formData.interestDetails[key]?.length
+          ),
           lookingFor: formData.lookingFor,
           media: [],
           safetyOptIn: formData.safetyOptIn,
@@ -3128,6 +3249,10 @@ function ProfileEditPanel({
         lookingFor: formData.lookingFor,
         datingModes: formData.datingModes,
         favoriteThings: formData.favoriteThings,
+        interestDetails: formData.interestDetails,
+        interests: Object.keys(formData.interestDetails).filter(
+          (key) => formData.interestDetails[key]?.length
+        ),
         safetyOptIn: formData.safetyOptIn,
         trustedContacts: [
           {
@@ -3443,6 +3568,50 @@ function ProfileEditPanel({
               These mirror onboarding interests and date modes used for
               matching.
             </FieldDescription>
+          </div>
+
+          <div className="grid gap-3 sm:col-span-2">
+            <div>
+              <p className="font-bold text-xs">Interest Categories</p>
+              <FieldDescription className="mt-1 text-xs">
+                These mirror onboarding chips and keep each signal in its
+                category.
+              </FieldDescription>
+            </div>
+            <div className="grid gap-3">
+              {availableSettingsInterestCategories.map((category) => (
+                <div
+                  className="rounded-2xl border border-border bg-background/35 p-3"
+                  key={category.label}
+                >
+                  <p className="mb-2 font-bold text-xs">{category.label}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {category.suggestions.map((suggestion) => {
+                      const active = (
+                        formData.interestDetails[category.label] ?? []
+                      ).includes(suggestion);
+                      return (
+                        <button
+                          className={cn(
+                            "rounded-full px-3 py-1.5 font-bold text-xs transition",
+                            active
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground hover:text-foreground"
+                          )}
+                          key={suggestion}
+                          onClick={() =>
+                            toggleInterestDetail(category.label, suggestion)
+                          }
+                          type="button"
+                        >
+                          {suggestion}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <Field className="gap-1">

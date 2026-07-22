@@ -583,6 +583,17 @@ describe("dating routes", () => {
     ).toBe("food restaurant near Nashville, TN");
   });
 
+  it("builds named place searches without category keywords", () => {
+    expect(
+      buildGooglePlacesTextQuery({
+        area: "Searcy, AR",
+        filters: ["Purple Onion Cabot AR"],
+        searchKind: "place",
+        what: ["eat"],
+      })
+    ).toBe("Purple Onion Cabot AR near Searcy, AR");
+  });
+
   it("keeps text filters when biasing Google Places by coordinates", async () => {
     process.env.GOOGLE_PLACES_API_KEY = "test-places-key";
     const fetchMock = vi

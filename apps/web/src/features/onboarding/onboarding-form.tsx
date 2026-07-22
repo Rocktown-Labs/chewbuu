@@ -31,7 +31,7 @@ import {
   type ReactFormExtendedApi,
   useForm,
 } from "@tanstack/react-form";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { upload } from "@vercel/blob/client";
 import {
   Camera,
@@ -487,6 +487,7 @@ const formatPhoneNumber = (value: string) => {
 
 export function OnboardingForm() {
   const navigate = useNavigate();
+  const router = useRouter();
   const {
     step: persistedStep,
     setStep: setPersistedStep,
@@ -497,7 +498,18 @@ export function OnboardingForm() {
   const [step, setStep] = useState(persistedStep);
   const [plans, setPlans] = useState<MembershipPlan[]>(defaultPlans);
   const [underageBirthday, setUnderageBirthday] = useState("");
+  const [isLeavingOnboarding, setIsLeavingOnboarding] = useState(false);
   const { data: session } = authClient.useSession();
+
+  const leaveOnboarding = useCallback(
+    async (to: "/me") => {
+      setIsLeavingOnboarding(true);
+      await authClient.getSession();
+      await router.invalidate();
+      await navigate({ replace: true, to });
+    },
+    [navigate, router]
+  );
 
   const form = useForm({
     defaultValues,
@@ -559,7 +571,7 @@ export function OnboardingForm() {
       });
       clearPersistedOnboarding();
       toast.success("Profile ready. Go find a real date.");
-      await navigate({ to: "/me" });
+      await leaveOnboarding("/me");
     },
   });
 
@@ -865,7 +877,7 @@ export function OnboardingForm() {
       );
       return;
     }
-    await navigate({ to: "/me" });
+    await leaveOnboarding("/me");
   };
 
   if (underageBirthday) {
@@ -882,7 +894,7 @@ export function OnboardingForm() {
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-7 px-4 py-8">
       <NavigationBlocker
         description="You have onboarding setup in progress. If you leave now, you will lose unsaved step entries."
-        shouldBlock={step > 0 && step < 4}
+        shouldBlock={!isLeavingOnboarding && step > 0 && step < 4}
         title="Unsaved Onboarding Progress"
       />
       <header className="grid gap-5 lg:grid-cols-[1fr_320px] lg:items-end">
@@ -1795,9 +1807,7 @@ function InterestsStepContent({
 
     const cacheKey = placeCacheKey(trimmedQuery);
     if (placesByQuery[cacheKey]) {
-      setSearchedPlaceQueries((current) =>
-        current.includes(trimmedQuery) ? current : [...current, trimmedQuery]
-      );
+      setSearchedPlaceQueries([trimmedQuery]);
       return;
     }
 
@@ -1808,15 +1818,14 @@ function InterestsStepContent({
         filters: [trimmedQuery],
         latitude: (form.state.values.latitude as string) || undefined,
         longitude: (form.state.values.longitude as string) || undefined,
+        searchKind: "place",
         what: [active.label.toLowerCase() as DateWhat],
       });
       setPlacesByQuery((current) => ({
         ...current,
         [cacheKey]: res.places || [],
       }));
-      setSearchedPlaceQueries((current) =>
-        current.includes(trimmedQuery) ? current : [...current, trimmedQuery]
-      );
+      setSearchedPlaceQueries([trimmedQuery]);
     } catch (error) {
       console.error("Failed to suggest places:", error);
       toast.error("Could not find local spots for that interest.");
@@ -2039,7 +2048,7 @@ function InterestsStepContent({
                 {searchedPlaceSections.map(({ places, query }) => (
                   <section className="flex flex-col gap-2" key={query}>
                     <div className="flex items-center justify-between gap-3">
-                      <h5 className="font-bold text-xs">{query}</h5>
+                      <h5 className="font-bold text-xs">Results for {query}</h5>
                       <Badge className="rounded-full text-[10px]">
                         {places.length} result{places.length === 1 ? "" : "s"}
                       </Badge>
@@ -2050,8 +2059,8 @@ function InterestsStepContent({
                         city, or broader search.
                       </p>
                     ) : (
-                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                        {places.slice(0, 6).map((place) => {
+                      <div className="grid auto-cols-[minmax(15rem,1fr)] grid-flow-col grid-rows-2 gap-2 overflow-x-auto pb-2 md:auto-cols-[minmax(18rem,0.48fr)]">
+                        {places.map((place) => {
                           const isFav = activeFavoritePlaces.includes(
                             place.name
                           );

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
   getPlans: vi.fn(),
   navigate: vi.fn(),
+  routerInvalidate: vi.fn(),
   saveProfile: vi.fn(),
   saveProfileDraft: vi.fn(),
   session: {
@@ -42,6 +43,9 @@ vi.mock("@tanstack/react-router", () => ({
     status: "idle",
   }),
   useNavigate: () => mocks.navigate,
+  useRouter: () => ({
+    invalidate: mocks.routerInvalidate,
+  }),
 }));
 
 vi.mock("@/lib/dating-api", () => ({
@@ -83,6 +87,7 @@ describe("OnboardingForm", () => {
     mocks.getProfile.mockResolvedValue(null);
     mocks.getPlans.mockResolvedValue({ plans: [] });
     mocks.navigate.mockReset();
+    mocks.routerInvalidate.mockReset();
     mocks.saveProfile.mockReset();
     mocks.saveProfileDraft.mockReset();
   });
