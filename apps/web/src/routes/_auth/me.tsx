@@ -246,6 +246,11 @@ const lookingForOptions = [
   "Group hangs",
   "Not sure yet",
 ] as const;
+const dateRequestCategoryOptions = ["eat", "drink", "play"] as const;
+const sanitizeDateRequestCategories = (values: string[] = []) =>
+  values.filter((value) =>
+    dateRequestCategoryOptions.some((option) => option === value)
+  );
 const settingsInterestCategories = [
   {
     label: "Eat",
@@ -3188,7 +3193,10 @@ function ProfileEditPanel({
     ageRangeMax: profile?.ageRangeMax ?? 38,
     distanceMiles: profile?.distanceMiles ?? 25,
     lookingFor: profile?.lookingFor ?? ["Relationship", "Dating"],
-    datingModes: profile?.datingModes ?? ["eat", "drink", "talk"],
+    datingModes:
+      sanitizeDateRequestCategories(profile?.datingModes).length > 0
+        ? sanitizeDateRequestCategories(profile?.datingModes)
+        : ["eat", "drink", "play"],
     favoriteThings: profile?.favoriteThings ?? [
       "Live Music",
       "Matcha",
@@ -3308,7 +3316,7 @@ function ProfileEditPanel({
         ...(profile ?? {
           area: formData.area,
           birthday: formData.birthday,
-          datingModes: formData.datingModes,
+          datingModes: sanitizeDateRequestCategories(formData.datingModes),
           favoriteThings: formData.favoriteThings,
           friendInvites: [],
           interestDetails: formData.interestDetails,
@@ -3343,7 +3351,7 @@ function ProfileEditPanel({
         ageRangeMax: formData.ageRangeMax,
         distanceMiles: formData.distanceMiles,
         lookingFor: formData.lookingFor,
-        datingModes: formData.datingModes,
+        datingModes: sanitizeDateRequestCategories(formData.datingModes),
         favoriteThings: formData.favoriteThings,
         interestDetails: formData.interestDetails,
         interests: Object.keys(formData.interestDetails).filter(
@@ -3646,24 +3654,15 @@ function ProfileEditPanel({
 
           <div className="sm:col-span-2">
             <SettingsMultiPillField
-              label="Date Styles"
+              label="Date Request Categories"
               onChange={(datingModes) =>
                 setFormData({ ...formData, datingModes })
               }
-              options={[
-                "solo",
-                "eat",
-                "drink",
-                "play",
-                "move",
-                "watch",
-                "talk",
-              ]}
+              options={dateRequestCategoryOptions}
               value={formData.datingModes}
             />
             <FieldDescription className="mt-2 text-xs">
-              These mirror onboarding interests and date modes used for
-              matching.
+              Chewbuu date requests can only be Eat, Drink, or Play.
             </FieldDescription>
           </div>
 

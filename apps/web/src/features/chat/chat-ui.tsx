@@ -177,6 +177,7 @@ function MediaAttachmentBubble({
   durationSec,
   kind,
   mediaUrl,
+  reaction,
   thumb,
   title,
 }: {
@@ -184,6 +185,7 @@ function MediaAttachmentBubble({
   durationSec?: number;
   kind: "photo" | "video" | "voice";
   mediaUrl?: string;
+  reaction?: string;
   thumb?: string;
   title?: string;
 }) {
@@ -257,6 +259,16 @@ function MediaAttachmentBubble({
           </a>
         )}
       </BubbleContent>
+      {reaction ? (
+        <BubbleReactions
+          align={align === "end" ? "end" : "start"}
+          aria-label={`Reaction: ${reaction}`}
+          role="img"
+          side="bottom"
+        >
+          <span className="text-xs">{reaction}</span>
+        </BubbleReactions>
+      ) : null}
     </Bubble>
   );
 }
@@ -358,7 +370,12 @@ export function ChatMessageRow({
                 {message.text}
               </BubbleContent>
               {message.reaction ? (
-                <BubbleReactions align={isMe ? "end" : "start"} side="bottom">
+                <BubbleReactions
+                  align={isMe ? "end" : "start"}
+                  aria-label={`Reaction: ${message.reaction}`}
+                  role="img"
+                  side="bottom"
+                >
                   <span className="text-xs">{message.reaction}</span>
                 </BubbleReactions>
               ) : null}
@@ -383,6 +400,7 @@ export function ChatMessageRow({
                     : "video"
             }
             mediaUrl={message.mediaUrl}
+            reaction={message.reaction}
             thumb={message.mediaThumb ?? message.mediaUrl}
             title={
               message.kind === "intro_video"

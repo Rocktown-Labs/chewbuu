@@ -153,8 +153,8 @@ export const demoDateScenarios: DateScenario[] = [
     status: "Matching",
     theirName: "Maya Ellis",
     theirVideoCount: 0,
-    title: "Eat, Play, Talk date",
-    what: ["eat", "play", "talk"],
+    title: "Eat, Drink, Play date",
+    what: ["eat", "drink", "play"],
   },
   {
     id: "demo-date-received",
@@ -271,7 +271,7 @@ const mayaActiveDate: ActiveDateContext = {
   scheduledAt: days(2),
   searchArea: "Nashville, TN",
   status: "matching",
-  title: "Eat, Play, Talk date",
+  title: "Eat, Drink, Play date",
 };
 
 export function buildInitialThreads(): ChatThread[] {

@@ -58,7 +58,7 @@ export function DateRoomChat({
       {
         id: "1",
         sender: "them",
-        text: "Hey! Really excited about the Eat, Play, Talk plan. The Golden Booth is one of my favorite spots in East Nashville!",
+        text: "Hey! Really excited about the Eat, Drink, Play plan. The Golden Booth is one of my favorite spots in East Nashville!",
         timestamp: "6:12 PM",
       },
       {
