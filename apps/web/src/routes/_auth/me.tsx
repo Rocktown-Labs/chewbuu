@@ -73,6 +73,7 @@ import {
   User,
   UserPlus,
   Users,
+  Utensils,
   X,
 } from "lucide-react";
 import type { ComponentType, FormEvent, ReactNode } from "react";
@@ -92,6 +93,7 @@ import type { ChatPerson, DateScenario } from "@/features/chat/chat-types";
 import { DateChat } from "@/features/chat/date-chat";
 import { DateConfirmScreen } from "@/features/chat/date-confirm";
 import { demoDateScenarios } from "@/features/chat/demo-data";
+import { DateWizard } from "@/features/date-wizard/date-wizard";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
@@ -625,6 +627,10 @@ export function MePage({
     useState<ProfileStatTarget | null>(null);
   const [profilePhotoActionsOpen, setProfilePhotoActionsOpen] = useState(false);
   const [mediaViewer, setMediaViewer] = useState<ProfileMediaItem | null>(null);
+  const [isPlanDateDrawerOpen, setIsPlanDateDrawerOpen] = useState(false);
+  const [presetPlaceForWizard, setPresetPlaceForWizard] = useState<
+    DatePlace | undefined
+  >();
 
   const [summary, setSummary] = useState<DatingSummary | null>(null);
   const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
@@ -1390,8 +1396,7 @@ export function MePage({
             </nav>
 
             {/* Plan a Date Button */}
-            <Link
-              to={canDate ? "/date/new" : "/onboarding"}
+            <button
               className={cn(
                 "w-full py-3 rounded-full font-bold flex items-center justify-center gap-2 shadow-lg hover:opacity-90 transition duration-200",
                 isSidebarCollapsed ? "px-0" : "px-4",
@@ -1399,11 +1404,20 @@ export function MePage({
                   ? "bg-primary text-primary-foreground shadow-primary/15"
                   : "bg-secondary text-secondary-foreground"
               )}
+              onClick={() => {
+                if (canDate) {
+                  setPresetPlaceForWizard(undefined);
+                  setIsPlanDateDrawerOpen(true);
+                } else {
+                  navigate({ to: "/onboarding" });
+                }
+              }}
               title="Plan a Date"
+              type="button"
             >
               <CalendarHeart className="size-5 shrink-0" />
               {!isSidebarCollapsed && <span>Plan a Date</span>}
-            </Link>
+            </button>
           </div>
 
           {!isSidebarCollapsed ? (
@@ -3319,6 +3333,43 @@ export function MePage({
           </Dialog>
         ) : null}
 
+        {/* Plan a Date Drawer Modal */}
+        {isPlanDateDrawerOpen ? (
+          <Dialog
+            open={isPlanDateDrawerOpen}
+            onOpenChange={(open) => {
+              if (!open) setIsPlanDateDrawerOpen(false);
+            }}
+          >
+            <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto rounded-3xl p-6 sm:p-8">
+              <DialogHeader>
+                <DialogTitle className="font-bold text-xl">
+                  Plan a New Date
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground text-xs">
+                  Select date activities, scheduled time, and candidate spots.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="mt-4">
+                <DateWizard
+                  membershipTier={tier}
+                  onCancel={() => setIsPlanDateDrawerOpen(false)}
+                  onCreated={(newRequestId) => {
+                    setIsPlanDateDrawerOpen(false);
+                    openDateHistory(newRequestId, "matcher");
+                  }}
+                  presetPlace={presetPlaceForWizard}
+                />
+              </div>
+            </DialogContent>
+          </Dialog>
+        ) : null}
+
+        <NavigationBlocker
+          shouldBlock={Boolean(recapForm.placeName || recapForm.caption)}
+        />
+
         {/* Video Player Modal */}
         {activeVideoModal ? (
           <Dialog
@@ -3356,10 +3407,6 @@ export function MePage({
             </DialogContent>
           </Dialog>
         ) : null}
-
-        <NavigationBlocker
-          shouldBlock={Boolean(recapForm.placeName || recapForm.caption)}
-        />
       </div>
     </div>
   );
@@ -5140,87 +5187,183 @@ function DateHistoryDetail({
         steps={steps}
       />
 
-      {/* CARD 1: REQUEST SUMMARY VIEW */}
+      {/* CARD 1: REQUEST SUMMARY VIEW (ITINERARY TIMELINE) */}
       {activeCardStep === "request" && (
-        <Card className="rounded-xl border-border bg-card/45">
-          <CardHeader>
+        <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
+          <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle className="text-base">Request summary</CardTitle>
-                <CardDescription>
-                  This is the simplified version of onboarding that creates the
-                  date request.
+                <CardTitle className="font-extrabold text-lg tracking-tight">
+                  Date Itinerary & Planned Order
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Initial itinerary schedule for both date partners. Sequence
+                  and spots can be refined together on the Choice step.
                 </CardDescription>
               </div>
-              <Badge className="rounded-full bg-amber-500/10 text-amber-600 border-0">
+              <Badge
+                className={cn(
+                  "rounded-full border-0 px-3 py-1 font-bold text-xs",
+                  currentDate.status === "Confirmed"
+                    ? "bg-emerald-500/15 text-emerald-600"
+                    : "bg-amber-500/15 text-amber-600"
+                )}
+              >
                 {currentDate.status}
               </Badge>
             </div>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
+          <CardContent className="flex flex-col gap-6">
+            {/* Top Overview Bar */}
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border border-border bg-background/50 p-3">
-                <span className="text-[10px] font-bold uppercase text-muted-foreground">
-                  Activity
-                </span>
-                <p className="mt-1 font-bold text-sm">
-                  {currentDate.what.map(formatLabel).join(" + ")}
-                </p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {currentDate.title}
-                </p>
-              </div>
-              <div className="rounded-lg border border-border bg-background/50 p-3">
-                <span className="text-[10px] font-bold uppercase text-muted-foreground">
-                  When
-                </span>
-                <p className="mt-1 font-bold text-sm">
-                  {new Date(currentDate.scheduledAt).toLocaleDateString([], {
-                    day: "numeric",
-                    month: "short",
-                    weekday: "short",
-                  })}
-                </p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {new Date(currentDate.scheduledAt).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
-              <div className="rounded-lg border border-border bg-background/50 p-3">
-                <span className="text-[10px] font-bold uppercase text-muted-foreground">
-                  Area
-                </span>
-                <p className="mt-1 font-bold text-sm">
-                  {currentDate.searchArea}
-                </p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Solo request · Dutch split
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-3">
-              {currentDate.places.map((place) => (
-                <div
-                  className="rounded-lg border border-border/80 bg-background/50 p-3"
-                  key={place.placeId}
-                >
-                  <div className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 size-3.5 shrink-0 text-primary" />
-                    <div className="min-w-0">
-                      <p className="truncate font-bold text-xs">{place.name}</p>
-                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-                        {place.address ?? currentDate.searchArea}
-                      </p>
-                    </div>
-                  </div>
+              <div className="flex items-start gap-3 rounded-xl border border-border bg-background/60 p-3.5 shadow-2xs">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Utensils className="size-4" />
                 </div>
-              ))}
+                <div className="min-w-0">
+                  <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Activity Categories
+                  </span>
+                  <p className="mt-0.5 truncate font-extrabold text-sm">
+                    {currentDate.what.map(formatLabel).join(" + ")}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {currentDate.title}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 rounded-xl border border-border bg-background/60 p-3.5 shadow-2xs">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-500">
+                  <CalendarHeart className="size-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Scheduled Time
+                  </span>
+                  <p className="mt-0.5 truncate font-extrabold text-sm">
+                    {new Date(currentDate.scheduledAt).toLocaleDateString([], {
+                      day: "numeric",
+                      month: "short",
+                      weekday: "short",
+                    })}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {new Date(currentDate.scheduledAt).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 rounded-xl border border-border bg-background/60 p-3.5 shadow-2xs">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                  <MapPin className="size-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Location Area
+                  </span>
+                  <p className="mt-0.5 truncate font-extrabold text-sm">
+                    {currentDate.searchArea}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    Solo request · Dutch split
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/8 p-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Stepper Itinerary Timeline */}
+            <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-background/40 p-4 sm:p-5">
+              <div className="flex items-center justify-between border-border/60 border-b pb-3">
+                <h4 className="font-extrabold text-sm uppercase tracking-wide">
+                  Planned Itinerary Stops
+                </h4>
+                {!currentDate.requesterView &&
+                  currentDate.status !== "Confirmed" && (
+                    <Badge className="rounded-full border-0 bg-primary/10 font-medium text-[10px] text-primary">
+                      🔒 Venue names hidden until confirmed
+                    </Badge>
+                  )}
+              </div>
+
+              <div className="relative flex flex-col gap-4 pl-2 pt-2">
+                {/* Timeline vertical connector bar */}
+                <div className="absolute top-6 bottom-6 left-[21px] w-0.5 bg-border/80" />
+
+                {currentDate.places.map((place, index) => {
+                  const categoryLabel =
+                    currentDate.what[index % currentDate.what.length] ?? "eat";
+                  const canSeeDetails =
+                    currentDate.requesterView ||
+                    currentDate.status === "Confirmed";
+
+                  return (
+                    <div
+                      className="relative flex items-start gap-3.5"
+                      key={place.placeId || index}
+                    >
+                      {/* Step Number Badge */}
+                      <div className="relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full border-2 border-primary bg-background font-extrabold text-xs text-primary shadow-xs">
+                        {index + 1}
+                      </div>
+
+                      {/* Stop Detail Card */}
+                      <div className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-xl border border-border/80 bg-card p-3.5 shadow-2xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Badge className="rounded-full font-bold text-[10px] uppercase tracking-wider">
+                              Stop {index + 1} · {formatLabel(categoryLabel)}
+                            </Badge>
+                            {canSeeDetails ? (
+                              <Badge className="rounded-full border-0 bg-emerald-500/10 font-bold text-[9px] text-emerald-600">
+                                Venue Unlocked
+                              </Badge>
+                            ) : (
+                              <Badge className="rounded-full border-0 bg-amber-500/10 font-bold text-[9px] text-amber-600">
+                                🔒 Hidden Category
+                              </Badge>
+                            )}
+                          </div>
+                          <span className="font-semibold text-muted-foreground text-[11px]">
+                            {place.types?.[0]
+                              ? formatLabel(place.types[0])
+                              : "Recommended Spot"}
+                          </span>
+                        </div>
+
+                        {canSeeDetails ? (
+                          <>
+                            <p className="font-extrabold text-foreground text-sm">
+                              {place.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {place.address ?? `${currentDate.searchArea}`}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-bold text-foreground/90 text-sm">
+                              {formatLabel(categoryLabel)} Spot in{" "}
+                              {currentDate.searchArea}
+                            </p>
+                            <p className="text-xs text-muted-foreground italic">
+                              Specific venue name & street address are kept
+                              private until you match and confirm the date.
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Bottom Matcher Transition Bar */}
+            <div className="flex flex-col gap-3 rounded-xl border border-primary/30 bg-primary/8 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="font-bold text-sm">Ready for matching</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
@@ -5229,13 +5372,13 @@ function DateHistoryDetail({
                 </p>
               </div>
               <Button
-                className="rounded-full text-xs sm:self-center"
-                onClick={() => setActiveCardStep("matcher")}
+                className="shrink-0 rounded-full font-bold text-xs"
+                onClick={() => handleStepChange("matcher")}
                 size="sm"
                 type="button"
               >
-                Review matches
-                <ChevronRight className="size-4" />
+                Review candidate rooms
+                <ChevronRight className="ml-1 size-4" />
               </Button>
             </div>
           </CardContent>

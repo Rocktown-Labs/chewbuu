@@ -234,10 +234,17 @@ const emailPattern = /^\S+@\S+\.\S+$/;
 
 interface DateWizardProps {
   membershipTier: string;
+  onCancel?: () => void;
+  onCreated?: (requestId: string) => void;
   presetPlace?: DatePlace;
 }
 
-export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
+export function DateWizard({
+  membershipTier,
+  onCancel,
+  onCreated,
+  presetPlace,
+}: DateWizardProps) {
   const [step, setStep] = useState(0);
   const [matches, setMatches] = useState<DateMatch[]>([]);
   const [activeMatch, setActiveMatch] = useState<DateMatch | null>(null);
@@ -276,7 +283,10 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
         )
       );
       setStep(2);
-      toast.success("Intro videos are exchanged when a match request is sent.");
+      toast.success("Date request created!");
+      if (onCreated) {
+        onCreated(response.request.id);
+      }
     },
   });
 
@@ -367,7 +377,7 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
       <header className="flex flex-col gap-3">
         <Button
           className="w-fit"
-          onClick={() => history.back()}
+          onClick={() => (onCancel ? onCancel() : history.back())}
           type="button"
           variant="ghost"
         >

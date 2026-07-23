@@ -92,7 +92,8 @@ export default function Header() {
             <Link
               aria-label="Notifications"
               className="relative flex size-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              to="/me/notifications"
+              search={{ tab: "notifications" }}
+              to="/me"
             >
               <Bell aria-hidden="true" className="size-4" />
               <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" />

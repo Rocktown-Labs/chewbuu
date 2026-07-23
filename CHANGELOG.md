@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added top header notification bell navigation to open `/me?tab=notifications`.
+- Added in-workspace New Date Drawer modal dialog that lets users plan dates with `DateWizard` directly inside `/me` without navigating away.
 - Added mobile-first `HorizontalStepper` component (`Request` -> `Matcher` -> `Choice` -> `Date`) with status badges, step locking, and URL route search param persistence (`/me?tab=matches&dateId=...&step=...`).
 - Added interactive spot search on `DateConfirmScreen` (`Choice` step) powered by live Google Places API searches (`datingApi.suggestPlaces`).
 - Added requester video intro play overlay button (`▶`) on date request cards and a full-screen video player modal.
@@ -18,6 +20,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Redesigned the Request Summary View into a visual Date Itinerary Timeline stepper showing stop numbers, categories, scheduled time, and area.
+- Enforced strict itinerary venue privacy: senders see full venue details, while receivers see category placeholders with lock badges until a match choice is confirmed.
+- Fixed Date Detail back arrow `←` navigation to cleanly clear search params (`dateId`, `step`) and return seamlessly to the date request feed without getting stuck.
 - Redesigned Date Feed cards to feature a large hero video/photo preview thumbnail on the left, date details, and horizontal footer layout inspired by modern card designs.
 - Updated Date Feed card avatar logic: "Sent" requests display the logged-in user's profile avatar so users instantly know they sent it, while "Received" requests display the sender's avatar and match score.
 - Enforced strict URL route state persistence on browser refresh so users stay on their current tab (`/me?tab=...`), date ID, step, and filter without defaulting back to feed.
