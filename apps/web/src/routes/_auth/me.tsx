@@ -72,6 +72,7 @@ import {
   Star,
   User,
   UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import type { ComponentType, FormEvent, ReactNode } from "react";
@@ -81,6 +82,7 @@ import { z } from "zod";
 
 import { PasskeysCard } from "@/components/auth/passkey";
 import { DateRecapFeed } from "@/components/feed/date-recap-feed";
+import { NavigationBlocker } from "@/components/navigation-blocker";
 import {
   HorizontalStepper,
   type StepItem,
@@ -634,6 +636,27 @@ export function MePage({
   const [selectedDateHistoryId, setSelectedDateHistoryId] = useState<
     null | string
   >(initialDateId ?? null);
+
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, activeTab]);
+
+  useEffect(() => {
+    if (
+      initialDateId !== undefined &&
+      initialDateId !== selectedDateHistoryId
+    ) {
+      setSelectedDateHistoryId(initialDateId);
+    }
+  }, [initialDateId, selectedDateHistoryId]);
+
+  useEffect(() => {
+    if (initialFilter && initialFilter !== dateFeedFilter) {
+      setDateFeedFilter(initialFilter);
+    }
+  }, [initialFilter, dateFeedFilter]);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<
     Date | undefined
   >();
@@ -1012,32 +1035,28 @@ export function MePage({
     return grouped;
   }, [spots]);
 
-  const routeForTab = (tab: DashboardTab) => {
-    if (tab === "calendar") return "/me/calendar";
-    if (tab === "chats")
-      return initialChatId ? `/me/chats/${initialChatId}` : "/me/chats";
-    if (tab === "matches") return "/me/dates";
-    if (tab === "notifications") return "/me/notifications";
-    if (tab === "profile") return "/me/profile";
-    if (tab === "spots") return `/me/spots/${spotsCategory}`;
-    return "/me";
-  };
-
-  const syncMePath = (path: string) => {
-    window.history.pushState(null, "", path);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  };
-
   const setSpotCategory = (category: SpotCategory) => {
     setSpotsCategory(category);
     if (activeTab === "spots") {
-      syncMePath(`/me/spots/${category}`);
+      navigate({
+        to: "/me",
+        search: (prev: Record<string, unknown>) => ({
+          ...prev,
+          category,
+          tab: "spots",
+        }),
+        replace: true,
+      } as Parameters<typeof navigate>[0]);
     }
   };
 
   const setDashboardTab = (tab: DashboardTab) => {
     setActiveTab(tab);
-    syncMePath(routeForTab(tab));
+    navigate({
+      to: "/me",
+      search: (prev: Record<string, unknown>) => ({ ...prev, tab }),
+      replace: true,
+    } as Parameters<typeof navigate>[0]);
     if (tab !== "profile") {
       setProfileStatTarget(null);
     }
@@ -1058,13 +1077,29 @@ export function MePage({
     setActiveTab("profile");
     setProfileMode(mode);
     setProfileStatTarget(null);
-    syncMePath("/me/profile");
+    navigate({
+      to: "/me",
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        tab: "profile",
+      }),
+      replace: true,
+    } as Parameters<typeof navigate>[0]);
   };
 
-  const openDateHistory = (dateId: string) => {
+  const openDateHistory = (dateId: string, step: StepKey = "request") => {
     setActiveTab("matches");
     setSelectedDateHistoryId(dateId);
-    syncMePath(`/me/dates/${dateId}`);
+    navigate({
+      to: "/me",
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        dateId,
+        step,
+        tab: "matches",
+      }),
+      replace: true,
+    } as Parameters<typeof navigate>[0]);
   };
 
   const handleSignOut = async () => {
@@ -1508,9 +1543,7 @@ export function MePage({
                       className="flex w-full items-start gap-3 rounded-2xl border border-sky-500/45 bg-sky-500/10 p-4 text-left transition hover:border-sky-500/70 hover:bg-sky-500/15"
                       key={request.id}
                       onClick={() => {
-                        setDashboardTab("matches");
-                        setSelectedDateHistoryId(request.id);
-                        syncMePath(`/me/dates/${request.id}`);
+                        openDateHistory(request.id);
                       }}
                       type="button"
                     >
@@ -1679,7 +1712,7 @@ export function MePage({
                       className="mt-0.5 rounded-full"
                       onClick={() => {
                         setSelectedDateHistoryId(null);
-                        syncMePath("/me/dates");
+                        setDashboardTab("matches");
                       }}
                       size="icon-sm"
                       type="button"
@@ -1802,7 +1835,10 @@ export function MePage({
                           <DateHistoryNotification
                             date={date}
                             key={date.id}
-                            onOpen={() => openDateHistory(date.id)}
+                            onOpen={() => openDateHistory(date.id, "request")}
+                            onOpenStep={(step) =>
+                              openDateHistory(date.id, step)
+                            }
                             onPlayVideo={() =>
                               setActiveVideoModal({
                                 name: date.requester.name,
@@ -1818,6 +1854,8 @@ export function MePage({
                                 tags: date.requester.tags,
                               })
                             }
+                            userAvatar={profilePhoto}
+                            userName={displayName}
                           />
                         ))}
                       </DateRequestSection>
@@ -1834,7 +1872,10 @@ export function MePage({
                           <DateHistoryNotification
                             date={date}
                             key={date.id}
-                            onOpen={() => openDateHistory(date.id)}
+                            onOpen={() => openDateHistory(date.id, "request")}
+                            onOpenStep={(step) =>
+                              openDateHistory(date.id, step)
+                            }
                             onPlayVideo={() =>
                               setActiveVideoModal({
                                 name: date.requester.name,
@@ -1850,6 +1891,8 @@ export function MePage({
                                 tags: date.requester.tags,
                               })
                             }
+                            userAvatar={profilePhoto}
+                            userName={displayName}
                           />
                         ))}
                       </DateRequestSection>
@@ -2475,8 +2518,7 @@ export function MePage({
                     className="flex items-start gap-3 rounded-2xl border border-border bg-card/45 p-4 text-left transition hover:border-primary/40"
                     key={request.id}
                     onClick={() => {
-                      setDashboardTab("matches");
-                      syncMePath(`/me/dates/${request.id}`);
+                      openDateHistory(request.id);
                     }}
                     type="button"
                   >
@@ -3314,6 +3356,10 @@ export function MePage({
             </DialogContent>
           </Dialog>
         ) : null}
+
+        <NavigationBlocker
+          shouldBlock={Boolean(recapForm.placeName || recapForm.caption)}
+        />
       </div>
     </div>
   );
@@ -4749,13 +4795,19 @@ function DateRequestSection({
 function DateHistoryNotification({
   date,
   onOpen,
+  onOpenStep,
   onPlayVideo,
   onViewProfile,
+  userAvatar,
+  userName = "You",
 }: {
   date: DateHistoryItem;
   onOpen: () => void;
+  onOpenStep?: (step: "request" | "matcher" | "choice" | "date") => void;
   onPlayVideo?: () => void;
   onViewProfile?: () => void;
+  userAvatar?: string;
+  userName?: string;
 }) {
   const acceptedMatch = date.matches.find(
     (match) => match.id === date.acceptedMatchId
@@ -4766,76 +4818,77 @@ function DateHistoryNotification({
   return (
     <div
       className={cn(
-        "group flex w-full min-w-0 flex-col gap-3 rounded-xl border p-3 text-left transition sm:p-4",
+        "group flex w-full min-w-0 flex-col gap-4 rounded-2xl border p-4 text-left transition sm:flex-row sm:items-stretch sm:p-5 shadow-sm hover:shadow-md",
         date.requesterView
-          ? "border-sky-500/45 bg-sky-500/10 hover:border-sky-500/70 hover:bg-sky-500/15"
-          : "border-primary/25 bg-primary/10 hover:border-primary/50 hover:bg-primary/15"
+          ? "border-sky-500/40 bg-sky-500/8 hover:border-sky-500/70 hover:bg-sky-500/12"
+          : "border-primary/30 bg-primary/8 hover:border-primary/60 hover:bg-primary/12"
       )}
     >
-      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start">
-        {/* Requester Thumbnail / Video Play Button Overlay */}
-        <div className="relative size-20 shrink-0 overflow-hidden rounded-xl border border-border/80 bg-card/80 sm:size-24">
-          {date.requester.avatar ? (
-            <img
-              alt={date.requester.name}
-              className="size-full object-cover"
-              src={date.requester.avatar}
-            />
-          ) : (
-            <div className="flex size-full items-center justify-center bg-muted font-bold text-muted-foreground text-sm">
-              {date.requester.name.slice(0, 2).toUpperCase()}
-            </div>
-          )}
-          {/* Play Button Overlay */}
-          <button
-            aria-label={`Play intro video for ${date.requester.name}`}
-            className="absolute inset-0 flex items-center justify-center bg-black/40 transition hover:bg-black/25"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPlayVideo?.();
-            }}
-            type="button"
-          >
-            <div className="flex size-9 items-center justify-center rounded-full bg-primary/90 text-primary-foreground shadow-md transition group-hover:scale-105">
-              <Play className="ml-0.5 size-4 fill-primary-foreground" />
-            </div>
-          </button>
-          {date.requester.compatibility ? (
-            <Badge className="absolute top-1 left-1 border-0 bg-amber-500/90 font-bold text-[9px] text-white">
-              ★ {date.requester.compatibility}%
-            </Badge>
-          ) : null}
-        </div>
-
-        {/* Content details */}
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 truncate font-bold text-sm">
-                {date.title}
-              </span>
-              <Badge
-                className={cn(
-                  "rounded-full border-0 text-[10px]",
-                  date.requesterView
-                    ? "bg-sky-500/15 text-sky-500"
-                    : "bg-primary/15 text-primary"
-                )}
-              >
-                {date.requesterView ? "You sent" : "Received"}
-              </Badge>
-            </div>
-            <Badge className="w-fit rounded-full bg-background/80 text-[10px] text-foreground">
-              {date.status}
-            </Badge>
+      {/* Hero Media / Video Preview Thumbnail */}
+      <div className="relative aspect-4/3 w-full shrink-0 overflow-hidden rounded-xl border border-border/80 bg-card/90 shadow-sm transition group-hover:border-primary/50 sm:h-auto sm:w-48 md:w-56">
+        {date.requester.avatar ? (
+          <img
+            alt={date.requester.name}
+            className="size-full object-cover"
+            src={date.requester.avatar}
+          />
+        ) : (
+          <div className="flex size-full items-center justify-center bg-muted font-bold text-muted-foreground text-base">
+            {date.requester.name.slice(0, 2).toUpperCase()}
           </div>
+        )}
+        {/* Play Button Overlay */}
+        <button
+          aria-label={`Play intro video for ${date.requester.name}`}
+          className="absolute inset-0 flex items-center justify-center bg-black/35 transition hover:bg-black/20"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlayVideo?.();
+          }}
+          type="button"
+        >
+          <div className="flex size-11 items-center justify-center rounded-full bg-primary/95 text-primary-foreground shadow-lg transition group-hover:scale-110">
+            <Play className="ml-0.5 size-5 fill-primary-foreground" />
+          </div>
+        </button>
+        {date.requester.compatibility ? (
+          <Badge className="absolute top-2 left-2 border-0 bg-amber-500/90 font-bold text-[10px] text-white shadow-xs">
+            ★ {date.requester.compatibility}% Match
+          </Badge>
+        ) : null}
+      </div>
 
-          <div className="text-xs text-foreground">
-            {date.requesterView
-              ? "You are waiting on matches"
-              : `From ${date.requester.name}`}
-            <span className="ml-1 text-muted-foreground">
-              · {date.searchArea} ·{" "}
+      {/* Content details & Footer layout (Image 1 inspired) */}
+      <div className="flex min-w-0 flex-1 flex-col justify-between gap-3">
+        <div className="flex flex-col gap-2">
+          {/* Top category & scheduled time bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {date.what.map((item) => (
+                <Badge
+                  className="rounded-full font-bold text-[10px] uppercase tracking-wide"
+                  key={item}
+                  variant="secondary"
+                >
+                  {formatLabel(item)}
+                </Badge>
+              ))}
+              {visibleTags.map((tag) => (
+                <Badge
+                  className="rounded-full border-0 text-[10px]"
+                  key={tag}
+                  variant="outline"
+                >
+                  {tag}
+                </Badge>
+              ))}
+              {acceptedMatch && isConfirmed ? (
+                <Badge className="rounded-full border-0 bg-emerald-500/15 font-semibold text-emerald-600 text-[10px]">
+                  Matched with {acceptedMatch.displayName}
+                </Badge>
+              ) : null}
+            </div>
+            <span className="font-semibold text-muted-foreground text-xs">
               {new Date(date.scheduledAt).toLocaleDateString([], {
                 day: "numeric",
                 hour: "numeric",
@@ -4845,61 +4898,111 @@ function DateHistoryNotification({
             </span>
           </div>
 
-          <p className="line-clamp-2 text-muted-foreground text-xs">
-            {date.requester.bio}
-          </p>
+          {/* Large Title */}
+          <h4 className="font-extrabold text-foreground text-base tracking-tight sm:text-lg">
+            {date.title}
+          </h4>
 
-          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-            {date.what.map((item) => (
-              <Badge className="rounded-full text-[10px]" key={item}>
-                {formatLabel(item)}
-              </Badge>
-            ))}
-            {visibleTags.map((tag) => (
-              <Badge
-                className="rounded-full border-0 text-[10px]"
-                key={tag}
-                variant="secondary"
-              >
-                {tag}
-              </Badge>
-            ))}
-            {acceptedMatch && isConfirmed ? (
-              <Badge className="rounded-full border-0 bg-emerald-500/15 text-emerald-600 text-[10px]">
-                Matched with {acceptedMatch.displayName}
-              </Badge>
-            ) : null}
+          {/* Bio / Request description */}
+          <p className="line-clamp-2 text-muted-foreground text-xs leading-relaxed">
+            {date.requester.bio ||
+              `Looking for a fun date in ${date.searchArea}. Open to checking out great local spots together!`}
+          </p>
+        </div>
+
+        {/* Divider & Footer Section */}
+        <div className="flex flex-col gap-3 border-border/60 border-t pt-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Requester / Sender Avatar & Info */}
+            <div className="flex items-center gap-2.5">
+              <Avatar className="size-9 border border-border shadow-xs">
+                {date.requesterView ? (
+                  userAvatar ? (
+                    <AvatarImage src={userAvatar} />
+                  ) : (
+                    <AvatarFallback className="bg-sky-500/20 font-bold text-sky-600 text-xs uppercase">
+                      {userName.slice(0, 2)}
+                    </AvatarFallback>
+                  )
+                ) : date.requester.avatar ? (
+                  <AvatarImage src={date.requester.avatar} />
+                ) : (
+                  <AvatarFallback className="bg-primary/20 font-bold text-primary text-xs uppercase">
+                    {date.requester.name.slice(0, 2)}
+                  </AvatarFallback>
+                )}
+              </Avatar>
+
+              <div className="min-w-0">
+                <p className="truncate font-bold text-xs">
+                  {date.requesterView
+                    ? `${userName} (You sent)`
+                    : date.requester.name}
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {date.requesterView
+                    ? `Waiting on matches in ${date.searchArea}`
+                    : `${date.requester.compatibility ? `${date.requester.compatibility}% match · ` : ""}${date.searchArea}`}
+                </p>
+              </div>
+            </div>
+
+            {/* Action CTAs */}
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              {!date.requesterView ? (
+                <>
+                  <Button
+                    className="h-8 rounded-full px-3 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onViewProfile?.();
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <Eye className="mr-1.5 size-3.5" />
+                    View Profile
+                  </Button>
+                  <Button
+                    className="h-8 rounded-full font-bold text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onOpenStep) {
+                        onOpenStep("matcher");
+                      } else {
+                        onOpen();
+                      }
+                    }}
+                    size="sm"
+                    type="button"
+                  >
+                    <Heart className="mr-1.5 size-3.5 fill-current" />
+                    I'm Interested
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  className="h-8 rounded-full font-bold text-xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onOpenStep) {
+                      onOpenStep("matcher");
+                    } else {
+                      onOpen();
+                    }
+                  }}
+                  size="sm"
+                  type="button"
+                >
+                  <Users className="mr-1.5 size-3.5" />
+                  Review Candidate Rooms
+                  <ChevronRight className="ml-1 size-3.5" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex flex-col gap-2 border-border/50 border-t pt-2 sm:flex-row sm:items-center sm:justify-end">
-        {!date.requesterView ? (
-          <Button
-            className="h-8 rounded-full px-3 text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              onViewProfile?.();
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            <Eye className="mr-1.5 size-3.5" />
-            View profile
-          </Button>
-        ) : null}
-        <Button
-          className="h-8 rounded-full px-4 font-semibold text-xs"
-          onClick={onOpen}
-          size="sm"
-          type="button"
-        >
-          <MessageSquare className="mr-1.5 size-3.5" />
-          Open request
-          <ChevronRight className="ml-1 size-3.5" />
-        </Button>
       </div>
     </div>
   );

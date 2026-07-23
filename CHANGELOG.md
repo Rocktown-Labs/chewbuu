@@ -13,9 +13,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added requester video intro play overlay button (`▶`) on date request cards and a full-screen video player modal.
 - Added requester profile overlay modal with easy back-navigation ("← Back to Date Feed").
 - Added filter pills (`All`, `Received`, `Sent`, `Active`) with count badges to the `Dates & Requests` feed hub.
+- Added Tinder-style "I'm Interested" / "Accept" feed card CTAs for received requests and "Review Candidate Rooms" for sent requests that transition directly into step 2 (`Matcher`).
+- Added TanStack Router `NavigationBlocker` integration across form creation flows (`/date/new`, onboarding, and recap forms).
 
 ### Changed
 
+- Redesigned Date Feed cards to feature a large hero video/photo preview thumbnail on the left, date details, and horizontal footer layout inspired by modern card designs.
+- Updated Date Feed card avatar logic: "Sent" requests display the logged-in user's profile avatar so users instantly know they sent it, while "Received" requests display the sender's avatar and match score.
+- Enforced strict URL route state persistence on browser refresh so users stay on their current tab (`/me?tab=...`), date ID, step, and filter without defaulting back to feed.
 - Refactored Date Feed cards to enforce strict venue privacy: venue names and images are kept private until a match choice is confirmed.
 - Updated Date step progression so completed step inputs lock as users progress.
 - Enhanced Date Confirmation flow to lock finalized date details and trigger success toast and calendar schedule updates.
