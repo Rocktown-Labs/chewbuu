@@ -77,9 +77,15 @@ import {
 import type { ComponentType, FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { PasskeysCard } from "@/components/auth/passkey";
 import { DateRecapFeed } from "@/components/feed/date-recap-feed";
+import {
+  HorizontalStepper,
+  type StepItem,
+  type StepKey,
+} from "@/components/ui/horizontal-stepper";
 import type { ChatPerson, DateScenario } from "@/features/chat/chat-types";
 import { DateChat } from "@/features/chat/date-chat";
 import { DateConfirmScreen } from "@/features/chat/date-confirm";
@@ -163,14 +169,34 @@ interface DateHistoryItem {
   what: string[];
 }
 
+const meSearchSchema = z.object({
+  dateId: z.string().optional(),
+  filter: z.enum(["all", "received", "sent", "active"]).optional(),
+  step: z.enum(["request", "matcher", "choice", "date"]).optional(),
+  tab: z
+    .enum([
+      "calendar",
+      "chats",
+      "feed",
+      "matches",
+      "notifications",
+      "profile",
+      "spots",
+    ])
+    .optional(),
+});
+
 export const Route = createFileRoute("/_auth/me")({
   component: RouteComponent,
+  validateSearch: (search) => meSearchSchema.parse(search),
 });
 
 interface MePageProps {
   initialChatId?: string;
   initialDateId?: string;
+  initialFilter?: "all" | "received" | "sent" | "active";
   initialSpotsCategory?: SpotCategory;
+  initialStep?: "request" | "matcher" | "choice" | "date";
   initialTab?: DashboardTab;
 }
 
@@ -558,19 +584,38 @@ const getDaysInMonth = (date: Date) => {
 };
 
 function RouteComponent() {
-  return <MePage />;
+  const search = Route.useSearch();
+  return (
+    <MePage
+      initialDateId={search.dateId}
+      initialFilter={search.filter}
+      initialStep={search.step}
+      initialTab={search.tab ?? "feed"}
+    />
+  );
 }
 
 export function MePage({
   initialChatId,
   initialDateId,
+  initialFilter = "all",
   initialSpotsCategory = "all",
+  initialStep = "request",
   initialTab = "feed",
 }: MePageProps) {
   const { session } = useRouteContext({ from: "/_auth" });
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
+  const [dateFeedFilter, setDateFeedFilter] = useState<
+    "all" | "received" | "sent" | "active"
+  >(initialFilter);
+  const [activeProfilePerson, setActiveProfilePerson] =
+    useState<ChatPerson | null>(null);
+  const [activeVideoModal, setActiveVideoModal] = useState<{
+    name: string;
+    url?: string;
+  } | null>(null);
   const [spotsCategory, setSpotsCategory] =
     useState<SpotCategory>(initialSpotsCategory);
   const [profileMode, setProfileMode] = useState<ProfileMode>("profile");
@@ -1666,6 +1711,7 @@ export function MePage({
                 {selectedDateHistory ? (
                   <DateHistoryDetail
                     date={selectedDateHistory}
+                    initialStep={initialStep}
                     onShowChats={() => setDashboardTab("chats")}
                   />
                 ) : (
@@ -1692,7 +1738,61 @@ export function MePage({
                       </div>
                     </div>
 
-                    {receivedDateHistories.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2 border-border/60 border-b pb-2">
+                      {[
+                        {
+                          count:
+                            receivedDateHistories.length +
+                            sentDateHistories.length +
+                            pendingRequests.length,
+                          key: "all" as const,
+                          label: "All",
+                        },
+                        {
+                          count: receivedDateHistories.length,
+                          key: "received" as const,
+                          label: "Received",
+                        },
+                        {
+                          count: sentDateHistories.length,
+                          key: "sent" as const,
+                          label: "Sent",
+                        },
+                        {
+                          count: pendingRequests.length,
+                          key: "active" as const,
+                          label: "Active",
+                        },
+                      ].map((filterItem) => (
+                        <button
+                          className={cn(
+                            "flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold text-xs transition",
+                            dateFeedFilter === filterItem.key
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "bg-muted/60 text-muted-foreground hover:bg-muted"
+                          )}
+                          key={filterItem.key}
+                          onClick={() => setDateFeedFilter(filterItem.key)}
+                          type="button"
+                        >
+                          <span>{filterItem.label}</span>
+                          <Badge
+                            className={cn(
+                              "h-4 rounded-full px-1.5 text-[10px]",
+                              dateFeedFilter === filterItem.key
+                                ? "bg-primary-foreground/20 text-primary-foreground"
+                                : "bg-background/80 text-muted-foreground"
+                            )}
+                          >
+                            {filterItem.count}
+                          </Badge>
+                        </button>
+                      ))}
+                    </div>
+
+                    {(dateFeedFilter === "all" ||
+                      dateFeedFilter === "received") &&
+                    receivedDateHistories.length > 0 ? (
                       <DateRequestSection
                         count={receivedDateHistories.length}
                         description="People who sent you a date request. Open one to review candidate rooms, profile context, and the plan."
@@ -1703,12 +1803,28 @@ export function MePage({
                             date={date}
                             key={date.id}
                             onOpen={() => openDateHistory(date.id)}
+                            onPlayVideo={() =>
+                              setActiveVideoModal({
+                                name: date.requester.name,
+                              })
+                            }
+                            onViewProfile={() =>
+                              setActiveProfilePerson({
+                                avatar: date.requester.avatar ?? "",
+                                compatibility: date.requester.compatibility,
+                                id: date.id,
+                                name: date.requester.name,
+                                note: date.requester.bio,
+                                tags: date.requester.tags,
+                              })
+                            }
                           />
                         ))}
                       </DateRequestSection>
                     ) : null}
 
-                    {sentDateHistories.length > 0 ? (
+                    {(dateFeedFilter === "all" || dateFeedFilter === "sent") &&
+                    sentDateHistories.length > 0 ? (
                       <DateRequestSection
                         count={sentDateHistories.length}
                         description="Requests you started. These use a blue border so they are easy to separate from incoming requests."
@@ -1719,6 +1835,21 @@ export function MePage({
                             date={date}
                             key={date.id}
                             onOpen={() => openDateHistory(date.id)}
+                            onPlayVideo={() =>
+                              setActiveVideoModal({
+                                name: date.requester.name,
+                              })
+                            }
+                            onViewProfile={() =>
+                              setActiveProfilePerson({
+                                avatar: date.requester.avatar ?? "",
+                                compatibility: date.requester.compatibility,
+                                id: date.id,
+                                name: date.requester.name,
+                                note: date.requester.bio,
+                                tags: date.requester.tags,
+                              })
+                            }
                           />
                         ))}
                       </DateRequestSection>
@@ -3044,6 +3175,145 @@ export function MePage({
             ))}
           </div>
         </nav>
+
+        {/* Requester Profile Overlay Modal */}
+        {activeProfilePerson ? (
+          <Dialog
+            open={Boolean(activeProfilePerson)}
+            onOpenChange={(open) => {
+              if (!open) setActiveProfilePerson(null);
+            }}
+          >
+            <DialogContent className="max-w-md rounded-2xl p-5">
+              <DialogHeader>
+                <div className="flex items-center justify-between">
+                  <Button
+                    className="h-8 rounded-full px-3 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setActiveProfilePerson(null)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <ArrowLeft className="mr-1 size-3.5" />
+                    Back to Date Feed
+                  </Button>
+                  <Badge
+                    className="rounded-full text-[10px]"
+                    variant="secondary"
+                  >
+                    {activeProfilePerson.compatibility
+                      ? `${activeProfilePerson.compatibility}% Match`
+                      : "Candidate"}
+                  </Badge>
+                </div>
+                <DialogTitle className="mt-2 text-lg font-bold">
+                  {activeProfilePerson.name}
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="mt-2 flex flex-col gap-4">
+                <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-muted">
+                  {activeProfilePerson.avatar ? (
+                    <img
+                      alt={activeProfilePerson.name}
+                      className="size-full object-cover"
+                      src={activeProfilePerson.avatar}
+                    />
+                  ) : null}
+                  <button
+                    className="absolute inset-0 flex items-center justify-center bg-black/40 transition hover:bg-black/30"
+                    onClick={() => {
+                      setActiveVideoModal({
+                        name: activeProfilePerson.name,
+                        url: activeProfilePerson.introVideoThumb,
+                      });
+                    }}
+                    type="button"
+                  >
+                    <div className="flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
+                      <Play className="ml-1 size-6 fill-primary-foreground" />
+                    </div>
+                  </button>
+                </div>
+
+                <div>
+                  <h4 className="font-bold text-muted-foreground text-xs uppercase">
+                    About
+                  </h4>
+                  <p className="mt-1 text-xs text-foreground leading-relaxed">
+                    {activeProfilePerson.note ??
+                      "Looking forward to matching and discovering date spots together!"}
+                  </p>
+                </div>
+
+                {activeProfilePerson.tags?.length ? (
+                  <div>
+                    <h4 className="mb-1.5 font-bold text-muted-foreground text-xs uppercase">
+                      Interests
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {activeProfilePerson.tags.map((t) => (
+                        <Badge
+                          className="rounded-full text-[10px]"
+                          key={t}
+                          variant="secondary"
+                        >
+                          {t}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <Button
+                  className="mt-2 w-full rounded-full font-semibold text-xs"
+                  onClick={() => setActiveProfilePerson(null)}
+                  type="button"
+                >
+                  Close profile
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        ) : null}
+
+        {/* Video Player Modal */}
+        {activeVideoModal ? (
+          <Dialog
+            open={Boolean(activeVideoModal)}
+            onOpenChange={(open) => {
+              if (!open) setActiveVideoModal(null);
+            }}
+          >
+            <DialogContent className="max-w-sm rounded-2xl p-5 text-center">
+              <DialogHeader>
+                <DialogTitle className="font-bold text-base">
+                  Intro Video · {activeVideoModal.name}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="relative aspect-9/16 flex w-full items-center justify-center overflow-hidden rounded-xl border border-border bg-black">
+                <video
+                  autoPlay
+                  controls
+                  className="size-full object-cover"
+                  src={
+                    activeVideoModal.url ??
+                    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+                  }
+                >
+                  <track kind="captions" srcLang="en" label="English" />
+                </video>
+              </div>
+              <Button
+                className="w-full rounded-full text-xs"
+                onClick={() => setActiveVideoModal(null)}
+                type="button"
+              >
+                Close video
+              </Button>
+            </DialogContent>
+          </Dialog>
+        ) : null}
       </div>
     </div>
   );
@@ -4479,44 +4749,71 @@ function DateRequestSection({
 function DateHistoryNotification({
   date,
   onOpen,
+  onPlayVideo,
+  onViewProfile,
 }: {
   date: DateHistoryItem;
   onOpen: () => void;
+  onPlayVideo?: () => void;
+  onViewProfile?: () => void;
 }) {
   const acceptedMatch = date.matches.find(
     (match) => match.id === date.acceptedMatchId
   );
   const visibleTags = date.requester.tags.slice(0, 3);
+  const isConfirmed = date.status === "Confirmed";
 
   return (
-    <button
+    <div
       className={cn(
-        "flex w-full min-w-0 flex-col gap-3 rounded-xl border p-3 text-left transition sm:p-4",
+        "group flex w-full min-w-0 flex-col gap-3 rounded-xl border p-3 text-left transition sm:p-4",
         date.requesterView
           ? "border-sky-500/45 bg-sky-500/10 hover:border-sky-500/70 hover:bg-sky-500/15"
           : "border-primary/25 bg-primary/10 hover:border-primary/50 hover:bg-primary/15"
       )}
-      onClick={onOpen}
-      type="button"
     >
-      <span className="flex min-w-0 items-start gap-3">
-        <Avatar className="size-12 shrink-0 border border-border">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start">
+        {/* Requester Thumbnail / Video Play Button Overlay */}
+        <div className="relative size-20 shrink-0 overflow-hidden rounded-xl border border-border/80 bg-card/80 sm:size-24">
           {date.requester.avatar ? (
-            <AvatarImage src={date.requester.avatar} />
+            <img
+              alt={date.requester.name}
+              className="size-full object-cover"
+              src={date.requester.avatar}
+            />
+          ) : (
+            <div className="flex size-full items-center justify-center bg-muted font-bold text-muted-foreground text-sm">
+              {date.requester.name.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+          {/* Play Button Overlay */}
+          <button
+            aria-label={`Play intro video for ${date.requester.name}`}
+            className="absolute inset-0 flex items-center justify-center bg-black/40 transition hover:bg-black/25"
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlayVideo?.();
+            }}
+            type="button"
+          >
+            <div className="flex size-9 items-center justify-center rounded-full bg-primary/90 text-primary-foreground shadow-md transition group-hover:scale-105">
+              <Play className="ml-0.5 size-4 fill-primary-foreground" />
+            </div>
+          </button>
+          {date.requester.compatibility ? (
+            <Badge className="absolute top-1 left-1 border-0 bg-amber-500/90 font-bold text-[9px] text-white">
+              ★ {date.requester.compatibility}%
+            </Badge>
           ) : null}
-          <AvatarFallback>
-            {date.requester.name.slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
-        <span className="flex min-w-0 flex-1 flex-col gap-2">
-          <span className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-            <span className="min-w-0 truncate font-bold text-sm">
-              {date.title}
-            </span>
-            <span className="flex flex-wrap gap-1.5">
-              <Badge className="rounded-full bg-background/80 text-[10px] text-foreground">
-                {date.status}
-              </Badge>
+        </div>
+
+        {/* Content details */}
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="min-w-0 truncate font-bold text-sm">
+                {date.title}
+              </span>
               <Badge
                 className={cn(
                   "rounded-full border-0 text-[10px]",
@@ -4527,69 +4824,93 @@ function DateHistoryNotification({
               >
                 {date.requesterView ? "You sent" : "Received"}
               </Badge>
-            </span>
-          </span>
-          <span className="text-xs text-foreground">
+            </div>
+            <Badge className="w-fit rounded-full bg-background/80 text-[10px] text-foreground">
+              {date.status}
+            </Badge>
+          </div>
+
+          <div className="text-xs text-foreground">
             {date.requesterView
               ? "You are waiting on matches"
               : `From ${date.requester.name}`}
-            {date.requester.compatibility
-              ? ` · ${date.requester.compatibility}% match`
-              : ""}
-          </span>
-          <span className="line-clamp-2 text-muted-foreground text-xs">
-            {date.requester.bio}
-          </span>
-        </span>
-        <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
-      </span>
-
-      <span className="flex min-w-0 flex-col gap-2 pl-0 sm:pl-[3.75rem]">
-        <span className="text-muted-foreground text-xs">
-          {date.searchArea} · {new Date(date.scheduledAt).toLocaleString()}
-        </span>
-        <span className="flex flex-wrap gap-1.5">
-          {date.what.map((item) => (
-            <Badge className="rounded-full text-[10px]" key={item}>
-              {formatLabel(item)}
-            </Badge>
-          ))}
-          {visibleTags.map((tag) => (
-            <Badge
-              className="rounded-full border-0 text-[10px]"
-              key={tag}
-              variant="secondary"
-            >
-              {tag}
-            </Badge>
-          ))}
-          {acceptedMatch ? (
-            <Badge className="rounded-full text-[10px]" variant="secondary">
-              Kept {acceptedMatch.displayName}
-            </Badge>
-          ) : null}
-        </span>
-        <span className="flex flex-col gap-2 pt-1 sm:flex-row">
-          <span className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full bg-primary px-3 font-semibold text-primary-foreground text-xs sm:w-fit">
-            <MessageSquare className="size-3.5" />
-            Open request
-          </span>
-          {!date.requesterView ? (
-            <span className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full border border-border bg-background/55 px-3 font-semibold text-xs sm:w-fit">
-              <Eye className="size-3.5" />
-              View profile
+            <span className="ml-1 text-muted-foreground">
+              · {date.searchArea} ·{" "}
+              {new Date(date.scheduledAt).toLocaleDateString([], {
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                month: "short",
+              })}
             </span>
-          ) : null}
-        </span>
-      </span>
-    </button>
+          </div>
+
+          <p className="line-clamp-2 text-muted-foreground text-xs">
+            {date.requester.bio}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {date.what.map((item) => (
+              <Badge className="rounded-full text-[10px]" key={item}>
+                {formatLabel(item)}
+              </Badge>
+            ))}
+            {visibleTags.map((tag) => (
+              <Badge
+                className="rounded-full border-0 text-[10px]"
+                key={tag}
+                variant="secondary"
+              >
+                {tag}
+              </Badge>
+            ))}
+            {acceptedMatch && isConfirmed ? (
+              <Badge className="rounded-full border-0 bg-emerald-500/15 text-emerald-600 text-[10px]">
+                Matched with {acceptedMatch.displayName}
+              </Badge>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex flex-col gap-2 border-border/50 border-t pt-2 sm:flex-row sm:items-center sm:justify-end">
+        {!date.requesterView ? (
+          <Button
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewProfile?.();
+            }}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <Eye className="mr-1.5 size-3.5" />
+            View profile
+          </Button>
+        ) : null}
+        <Button
+          className="h-8 rounded-full px-4 font-semibold text-xs"
+          onClick={onOpen}
+          size="sm"
+          type="button"
+        >
+          <MessageSquare className="mr-1.5 size-3.5" />
+          Open request
+          <ChevronRight className="ml-1 size-3.5" />
+        </Button>
+      </div>
+    </div>
   );
 }
 function DateHistoryDetail({
   date,
+  initialStep = "request",
   onShowChats,
 }: {
   date: DateHistoryItem;
+  initialStep?: StepKey;
   onShowChats: () => void;
 }) {
   const navigate = useNavigate();
@@ -4607,9 +4928,7 @@ function DateHistoryDetail({
     (match) => match.id === currentDate.acceptedMatchId
   );
 
-  const [activeCardStep, setActiveCardStep] = useState<
-    "request" | "matcher" | "choice" | "date"
-  >("request");
+  const [activeCardStep, setActiveCardStep] = useState<StepKey>(initialStep);
 
   const [activeChatMatchId, setActiveChatMatchId] = useState<string | null>(
     null
@@ -4665,88 +4984,58 @@ function DateHistoryDetail({
     toast.success("Photo attached to date memories!");
   };
 
+  const handleStepChange = (nextStep: StepKey) => {
+    setActiveCardStep(nextStep);
+    if (nextStep !== "matcher") setActiveChatMatchId(null);
+    navigate({
+      search: (prev: Record<string, unknown>) => ({ ...prev, step: nextStep }),
+      to: "/me",
+      replace: true,
+    } as Parameters<typeof navigate>[0]);
+  };
+
+  const steps: StepItem[] = [
+    {
+      description: `${currentDate.places.length || 3} spots selected`,
+      key: "request" as const,
+      label: "Request",
+      locked: currentDate.status === "Confirmed",
+      tone: "done" as const,
+    },
+    {
+      description: activeChatCandidate
+        ? `Room with ${activeChatCandidate.displayName}`
+        : `${currentDate.matches.length} candidate rooms`,
+      key: "matcher" as const,
+      label: "Matcher",
+      locked: currentDate.status === "Confirmed",
+      tone: "live" as const,
+    },
+    {
+      description: acceptedMatch
+        ? `${acceptedMatch.displayName} chosen`
+        : "Pending partner",
+      key: "choice" as const,
+      label: "Choice",
+      tone: acceptedMatch ? ("done" as const) : ("muted" as const),
+    },
+    {
+      description: isGeofenceScanned
+        ? "Live + memories open"
+        : "After confirmation",
+      key: "date" as const,
+      label: "Date",
+      tone: isGeofenceScanned ? ("live" as const) : ("muted" as const),
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-5">
-      <div
-        aria-label="Date request steps"
-        className="-mx-4 flex gap-2 overflow-x-auto border-b border-border/70 px-4 pb-4 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:border-b-0 sm:px-0 sm:pb-0"
-        role="tablist"
-      >
-        {[
-          {
-            description: `${currentDate.places.length || 3} spots selected`,
-            key: "request" as const,
-            label: "Request",
-            tone: "done" as const,
-          },
-          {
-            description: activeChatCandidate
-              ? `Room with ${activeChatCandidate.displayName}`
-              : `${currentDate.matches.length} candidate rooms`,
-            key: "matcher" as const,
-            label: "Matcher",
-            tone: "live" as const,
-          },
-          {
-            description: acceptedMatch
-              ? `${acceptedMatch.displayName} chosen`
-              : "Pending partner",
-            key: "choice" as const,
-            label: "Choice",
-            tone: acceptedMatch ? ("done" as const) : ("muted" as const),
-          },
-          {
-            description: isGeofenceScanned
-              ? "Live + memories open"
-              : "After confirmation",
-            key: "date" as const,
-            label: "Date",
-            tone: isGeofenceScanned ? ("live" as const) : ("muted" as const),
-          },
-        ].map((item) => {
-          const active = activeCardStep === item.key;
-          return (
-            <button
-              aria-selected={active}
-              className={cn(
-                "min-w-[9.25rem] rounded-lg border p-3 text-left transition sm:min-w-0",
-                active
-                  ? "border-primary/40 bg-primary/10 shadow-sm"
-                  : "border-border/70 bg-card/45 hover:border-border hover:bg-card/70"
-              )}
-              key={item.key}
-              onClick={() => {
-                setActiveCardStep(item.key);
-                if (item.key !== "matcher") setActiveChatMatchId(null);
-              }}
-              role="tab"
-              type="button"
-            >
-              <span
-                className={cn(
-                  "flex items-center gap-1.5 font-bold text-xs",
-                  item.tone === "done" && "text-emerald-600",
-                  item.tone === "live" && "text-primary",
-                  item.tone === "muted" && "text-muted-foreground"
-                )}
-              >
-                <span
-                  className={cn(
-                    "size-2 rounded-full",
-                    item.tone === "done" && "bg-emerald-500",
-                    item.tone === "live" && "bg-primary",
-                    item.tone === "muted" && "bg-muted-foreground/60"
-                  )}
-                />
-                {item.label}
-              </span>
-              <span className="mt-1 block truncate text-[11px] text-muted-foreground">
-                {item.description}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      <HorizontalStepper
+        activeStep={activeCardStep}
+        onSelectStep={handleStepChange}
+        steps={steps}
+      />
 
       {/* CARD 1: REQUEST SUMMARY VIEW */}
       {activeCardStep === "request" && (

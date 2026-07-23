@@ -37,12 +37,13 @@ import {
   MapPin,
   Navigation,
   QrCode,
+  Search,
   Star,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { datingApi } from "@/lib/dating-api";
+import { datingApi, type DatePlace } from "@/lib/dating-api";
 
 import type { ChatPerson, DateScenarioRole } from "./chat-types";
 import { personInitials } from "./chat-ui";
@@ -139,12 +140,15 @@ export function DateConfirmScreen({
     "brand"
   );
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
-  const [suggestion, setSuggestion] = useState("");
   const rescheduleTokensLeft = "2";
   const cancelStrikeCount = "0";
   const [weather, setWeather] = useState<WeatherDay | null>(null);
   const [checkedIn, setCheckedIn] = useState(false);
   const scanPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<DatePlace[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -386,46 +390,114 @@ export function DateConfirmScreen({
             ))}
 
             {!locked ? (
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Input
-                  className="h-9 rounded-full text-xs"
-                  onChange={(event) => setSuggestion(event.target.value)}
-                  placeholder={
-                    role === "sender"
-                      ? "Add or edit a spot from chat…"
-                      : "Suggest a different spot…"
-                  }
-                  value={suggestion}
-                />
-                <Button
-                  className="rounded-full text-xs"
-                  onClick={() => {
-                    const nextSuggestion = suggestion.trim();
-                    if (!nextSuggestion) return;
-                    if (role === "sender") {
-                      setPlaces((prev) => [
-                        ...prev,
-                        {
-                          address: searchArea,
-                          name: nextSuggestion,
-                          placeId: `suggested-${Date.now()}`,
-                        },
-                      ]);
-                    }
-                    onSuggestPlace?.(nextSuggestion);
-                    toast.success(
-                      role === "sender"
-                        ? "Spot edit added to the plan"
-                        : "Suggestion sent to the requester"
-                    );
-                    setSuggestion("");
-                  }}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  {role === "sender" ? "Add" : "Suggest"}
-                </Button>
+              <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card/40 p-3">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-xs text-foreground">
+                      {role === "sender"
+                        ? "Search and add spots to plan"
+                        : "Search and suggest a spot"}
+                    </span>
+                    {searchQuery ? (
+                      <button
+                        className="text-[11px] text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setSearchQuery("");
+                          setSearchResults([]);
+                        }}
+                        type="button"
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
+                      <Input
+                        className="h-9 rounded-full pl-8 text-xs"
+                        onChange={(event) => {
+                          setSearchQuery(event.target.value);
+                          if (searchTimerRef.current)
+                            clearTimeout(searchTimerRef.current);
+                          const value = event.target.value.trim();
+                          if (!value) {
+                            setSearchResults([]);
+                            setIsSearching(false);
+                            return;
+                          }
+                          setIsSearching(true);
+                          searchTimerRef.current = setTimeout(async () => {
+                            try {
+                              const res = await datingApi.suggestPlaces({
+                                area: searchArea,
+                                filters: [value],
+                                searchKind: "place",
+                                what: ["eat", "drink", "play"],
+                              });
+                              setSearchResults(res.places ?? []);
+                            } catch {
+                              toast.error("Could not search spots right now.");
+                            } finally {
+                              setIsSearching(false);
+                            }
+                          }, 350);
+                        }}
+                        placeholder="Search places (e.g. coffee, rooftop, Italian, bar)…"
+                        value={searchQuery}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {isSearching ? (
+                  <div className="p-3 text-center text-xs text-muted-foreground">
+                    Searching places near {searchArea}…
+                  </div>
+                ) : null}
+
+                {!isSearching && searchResults.length > 0 ? (
+                  <div className="flex max-h-48 flex-col gap-2 overflow-y-auto pr-1">
+                    {searchResults.map((place) => (
+                      <div
+                        className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-background/80 p-2 text-xs"
+                        key={place.placeId}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold">{place.name}</p>
+                          <p className="truncate text-[10px] text-muted-foreground">
+                            {place.address ?? searchArea}
+                          </p>
+                        </div>
+                        <Button
+                          className="h-7 rounded-full px-2.5 text-[11px]"
+                          onClick={() => {
+                            const newPlace: DatePlaceOption = {
+                              address: place.address ?? searchArea,
+                              name: place.name,
+                              placeId: place.placeId,
+                              rating: place.rating,
+                            };
+                            setPlaces((prev) => [...prev, newPlace]);
+                            onSuggestPlace?.(place.name);
+                            toast.success(
+                              role === "sender"
+                                ? `Added ${place.name} to date plan`
+                                : `Suggested ${place.name} to requester`
+                            );
+                            setSearchQuery("");
+                            setSearchResults([]);
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="secondary"
+                        >
+                          {role === "sender" ? "Add to plan" : "Suggest"}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>

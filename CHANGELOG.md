@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added mobile-first `HorizontalStepper` component (`Request` -> `Matcher` -> `Choice` -> `Date`) with status badges, step locking, and URL route search param persistence (`/me?tab=matches&dateId=...&step=...`).
+- Added interactive spot search on `DateConfirmScreen` (`Choice` step) powered by live Google Places API searches (`datingApi.suggestPlaces`).
+- Added requester video intro play overlay button (`▶`) on date request cards and a full-screen video player modal.
+- Added requester profile overlay modal with easy back-navigation ("← Back to Date Feed").
+- Added filter pills (`All`, `Received`, `Sent`, `Active`) with count badges to the `Dates & Requests` feed hub.
+
+### Changed
+
+- Refactored Date Feed cards to enforce strict venue privacy: venue names and images are kept private until a match choice is confirmed.
+- Updated Date step progression so completed step inputs lock as users progress.
+- Enhanced Date Confirmation flow to lock finalized date details and trigger success toast and calendar schedule updates.
+
 - Added hideable/collapsible venue check-in QR code widget with transparent Chewbuu logo state, partner scanning camera view, and `/dating/check-in` server API check-in integration.
 - Added multi-spot and multi-person Accordion review views with photo/video recap attachments and rating/comment validation.
 - Added full-screen single-page Profile & Onboarding Settings screen (`/me/profile`) allowing users to view and update all onboarding fields.
