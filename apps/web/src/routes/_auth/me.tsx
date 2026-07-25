@@ -114,6 +114,10 @@ import {
   type DatingProfilePayload,
   type DatingSummary,
 } from "@/lib/dating-api";
+import {
+  getLocationWeatherFromCityName,
+  getLocationWeatherFromCoords,
+} from "@/lib/location-weather";
 import { useUsernameChecker } from "@/lib/use-username-checker";
 
 interface DateRecap {
@@ -663,6 +667,7 @@ function HomeDashboardView({
   onOpenPlanDateDrawer,
   onOpenDateHistory,
   onOpenAnalytics,
+  onNavigateTab,
   profileArea,
   weatherText,
 }: {
@@ -670,6 +675,7 @@ function HomeDashboardView({
   onOpenPlanDateDrawer: () => void;
   onOpenDateHistory: (id: string) => void;
   onOpenAnalytics: () => void;
+  onNavigateTab: (tab: DashboardTab) => void;
   profileArea?: string;
   weatherText?: string;
 }) {
@@ -711,7 +717,7 @@ function HomeDashboardView({
           <Sun className="size-4 animate-spin-slow text-amber-500" />
           <span className="font-extrabold text-xs">
             {weatherText ||
-              `76°F · Clear & Sunny in ${profileArea || "Nashville, TN"}`}
+              `76°F · Clear & Sunny in ${profileArea || "Searcy, AR"}`}
           </span>
         </div>
       </div>
@@ -769,8 +775,7 @@ function HomeDashboardView({
                       Date with Maya Lin
                     </h4>
                     <p className="text-xs text-muted-foreground">
-                      Eat + Drink · Dutch Split ·{" "}
-                      {profileArea || "Nashville, TN"}
+                      Eat + Drink · Dutch Split · {profileArea || "Searcy, AR"}
                     </p>
                   </div>
                 </div>
@@ -840,76 +845,120 @@ function HomeDashboardView({
         )}
       </div>
 
-      {/* Date Stats Chart & Metrics Cards (Click to Open Analytics Drawer) */}
-      <div className="grid gap-3 sm:grid-cols-4">
+      {/* Dynamic Interactive Hero Stat Cards */}
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Card 1: Date Streak -> Analytics Drawer */}
         <button
-          className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs hover:border-amber-500/50 transition cursor-pointer text-left group"
+          aria-label="View date streak analytics and badges"
+          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-amber-500/60 hover:shadow-md cursor-pointer text-left"
           onClick={onOpenAnalytics}
           type="button"
         >
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-500 group-hover:scale-110 transition">
-            <Flame className="size-5" />
+          <div className="flex items-center justify-between">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500 text-white font-extrabold shadow-md group-hover:scale-110 transition">
+              <Flame className="size-5 animate-pulse" />
+            </div>
+            <Badge className="rounded-full bg-amber-500/20 text-amber-600 font-extrabold text-[10px] border-0">
+              🔥 3 In a Row
+            </Badge>
           </div>
-          <div>
-            <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
-              Date Streak
+
+          <div className="mt-4">
+            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+              Streak Analytics
             </span>
-            <p className="font-extrabold text-lg leading-none mt-0.5">
-              3 Dates →
+            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+              3 Date Streak
+            </h4>
+            <p className="mt-1.5 flex items-center text-xs font-bold text-amber-600 group-hover:underline">
+              View Badges & Stats <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
         </button>
 
+        {/* Card 2: This Month Bookings -> Calendar Tab */}
         <button
-          className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs hover:border-primary/50 transition cursor-pointer text-left group"
-          onClick={onOpenAnalytics}
+          aria-label="Open monthly calendar schedule"
+          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/15 via-sky-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-primary/60 hover:shadow-md cursor-pointer text-left"
+          onClick={() => onNavigateTab("calendar")}
           type="button"
         >
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:scale-110 transition">
-            <CalendarHeart className="size-5" />
+          <div className="flex items-center justify-between">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground font-extrabold shadow-md group-hover:scale-110 transition">
+              <CalendarHeart className="size-5" />
+            </div>
+            <Badge className="rounded-full bg-primary/20 text-primary font-extrabold text-[10px] border-0">
+              📅 4 Booked
+            </Badge>
           </div>
-          <div>
-            <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
-              This Month
+
+          <div className="mt-4">
+            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+              Monthly Schedule
             </span>
-            <p className="font-extrabold text-lg leading-none mt-0.5">
-              4 Bookings →
+            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+              4 Confirmed
+            </h4>
+            <p className="mt-1.5 flex items-center text-xs font-bold text-primary group-hover:underline">
+              Open Calendar <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
         </button>
 
+        {/* Card 3: Favorite Spots -> Spots Tab */}
         <button
-          className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs hover:border-amber-500/50 transition cursor-pointer text-left group"
-          onClick={onOpenAnalytics}
+          aria-label="Explore local favorite spots"
+          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-emerald-500/60 hover:shadow-md cursor-pointer text-left"
+          onClick={() => onNavigateTab("spots")}
           type="button"
         >
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500 group-hover:scale-110 transition">
-            <Star className="size-5" />
+          <div className="flex items-center justify-between">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500 text-white font-extrabold shadow-md group-hover:scale-110 transition">
+              <Star className="size-5" />
+            </div>
+            <Badge className="rounded-full bg-emerald-500/20 text-emerald-600 font-extrabold text-[10px] border-0">
+              ⭐ 12 Saved
+            </Badge>
           </div>
-          <div>
-            <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
-              Fav Spots
+
+          <div className="mt-4">
+            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+              Local Venues
             </span>
-            <p className="font-extrabold text-lg leading-none mt-0.5">
-              12 Places →
+            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+              12 Fav Spots
+            </h4>
+            <p className="mt-1.5 flex items-center text-xs font-bold text-emerald-600 group-hover:underline">
+              Explore Local Spots <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
         </button>
 
+        {/* Card 4: Recaps Posted -> Profile Tab */}
         <button
-          className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs hover:border-purple-500/50 transition cursor-pointer text-left group"
-          onClick={onOpenAnalytics}
+          aria-label="View published recaps on profile"
+          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/15 via-pink-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-purple-500/60 hover:shadow-md cursor-pointer text-left"
+          onClick={() => onNavigateTab("profile")}
           type="button"
         >
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500 group-hover:scale-110 transition">
-            <Sparkles className="size-5" />
+          <div className="flex items-center justify-between">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-purple-500 text-white font-extrabold shadow-md group-hover:scale-110 transition">
+              <Sparkles className="size-5" />
+            </div>
+            <Badge className="rounded-full bg-purple-500/20 text-purple-600 font-extrabold text-[10px] border-0">
+              📸 5 Recaps
+            </Badge>
           </div>
-          <div>
-            <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
-              Recaps Posted
+
+          <div className="mt-4">
+            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+              Food Recaps
             </span>
-            <p className="font-extrabold text-lg leading-none mt-0.5">
-              5 Recaps →
+            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+              5 Published
+            </h4>
+            <p className="mt-1.5 flex items-center text-xs font-bold text-purple-600 group-hover:underline">
+              My Profile Recaps <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
         </button>
@@ -984,37 +1033,61 @@ export function MePage({
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [customLocationInput, setCustomLocationInput] = useState("");
-  const [userCity, setUserCity] = useState("Nashville, TN");
+  const [userCity, setUserCity] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("chewbuu_user_city");
+      if (saved) return saved;
+    }
+    return "Searcy, AR";
+  });
   const [weatherText, setWeatherText] = useState(
-    "76°F · Clear & Sunny in Nashville, TN"
+    "☀️ 76°F · Clear & Sunny in Searcy, AR"
   );
 
   useEffect(() => {
-    if (typeof window !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const { latitude, longitude } = pos.coords;
-          try {
-            const res = await fetch(
-              `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`
+    let isMounted = true;
+    const initLocation = async () => {
+      const saved = localStorage.getItem("chewbuu_user_city");
+      if (saved) {
+        const result = await getLocationWeatherFromCityName(saved);
+        if (isMounted) {
+          setUserCity(result.city);
+          setWeatherText(result.weatherText);
+        }
+        return;
+      }
+
+      if (typeof window !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const { latitude, longitude } = pos.coords;
+            const result = await getLocationWeatherFromCoords(
+              latitude,
+              longitude
             );
-            if (res.ok) {
-              const data = (await res.json()) as {
-                current?: { temperature_2m?: number; weather_code?: number };
-              };
-              const tempC = data.current?.temperature_2m ?? 24;
-              const tempF = Math.round((tempC * 9) / 5 + 32);
-              setWeatherText(`☀️ ${tempF}°F · Live Weather in ${userCity}`);
+            if (isMounted) {
+              setUserCity(result.city);
+              setWeatherText(result.weatherText);
+              localStorage.setItem("chewbuu_user_city", result.city);
             }
-          } catch {
-            // Keep fallback format
-          }
-        },
-        () => {},
-        { timeout: 5000 }
-      );
-    }
-  }, [userCity]);
+          },
+          async () => {
+            const fallback = await getLocationWeatherFromCityName("Searcy, AR");
+            if (isMounted) {
+              setUserCity(fallback.city);
+              setWeatherText(fallback.weatherText);
+            }
+          },
+          { timeout: 5000 }
+        );
+      }
+    };
+
+    void initLocation();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const [summary, setSummary] = useState<DatingSummary | null>(null);
   const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
@@ -1869,6 +1942,7 @@ export function MePage({
           {activeTab === "feed" && (
             <HomeDashboardView
               canDate={canDate}
+              onNavigateTab={(tab) => setDashboardTab(tab)}
               onOpenAnalytics={() => setIsAnalyticsOpen(true)}
               onOpenDateHistory={(id) => openDateHistory(id)}
               onOpenPlanDateDrawer={() => {
@@ -3648,14 +3722,16 @@ export function MePage({
             </DialogHeader>
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                if (customLocationInput.trim()) {
-                  setUserCity(customLocationInput.trim());
+                const target = customLocationInput.trim() || userCity;
+                if (target) {
+                  const result = await getLocationWeatherFromCityName(target);
+                  setUserCity(result.city);
+                  setWeatherText(result.weatherText);
+                  localStorage.setItem("chewbuu_user_city", result.city);
                   setIsLocationModalOpen(false);
-                  toast.success(
-                    `Location updated to ${customLocationInput.trim()}`
-                  );
+                  toast.success(`Location updated to ${result.city}`);
                 }
               }}
               className="flex flex-col gap-4 mt-2"
@@ -3664,7 +3740,7 @@ export function MePage({
                 <MapPin className="absolute left-3.5 top-3.5 size-4 text-muted-foreground" />
                 <Input
                   className="pl-10 rounded-full h-11"
-                  placeholder="e.g. Austin, TX or Chicago, IL"
+                  placeholder="e.g. Searcy, AR or Little Rock, AR"
                   value={customLocationInput}
                   onChange={(e) => setCustomLocationInput(e.target.value)}
                 />
@@ -3678,12 +3754,27 @@ export function MePage({
                   onClick={() => {
                     if (navigator.geolocation) {
                       navigator.geolocation.getCurrentPosition(
-                        () => {
-                          toast.success("Using your device GPS location");
+                        async (pos) => {
+                          const result = await getLocationWeatherFromCoords(
+                            pos.coords.latitude,
+                            pos.coords.longitude
+                          );
+                          setUserCity(result.city);
+                          setWeatherText(result.weatherText);
+                          localStorage.setItem(
+                            "chewbuu_user_city",
+                            result.city
+                          );
+                          toast.success(`Location set to GPS: ${result.city}`);
                           setIsLocationModalOpen(false);
                         },
-                        () => {
-                          toast.error("Geolocation permission denied");
+                        async () => {
+                          const fallback =
+                            await getLocationWeatherFromCityName("Searcy, AR");
+                          setUserCity(fallback.city);
+                          setWeatherText(fallback.weatherText);
+                          toast.info(`Defaulted location to ${fallback.city}`);
+                          setIsLocationModalOpen(false);
                         }
                       );
                     }
