@@ -25,6 +25,12 @@ import {
   FieldLabel,
 } from "@chewbuu/ui/components/field";
 import { Input } from "@chewbuu/ui/components/input";
+import {
+  MiniCalendar,
+  MiniCalendarDay,
+  MiniCalendarDays,
+  MiniCalendarNavigation,
+} from "@chewbuu/ui/components/mini-calendar";
 import { Progress } from "@chewbuu/ui/components/progress";
 import {
   Select,
@@ -84,6 +90,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { AnalyticsDrawer } from "@/components/analytics/analytics-drawer";
 import { PasskeysCard } from "@/components/auth/passkey";
 import { DateRecapFeed } from "@/components/feed/date-recap-feed";
 import { NavigationBlocker } from "@/components/navigation-blocker";
@@ -655,119 +662,94 @@ function HomeDashboardView({
   canDate,
   onOpenPlanDateDrawer,
   onOpenDateHistory,
+  onOpenAnalytics,
   profileArea,
+  weatherText,
 }: {
   canDate: boolean;
   onOpenPlanDateDrawer: () => void;
   onOpenDateHistory: (id: string) => void;
+  onOpenAnalytics: () => void;
   profileArea?: string;
+  weatherText?: string;
 }) {
   void canDate;
-  const [selectedDay, setSelectedDay] = useState<number>(0);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<
+    Date | undefined
+  >(new Date());
 
-  const days = useMemo(() => {
-    const list = [];
-    const today = new Date();
-    for (let i = 0; i < 7; i += 1) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      list.push({
-        date: d,
-        dayName: d.toLocaleDateString([], { weekday: "short" }),
-        dayNumber: d.getDate(),
-        isToday: i === 0,
-        hasDate: i === 1 || i === 3,
-      });
-    }
-    return list;
-  }, []);
+  const formattedSelectedDate = useMemo(() => {
+    if (!selectedCalendarDate) return "Today";
+    return selectedCalendarDate.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  }, [selectedCalendarDate]);
 
-  const activeDayObj = days[selectedDay] ?? days[0];
+  const hasEventOnSelectedDate = useMemo(() => {
+    if (!selectedCalendarDate) return true;
+    return selectedCalendarDate.getDate() % 2 === 0;
+  }, [selectedCalendarDate]);
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6">
       {/* Top Welcome Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-extrabold text-2xl tracking-tight text-foreground">
-            Welcome back 👋
+            Home Dashboard 👋
           </h2>
           <p className="text-xs text-muted-foreground">
-            Select a day to view upcoming dates, local weather, and date stats.
+            View confirmed venue bookings on your schedule, check weather, and
+            track streaks.
           </p>
         </div>
 
         {/* Live Weather Forecast Badge */}
-        <div className="mt-2 sm:mt-0 flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-amber-600 shadow-2xs w-fit">
+        <div className="flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-amber-600 shadow-2xs w-fit">
           <Sun className="size-4 animate-spin-slow text-amber-500" />
           <span className="font-extrabold text-xs">
-            76°F · Clear & Sunny in {profileArea || "Nashville, TN"}
+            {weatherText ||
+              `76°F · Clear & Sunny in ${profileArea || "Nashville, TN"}`}
           </span>
         </div>
       </div>
 
-      {/* Horizontal Day Selector Ribbon */}
-      <div className="flex flex-col gap-2.5 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-sm">
+      {/* Kibo UI Mini-Calendar Integration */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 sm:p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
-            Schedule Ribbon
+            Mini-Calendar Schedule
           </span>
-          <span className="font-semibold text-xs text-primary">
-            {activeDayObj.date.toLocaleDateString([], {
-              month: "long",
-              day: "numeric",
-              year: "numeric",
-            })}
-          </span>
+          <Badge className="rounded-full bg-primary/10 text-primary font-bold text-xs border-0">
+            Selected: {formattedSelectedDate}
+          </Badge>
         </div>
 
-        <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none snap-x touch-pan-x">
-          {days.map((item, idx) => {
-            const isSelected = selectedDay === idx;
-            return (
-              <button
-                className={cn(
-                  "relative flex flex-col items-center justify-center rounded-xl p-3 min-w-16 transition cursor-pointer snap-start border",
-                  isSelected
-                    ? "border-primary bg-primary text-primary-foreground shadow-md scale-105"
-                    : "border-border/70 bg-background/70 text-foreground hover:bg-muted"
-                )}
-                key={item.dayNumber}
-                onClick={() => setSelectedDay(idx)}
-                type="button"
-              >
-                <span className="font-bold text-[10px] uppercase opacity-80">
-                  {item.dayName}
-                </span>
-                <span className="font-extrabold text-lg leading-tight mt-0.5">
-                  {item.dayNumber}
-                </span>
-                {item.hasDate ? (
-                  <span
-                    className={cn(
-                      "mt-1 size-1.5 rounded-full",
-                      isSelected ? "bg-white" : "bg-primary"
-                    )}
-                  />
-                ) : (
-                  <span className="mt-1 size-1.5" />
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {/* Kibo UI MiniCalendar Component */}
+        <MiniCalendar
+          className="w-full justify-between rounded-xl border border-border/80 bg-background/80 p-2"
+          days={7}
+          onValueChange={setSelectedCalendarDate}
+          value={selectedCalendarDate}
+        >
+          <MiniCalendarNavigation direction="prev" />
+          <MiniCalendarDays className="flex-1 justify-around">
+            {(date) => <MiniCalendarDay date={date} key={date.toISOString()} />}
+          </MiniCalendarDays>
+          <MiniCalendarNavigation direction="next" />
+        </MiniCalendar>
       </div>
 
       {/* Selected Day Event Overview */}
       <div className="flex flex-col gap-4">
         <h3 className="font-extrabold text-base tracking-tight text-foreground flex items-center gap-2">
           <CalendarHeart className="size-4 text-primary" />
-          {activeDayObj.isToday
-            ? "Today's Schedule & Date Itinerary"
-            : `Schedule for ${activeDayObj.dayName}, ${activeDayObj.date.toLocaleDateString([], { month: "short", day: "numeric" })}`}
+          Confirmed Bookings for {formattedSelectedDate}
         </h3>
 
-        {activeDayObj.hasDate ? (
+        {hasEventOnSelectedDate ? (
           <Card className="rounded-2xl border-primary/30 bg-gradient-to-br from-card via-card to-primary/5 p-4 sm:p-5 shadow-sm">
             <div className="flex flex-col gap-4">
               <div className="flex items-start justify-between gap-3">
@@ -787,7 +769,8 @@ function HomeDashboardView({
                       Date with Maya Lin
                     </h4>
                     <p className="text-xs text-muted-foreground">
-                      Eat + Drink · Dutch Split · Nashville, TN
+                      Eat + Drink · Dutch Split ·{" "}
+                      {profileArea || "Nashville, TN"}
                     </p>
                   </div>
                 </div>
@@ -838,11 +821,11 @@ function HomeDashboardView({
               <CalendarHeart className="size-6" />
             </div>
             <h4 className="font-extrabold text-base">
-              No dates scheduled for this day
+              No dates booked for {formattedSelectedDate}
             </h4>
             <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
-              Queue up a new date request or invite someone from your candidate
-              room.
+              Requests move to this calendar once confirmed. Queue up a new date
+              request to find a match.
             </p>
             <Button
               className="mt-4 rounded-full font-bold text-xs mx-auto"
@@ -851,16 +834,20 @@ function HomeDashboardView({
               type="button"
             >
               <Plus className="mr-1 size-4" />
-              Plan Date for this Day
+              Plan Date for {formattedSelectedDate}
             </Button>
           </Card>
         )}
       </div>
 
-      {/* Date Stats Chart & Metrics */}
+      {/* Date Stats Chart & Metrics Cards (Click to Open Analytics Drawer) */}
       <div className="grid gap-3 sm:grid-cols-4">
-        <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-500">
+        <button
+          className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs hover:border-amber-500/50 transition cursor-pointer text-left group"
+          onClick={onOpenAnalytics}
+          type="button"
+        >
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-500 group-hover:scale-110 transition">
             <Flame className="size-5" />
           </div>
           <div>
@@ -868,13 +855,17 @@ function HomeDashboardView({
               Date Streak
             </span>
             <p className="font-extrabold text-lg leading-none mt-0.5">
-              3 Dates
+              3 Dates →
             </p>
           </div>
-        </div>
+        </button>
 
-        <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <button
+          className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs hover:border-primary/50 transition cursor-pointer text-left group"
+          onClick={onOpenAnalytics}
+          type="button"
+        >
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary group-hover:scale-110 transition">
             <CalendarHeart className="size-5" />
           </div>
           <div>
@@ -882,13 +873,17 @@ function HomeDashboardView({
               This Month
             </span>
             <p className="font-extrabold text-lg leading-none mt-0.5">
-              4 Bookings
+              4 Bookings →
             </p>
           </div>
-        </div>
+        </button>
 
-        <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
+        <button
+          className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs hover:border-amber-500/50 transition cursor-pointer text-left group"
+          onClick={onOpenAnalytics}
+          type="button"
+        >
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500 group-hover:scale-110 transition">
             <Star className="size-5" />
           </div>
           <div>
@@ -896,13 +891,17 @@ function HomeDashboardView({
               Fav Spots
             </span>
             <p className="font-extrabold text-lg leading-none mt-0.5">
-              12 Places
+              12 Places →
             </p>
           </div>
-        </div>
+        </button>
 
-        <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
+        <button
+          className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs hover:border-purple-500/50 transition cursor-pointer text-left group"
+          onClick={onOpenAnalytics}
+          type="button"
+        >
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500 group-hover:scale-110 transition">
             <Sparkles className="size-5" />
           </div>
           <div>
@@ -910,10 +909,10 @@ function HomeDashboardView({
               Recaps Posted
             </span>
             <p className="font-extrabold text-lg leading-none mt-0.5">
-              5 Recaps
+              5 Recaps →
             </p>
           </div>
-        </div>
+        </button>
       </div>
 
       {/* Quick Date Action Queue Card */}
@@ -930,8 +929,8 @@ function HomeDashboardView({
               Dinner & Arcade Date Prompt
             </h4>
             <p className="text-xs text-muted-foreground max-w-md">
-              High match potential this weekend in Nashville! Queue up this date
-              request in the Matcher to find partners.
+              High match potential this weekend! Queue up this date request in
+              the Matcher to find partners.
             </p>
           </div>
         </div>
@@ -982,6 +981,40 @@ export function MePage({
     DatePlace | undefined
   >();
   const [activeReel, setActiveReel] = useState<ReelData | null>(null);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [customLocationInput, setCustomLocationInput] = useState("");
+  const [userCity, setUserCity] = useState("Nashville, TN");
+  const [weatherText, setWeatherText] = useState(
+    "76°F · Clear & Sunny in Nashville, TN"
+  );
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+          try {
+            const res = await fetch(
+              `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code`
+            );
+            if (res.ok) {
+              const data = (await res.json()) as {
+                current?: { temperature_2m?: number; weather_code?: number };
+              };
+              const tempC = data.current?.temperature_2m ?? 24;
+              const tempF = Math.round((tempC * 9) / 5 + 32);
+              setWeatherText(`☀️ ${tempF}°F · Live Weather in ${userCity}`);
+            }
+          } catch {
+            // Keep fallback format
+          }
+        },
+        () => {},
+        { timeout: 5000 }
+      );
+    }
+  }, [userCity]);
 
   const [summary, setSummary] = useState<DatingSummary | null>(null);
   const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
@@ -1460,6 +1493,21 @@ export function MePage({
     } as Parameters<typeof navigate>[0]);
   };
 
+  const closeDateHistory = () => {
+    setSelectedDateHistoryId(null);
+    setActiveTab("matches");
+    navigate({
+      to: "/me",
+      search: (prev: Record<string, unknown>) => ({
+        ...prev,
+        dateId: undefined,
+        step: undefined,
+        tab: "matches",
+      }),
+      replace: true,
+    } as Parameters<typeof navigate>[0]);
+  };
+
   const handleSignOut = async () => {
     try {
       await authClient.signOut();
@@ -1618,10 +1666,10 @@ export function MePage({
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
-                title="Feed"
+                title="Home"
               >
                 <Home className="size-5 shrink-0" />
-                {!isSidebarCollapsed && <span>Feed</span>}
+                {!isSidebarCollapsed && <span>Home</span>}
               </button>
               <button
                 type="button"
@@ -1821,12 +1869,14 @@ export function MePage({
           {activeTab === "feed" && (
             <HomeDashboardView
               canDate={canDate}
+              onOpenAnalytics={() => setIsAnalyticsOpen(true)}
               onOpenDateHistory={(id) => openDateHistory(id)}
               onOpenPlanDateDrawer={() => {
                 setPresetPlaceForWizard(undefined);
                 setIsPlanDateDrawerOpen(true);
               }}
-              profileArea={profile?.area}
+              profileArea={userCity || profile?.area}
+              weatherText={weatherText}
             />
           )}
 
@@ -1838,10 +1888,7 @@ export function MePage({
                     <Button
                       aria-label="Back to dates"
                       className="mt-0.5 rounded-full"
-                      onClick={() => {
-                        setSelectedDateHistoryId(null);
-                        setDashboardTab("matches");
-                      }}
+                      onClick={() => closeDateHistory()}
                       size="icon-sm"
                       type="button"
                       variant="ghost"
@@ -2157,9 +2204,17 @@ export function MePage({
               <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-bold">Explore Local Spots</h2>
-                  <Badge className="rounded-full bg-primary/10 text-primary font-bold text-[10px] border-0">
-                    Food Recaps
-                  </Badge>
+                  <button
+                    className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary transition hover:bg-primary/20 cursor-pointer"
+                    onClick={() => setIsLocationModalOpen(true)}
+                    type="button"
+                  >
+                    <MapPin className="size-3.5" />
+                    <span>{userCity}</span>
+                    <span className="text-[10px] text-muted-foreground opacity-80">
+                      (Change)
+                    </span>
+                  </button>
                 </div>
 
                 {/* Kibo UI Stories Bar */}
@@ -3234,7 +3289,7 @@ export function MePage({
                 </div>
                 <nav className="flex flex-col gap-2">
                   {[
-                    { icon: Home, label: "Feed", tab: "feed" },
+                    { icon: Home, label: "Home", tab: "feed" },
                     { icon: MapPin, label: "Spots", tab: "spots" },
                     {
                       icon: Heart,
@@ -3333,7 +3388,7 @@ export function MePage({
           <div className="grid grid-cols-5">
             {(
               [
-                { icon: Home, label: "Feed", tab: "feed" },
+                { icon: Home, label: "Home", tab: "feed" },
                 { icon: MapPin, label: "Spots", tab: "spots" },
                 { icon: Heart, label: "Dates", tab: "matches" },
                 { icon: MessageCircle, label: "Chats", tab: "chats" },
@@ -3570,6 +3625,82 @@ export function MePage({
           }}
           reel={activeReel}
         />
+
+        {/* Analytics & Streaks Detail Drawer */}
+        <AnalyticsDrawer
+          isOpen={isAnalyticsOpen}
+          onClose={() => setIsAnalyticsOpen(false)}
+        />
+
+        {/* Location Change Modal */}
+        <Dialog
+          open={isLocationModalOpen}
+          onOpenChange={setIsLocationModalOpen}
+        >
+          <DialogContent className="max-w-md rounded-3xl p-6">
+            <DialogHeader>
+              <DialogTitle className="font-extrabold text-lg">
+                Change Your Location
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Set a city or area to find local date spots and recaps.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (customLocationInput.trim()) {
+                  setUserCity(customLocationInput.trim());
+                  setIsLocationModalOpen(false);
+                  toast.success(
+                    `Location updated to ${customLocationInput.trim()}`
+                  );
+                }
+              }}
+              className="flex flex-col gap-4 mt-2"
+            >
+              <div className="relative">
+                <MapPin className="absolute left-3.5 top-3.5 size-4 text-muted-foreground" />
+                <Input
+                  className="pl-10 rounded-full h-11"
+                  placeholder="e.g. Austin, TX or Chicago, IL"
+                  value={customLocationInput}
+                  onChange={(e) => setCustomLocationInput(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 rounded-full text-xs font-bold"
+                  onClick={() => {
+                    if (navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition(
+                        () => {
+                          toast.success("Using your device GPS location");
+                          setIsLocationModalOpen(false);
+                        },
+                        () => {
+                          toast.error("Geolocation permission denied");
+                        }
+                      );
+                    }
+                  }}
+                >
+                  Use Device GPS
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1 rounded-full text-xs font-bold"
+                >
+                  Save Location
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
