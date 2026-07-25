@@ -55,7 +55,9 @@ import {
   ClipboardList,
   Clock,
   Eye,
+  Compass,
   ExternalLink,
+  Flame,
   Heart,
   Home,
   LogOut,
@@ -70,6 +72,7 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Sun,
   User,
   UserPlus,
   Users,
@@ -89,6 +92,8 @@ import {
   type StepItem,
   type StepKey,
 } from "@/components/ui/horizontal-stepper";
+import { ReelPlayer, type ReelData } from "@/components/ui/reel";
+import { StoriesBar, type StoryItem } from "@/components/ui/stories";
 import type { ChatPerson, DateScenario } from "@/features/chat/chat-types";
 import { DateChat } from "@/features/chat/date-chat";
 import { DateConfirmScreen } from "@/features/chat/date-confirm";
@@ -587,6 +592,53 @@ const getDaysInMonth = (date: Date) => {
   return days;
 };
 
+const sampleRecapStories: StoryItem[] = [
+  {
+    id: "story-1",
+    creatorName: "Maya Lin",
+    creatorAvatar:
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+    spotName: "Barista Parlor",
+    hasUnread: true,
+    caption: "Insane pour-over espresso & croissant date in 12 South! ☕✨",
+    videoUrl:
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+  },
+  {
+    id: "story-2",
+    creatorName: "Alex Rivera",
+    creatorAvatar:
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+    spotName: "Basement East",
+    hasUnread: true,
+    caption: "Live indie night! Highly recommend for a 2nd date spot 🎸🔥",
+    videoUrl:
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+  },
+  {
+    id: "story-3",
+    creatorName: "Sarah Chen",
+    creatorAvatar:
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
+    spotName: "Pins Mechanical",
+    hasUnread: false,
+    caption: "Duckpin bowling champion right here 🎳🏆",
+    videoUrl:
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+  },
+  {
+    id: "story-4",
+    creatorName: "Jordan Vance",
+    creatorAvatar:
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
+    spotName: "Attaboy",
+    hasUnread: true,
+    caption: "Speakeasy vibes & custom craft cocktails 🍸",
+    videoUrl:
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
+  },
+];
+
 function RouteComponent() {
   const search = Route.useSearch();
   return (
@@ -596,6 +648,304 @@ function RouteComponent() {
       initialStep={search.step}
       initialTab={search.tab ?? "feed"}
     />
+  );
+}
+
+function HomeDashboardView({
+  canDate,
+  onOpenPlanDateDrawer,
+  onOpenDateHistory,
+  profileArea,
+}: {
+  canDate: boolean;
+  onOpenPlanDateDrawer: () => void;
+  onOpenDateHistory: (id: string) => void;
+  profileArea?: string;
+}) {
+  void canDate;
+  const [selectedDay, setSelectedDay] = useState<number>(0);
+
+  const days = useMemo(() => {
+    const list = [];
+    const today = new Date();
+    for (let i = 0; i < 7; i += 1) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      list.push({
+        date: d,
+        dayName: d.toLocaleDateString([], { weekday: "short" }),
+        dayNumber: d.getDate(),
+        isToday: i === 0,
+        hasDate: i === 1 || i === 3,
+      });
+    }
+    return list;
+  }, []);
+
+  const activeDayObj = days[selectedDay] ?? days[0];
+
+  return (
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
+      {/* Top Welcome Header */}
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-extrabold text-2xl tracking-tight text-foreground">
+            Welcome back 👋
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Select a day to view upcoming dates, local weather, and date stats.
+          </p>
+        </div>
+
+        {/* Live Weather Forecast Badge */}
+        <div className="mt-2 sm:mt-0 flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-amber-600 shadow-2xs w-fit">
+          <Sun className="size-4 animate-spin-slow text-amber-500" />
+          <span className="font-extrabold text-xs">
+            76°F · Clear & Sunny in {profileArea || "Nashville, TN"}
+          </span>
+        </div>
+      </div>
+
+      {/* Horizontal Day Selector Ribbon */}
+      <div className="flex flex-col gap-2.5 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground">
+            Schedule Ribbon
+          </span>
+          <span className="font-semibold text-xs text-primary">
+            {activeDayObj.date.toLocaleDateString([], {
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none snap-x touch-pan-x">
+          {days.map((item, idx) => {
+            const isSelected = selectedDay === idx;
+            return (
+              <button
+                className={cn(
+                  "relative flex flex-col items-center justify-center rounded-xl p-3 min-w-16 transition cursor-pointer snap-start border",
+                  isSelected
+                    ? "border-primary bg-primary text-primary-foreground shadow-md scale-105"
+                    : "border-border/70 bg-background/70 text-foreground hover:bg-muted"
+                )}
+                key={item.dayNumber}
+                onClick={() => setSelectedDay(idx)}
+                type="button"
+              >
+                <span className="font-bold text-[10px] uppercase opacity-80">
+                  {item.dayName}
+                </span>
+                <span className="font-extrabold text-lg leading-tight mt-0.5">
+                  {item.dayNumber}
+                </span>
+                {item.hasDate ? (
+                  <span
+                    className={cn(
+                      "mt-1 size-1.5 rounded-full",
+                      isSelected ? "bg-white" : "bg-primary"
+                    )}
+                  />
+                ) : (
+                  <span className="mt-1 size-1.5" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Selected Day Event Overview */}
+      <div className="flex flex-col gap-4">
+        <h3 className="font-extrabold text-base tracking-tight text-foreground flex items-center gap-2">
+          <CalendarHeart className="size-4 text-primary" />
+          {activeDayObj.isToday
+            ? "Today's Schedule & Date Itinerary"
+            : `Schedule for ${activeDayObj.dayName}, ${activeDayObj.date.toLocaleDateString([], { month: "short", day: "numeric" })}`}
+        </h3>
+
+        {activeDayObj.hasDate ? (
+          <Card className="rounded-2xl border-primary/30 bg-gradient-to-br from-card via-card to-primary/5 p-4 sm:p-5 shadow-sm">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="relative size-12 shrink-0 rounded-full overflow-hidden border-2 border-primary">
+                    <img
+                      alt="Date partner"
+                      className="size-full object-cover"
+                      src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"
+                    />
+                  </div>
+                  <div>
+                    <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 font-bold text-[10px] border-0 mb-1">
+                      Confirmed Date · 7:30 PM
+                    </Badge>
+                    <h4 className="font-extrabold text-base">
+                      Date with Maya Lin
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Eat + Drink · Dutch Split · Nashville, TN
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  className="rounded-full font-bold text-xs shrink-0"
+                  onClick={() => onOpenDateHistory("demo-date-1")}
+                  size="sm"
+                  type="button"
+                >
+                  View Details
+                </Button>
+              </div>
+
+              <div className="grid gap-2.5 sm:grid-cols-2 rounded-xl border border-border/80 bg-background/60 p-3.5">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs">
+                    1
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-xs truncate">
+                      Stop 1: Barista Parlor
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      Coffee & Pastries · 12 South
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex size-7 items-center justify-center rounded-full bg-sky-500/10 text-sky-500 font-bold text-xs">
+                    2
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-xs truncate">
+                      Stop 2: The Basement East
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      Live Music Venue · East Nashville
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          <Card className="rounded-2xl border-border/80 bg-card/45 p-6 text-center shadow-2xs">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground mb-3">
+              <CalendarHeart className="size-6" />
+            </div>
+            <h4 className="font-extrabold text-base">
+              No dates scheduled for this day
+            </h4>
+            <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+              Queue up a new date request or invite someone from your candidate
+              room.
+            </p>
+            <Button
+              className="mt-4 rounded-full font-bold text-xs mx-auto"
+              onClick={onOpenPlanDateDrawer}
+              size="sm"
+              type="button"
+            >
+              <Plus className="mr-1 size-4" />
+              Plan Date for this Day
+            </Button>
+          </Card>
+        )}
+      </div>
+
+      {/* Date Stats Chart & Metrics */}
+      <div className="grid gap-3 sm:grid-cols-4">
+        <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/10 text-orange-500">
+            <Flame className="size-5" />
+          </div>
+          <div>
+            <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
+              Date Streak
+            </span>
+            <p className="font-extrabold text-lg leading-none mt-0.5">
+              3 Dates
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <CalendarHeart className="size-5" />
+          </div>
+          <div>
+            <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
+              This Month
+            </span>
+            <p className="font-extrabold text-lg leading-none mt-0.5">
+              4 Bookings
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
+            <Star className="size-5" />
+          </div>
+          <div>
+            <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
+              Fav Spots
+            </span>
+            <p className="font-extrabold text-lg leading-none mt-0.5">
+              12 Places
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-card/60 p-4 shadow-2xs">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
+            <Sparkles className="size-5" />
+          </div>
+          <div>
+            <span className="font-bold text-[10px] uppercase tracking-wider text-muted-foreground">
+              Recaps Posted
+            </span>
+            <p className="font-extrabold text-lg leading-none mt-0.5">
+              5 Recaps
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Date Action Queue Card */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold shadow-xs">
+            <Compass className="size-5" />
+          </div>
+          <div>
+            <Badge className="rounded-full bg-primary/20 text-primary font-bold text-[9px] border-0 mb-1">
+              AI Recommendation
+            </Badge>
+            <h4 className="font-extrabold text-base">
+              Dinner & Arcade Date Prompt
+            </h4>
+            <p className="text-xs text-muted-foreground max-w-md">
+              High match potential this weekend in Nashville! Queue up this date
+              request in the Matcher to find partners.
+            </p>
+          </div>
+        </div>
+
+        <Button
+          className="rounded-full font-bold text-xs shrink-0 self-start sm:self-center"
+          onClick={onOpenPlanDateDrawer}
+          type="button"
+        >
+          Queue in Matcher
+          <ChevronRight className="ml-1 size-4" />
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -631,6 +981,7 @@ export function MePage({
   const [presetPlaceForWizard, setPresetPlaceForWizard] = useState<
     DatePlace | undefined
   >();
+  const [activeReel, setActiveReel] = useState<ReelData | null>(null);
 
   const [summary, setSummary] = useState<DatingSummary | null>(null);
   const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
@@ -1001,6 +1352,7 @@ export function MePage({
         new Date(dateB.scheduledAt).getTime()
     )
     .slice(0, 3);
+  void upcomingDates;
   const featuredSpot = spots.find((spot) => spot.photoUrl) ?? spots[0];
   const spotsByCategory = useMemo(() => {
     const grouped: Record<Exclude<SpotCategory, "all">, DatePlace[]> = {
@@ -1465,255 +1817,17 @@ export function MePage({
                 : "lg:col-span-9"
           )}
         >
-          {/* FEED SUB-VIEW */}
+          {/* HOME DASHBOARD & CALENDAR SUB-VIEW */}
           {activeTab === "feed" && (
-            <div className="flex flex-col">
-              <div className="border-b border-border/80 px-5 py-4 sticky top-0 md:top-0 bg-background/90 backdrop-blur-md z-30 flex items-center justify-between">
-                <h2 className="text-xl font-bold">Feed</h2>
-                <Badge
-                  className="rounded-full bg-primary/10 text-primary border-primary/20"
-                  variant="outline"
-                >
-                  Friends & Date Requests
-                </Badge>
-              </div>
-
-              {/* Upcoming Date Widget */}
-              <div className="p-5 border-b border-border/80 bg-card/30 flex flex-col gap-4">
-                <div className="flex items-start gap-4">
-                  <Avatar className="size-10 border">
-                    {profilePhoto && <AvatarImage src={profilePhoto} />}
-                    <AvatarFallback className="font-bold text-xs uppercase bg-primary/15 text-primary">
-                      {displayName.slice(0, 2)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 flex flex-col gap-1.5">
-                    <span className="font-bold text-foreground">
-                      Going out today, {displayName}?
-                    </span>
-                    <p className="text-xs text-muted-foreground">
-                      Your calendar and active date requests live here first, so
-                      the feed stays focused on what is coming up.
-                    </p>
-                  </div>
-                </div>
-                <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
-                  {upcomingDates.map((date) => {
-                    const scheduledAt = new Date(date.scheduledAt);
-                    const placeNames = (date.places ?? [])
-                      .slice(0, 2)
-                      .map((place) => place.name)
-                      .join(" · ");
-
-                    return (
-                      <button
-                        className="min-w-[14rem] flex-1 rounded-2xl border border-primary/25 bg-background/60 p-3 text-left transition hover:border-primary/45 hover:bg-primary/10"
-                        key={date.id}
-                        onClick={() => openDateHistory(date.id)}
-                        type="button"
-                      >
-                        <span className="flex items-start justify-between gap-3">
-                          <span className="flex min-w-0 flex-col gap-1">
-                            <span className="truncate font-bold text-sm">
-                              {date.title}
-                            </span>
-                            <span className="text-muted-foreground text-xs">
-                              {scheduledAt.toLocaleDateString([], {
-                                month: "short",
-                                day: "numeric",
-                              })}{" "}
-                              at{" "}
-                              {scheduledAt.toLocaleTimeString([], {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          </span>
-                          <Badge className="rounded-full text-[10px] capitalize">
-                            {date.status}
-                          </Badge>
-                        </span>
-                        <span className="mt-2 block truncate text-muted-foreground text-xs">
-                          {placeNames || date.area}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {pendingRequests.length > 0 && (
-                <div className="flex flex-col gap-3 border-b border-border/80 p-5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-bold text-sm">Active date requests</h3>
-                    {unreadRequestCount > 0 && (
-                      <Badge className="rounded-full text-[10px]">
-                        {unreadRequestCount} new
-                      </Badge>
-                    )}
-                  </div>
-                  {pendingRequests.slice(0, 3).map((request) => (
-                    <button
-                      className="flex w-full items-start gap-3 rounded-2xl border border-sky-500/45 bg-sky-500/10 p-4 text-left transition hover:border-sky-500/70 hover:bg-sky-500/15"
-                      key={request.id}
-                      onClick={() => {
-                        openDateHistory(request.id);
-                      }}
-                      type="button"
-                    >
-                      <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <CalendarHeart className="size-4" />
-                      </span>
-                      <span className="flex min-w-0 flex-1 flex-col gap-1">
-                        <span className="flex items-center gap-2 font-bold text-sm">
-                          {getDateIntentTitle(request.what)}
-                          <Badge className="rounded-full bg-sky-500/15 text-[9px] text-sky-500">
-                            You sent
-                          </Badge>
-                          {!readRequestIds.includes(request.id) && (
-                            <span className="size-2 rounded-full bg-primary" />
-                          )}
-                        </span>
-                        <span className="mt-1 flex flex-wrap gap-1.5">
-                          {request.what.map((item) => (
-                            <Badge
-                              className="rounded-full text-[10px]"
-                              key={item}
-                              variant="outline"
-                            >
-                              {formatLabel(item)}
-                            </Badge>
-                          ))}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          Matching around {request.searchArea} for{" "}
-                          {new Date(request.scheduledAt).toLocaleString()}
-                        </span>
-                        <span className="mt-1 flex flex-wrap gap-1.5">
-                          {(request.places ?? []).slice(0, 3).map((place) => (
-                            <Badge
-                              className="rounded-full text-[10px]"
-                              key={place.placeId}
-                              variant="secondary"
-                            >
-                              {place.name}
-                            </Badge>
-                          ))}
-                        </span>
-                      </span>
-                      <ChevronRight className="mt-1 size-4 shrink-0 text-muted-foreground" />
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Recaps Feed List */}
-              <div className="flex flex-col divide-y divide-border/70">
-                {allRecaps.length === 0 && (
-                  <div className="p-8 text-center">
-                    <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <CalendarCheck className="size-6" />
-                    </div>
-                    <h3 className="font-bold text-lg">No recaps yet</h3>
-                    <p className="mx-auto mt-2 max-w-md text-muted-foreground text-sm/relaxed">
-                      Friend date recaps and active date-request posts will show
-                      here. After your own date, you can collect photos and
-                      videos into a recap and choose when to post it.
-                    </p>
-                    <Link
-                      to={canDate ? "/date/new" : "/onboarding"}
-                      className={buttonVariants({
-                        className: "mt-5 rounded-full text-sm font-semibold",
-                        size: "sm",
-                      })}
-                    >
-                      {canDate ? "Plan a Date" : "Finish Profile"}
-                    </Link>
-                  </div>
-                )}
-                {allRecaps.map((recap) => (
-                  <article className="p-5 flex flex-col gap-4" key={recap.id}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="size-10 border border-border">
-                          {recap.userAvatar && (
-                            <AvatarImage src={recap.userAvatar} />
-                          )}
-                          <AvatarFallback className="font-bold text-xs bg-muted text-muted-foreground uppercase">
-                            {recap.userName.slice(0, 2)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col text-left">
-                          <span className="font-bold text-sm flex items-center gap-1">
-                            {recap.userName}
-                            <Check className="size-3.5 text-primary fill-primary/10 rounded-full" />
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {new Date(recap.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-
-                      <Badge className="rounded-full" variant="secondary">
-                        Recap
-                      </Badge>
-                    </div>
-
-                    <p className="text-sm/relaxed font-medium text-foreground">
-                      {recap.caption}
-                    </p>
-
-                    <div className="rounded-2xl border border-border/80 p-3 bg-card/40 flex items-center justify-between gap-4">
-                      <div className="flex items-start gap-2.5">
-                        <MapPin className="size-4 text-primary shrink-0 mt-0.5" />
-                        <div>
-                          <p className="font-bold text-xs text-foreground">
-                            {recap.placeName}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {recap.placeAddress}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {recap.photos.length > 0 && (
-                      <div className="aspect-video w-full rounded-2xl overflow-hidden border border-border/80 bg-muted/20">
-                        <img
-                          src={recap.photos[0]}
-                          alt={recap.placeName}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    )}
-
-                    <p className="text-xs text-muted-foreground italic">
-                      Date with{" "}
-                      <span className="font-bold text-foreground">
-                        {recap.personName}
-                      </span>
-                    </p>
-
-                    <div className="flex items-center gap-6 border-t border-border/40 pt-3 text-muted-foreground text-xs font-semibold">
-                      <button
-                        type="button"
-                        className="flex items-center gap-1.5 hover:text-primary transition cursor-pointer"
-                      >
-                        <Heart className="size-4" />
-                        <span>Like</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="flex items-center gap-1.5 hover:text-primary transition cursor-pointer"
-                      >
-                        <MessageSquare className="size-4" />
-                        <span>Comment</span>
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
+            <HomeDashboardView
+              canDate={canDate}
+              onOpenDateHistory={(id) => openDateHistory(id)}
+              onOpenPlanDateDrawer={() => {
+                setPresetPlaceForWizard(undefined);
+                setIsPlanDateDrawerOpen(true);
+              }}
+              profileArea={profile?.area}
+            />
           )}
 
           {activeTab === "matches" && (
@@ -2037,11 +2151,40 @@ export function MePage({
             </div>
           )}
 
-          {/* SPOTS SUB-VIEW (DoorDash Style) */}
+          {/* SPOTS SUB-VIEW (DoorDash & Influencer Recaps Style) */}
           {activeTab === "spots" && (
             <div className="flex flex-col">
               <div className="border-b border-border/80 px-5 py-4 sticky top-0 bg-background/90 backdrop-blur-md z-30 flex flex-col gap-3">
-                <h2 className="text-xl font-bold">Explore Local Spots</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold">Explore Local Spots</h2>
+                  <Badge className="rounded-full bg-primary/10 text-primary font-bold text-[10px] border-0">
+                    Food Recaps
+                  </Badge>
+                </div>
+
+                {/* Kibo UI Stories Bar */}
+                <StoriesBar
+                  stories={sampleRecapStories}
+                  onSelectStory={(story) => {
+                    setActiveReel({
+                      id: story.id,
+                      creatorName: story.creatorName,
+                      creatorAvatar: story.creatorAvatar,
+                      spotName: story.spotName,
+                      spotAddress: profile?.area || "Nashville, TN",
+                      category: "eat",
+                      videoUrl:
+                        story.videoUrl ||
+                        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                      caption: story.caption,
+                      likesCount: 38,
+                    });
+                  }}
+                  onAddStory={() => {
+                    toast.info("Record & upload your spot recap!");
+                  }}
+                />
+
                 {/* Search Bar */}
                 <div className="relative w-full">
                   <Search className="absolute left-3.5 top-3.5 size-4 text-muted-foreground" />
@@ -3407,6 +3550,26 @@ export function MePage({
             </DialogContent>
           </Dialog>
         ) : null}
+
+        {/* Full-Screen Vertical Reel Player Modal */}
+        <ReelPlayer
+          isOpen={Boolean(activeReel)}
+          onClose={() => setActiveReel(null)}
+          onPlanDateAtSpot={(spotName, spotAddress) => {
+            if (!canDate) {
+              navigate({ to: "/onboarding" });
+              return;
+            }
+            setPresetPlaceForWizard({
+              address: spotAddress || "Nashville, TN",
+              name: spotName,
+              placeId: `spot-${Date.now()}`,
+              types: ["restaurant"],
+            });
+            setIsPlanDateDrawerOpen(true);
+          }}
+          reel={activeReel}
+        />
       </div>
     </div>
   );

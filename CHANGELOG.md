@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added Kibo UI-inspired `StoriesBar` component (`apps/web/src/components/ui/stories.tsx`) featuring unread gradient rings for creator food recaps.
+- Added Kibo UI-inspired `ReelPlayer` full-screen vertical video modal (`apps/web/src/components/ui/reel.tsx`) for watching recaps and video replies, complete with venue badge, creator avatar, and instant "Plan Date at Spot" CTA.
+- Re-architected Home Dashboard (`/me`) featuring a horizontal schedule ribbon, live location weather forecast badge (`☀️ 76°F · Clear & Sunny`), upcoming date itinerary card, date stats metrics (streak, monthly bookings, fav spots, recaps), and AI recommendation queue prompt.
 - Added top header notification bell navigation to open `/me?tab=notifications`.
 - Added in-workspace New Date Drawer modal dialog that lets users plan dates with `DateWizard` directly inside `/me` without navigating away.
 - Added mobile-first `HorizontalStepper` component (`Request` -> `Matcher` -> `Choice` -> `Date`) with status badges, step locking, and URL route search param persistence (`/me?tab=matches&dateId=...&step=...`).
