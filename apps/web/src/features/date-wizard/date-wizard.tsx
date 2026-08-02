@@ -57,17 +57,20 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+import { NavigationBlocker } from "@/components/navigation-blocker";
 import { datingApi } from "@/lib/dating-api";
-import type {
-  DateMatch,
-  DatePlace,
-  DateRequestPayload,
-  DateWhat,
-} from "@/lib/dating-api";
+import type { DateMatch, DatePlace, DateWhat } from "@/lib/dating-api";
 
 const steps = ["Plan", "Places", "Matches"] as const;
 
 type WizardWhat = "eat" | "drink" | "play";
+
+type PartyMember = {
+  displayName?: string;
+  email?: string;
+  name?: string;
+  phone?: string;
+};
 
 const activityOptions: { hint: string; label: string; value: WizardWhat }[] = [
   { hint: "Restaurants & food", label: "Eat", value: "eat" },
@@ -139,7 +142,7 @@ const isComboPlace = (types: string[]): boolean => {
 const placeMatchesCategory = (
   place: DatePlace,
   category: WizardWhat,
-  placesByCategory: Record<WizardWhat, DatePlace[]>
+  placesByCategory: Partial<Record<WizardWhat, DatePlace[]>>
 ): boolean => {
   if (placesByCategory[category]?.some((p) => p.placeId === place.placeId)) {
     return true;
@@ -176,7 +179,7 @@ const placeMatchesCategory = (
 const isPlacesSelectionValid = (
   selectedPlaces: DatePlace[],
   categories: WizardWhat[],
-  placesByCategory: Record<WizardWhat, DatePlace[]>
+  placesByCategory: Partial<Record<WizardWhat, DatePlace[]>>
 ): boolean => {
   if (selectedPlaces.length === 0) return false;
   if (selectedPlaces.length > 3) return false;
@@ -231,10 +234,17 @@ const emailPattern = /^\S+@\S+\.\S+$/;
 
 interface DateWizardProps {
   membershipTier: string;
+  onCancel?: () => void;
+  onCreated?: (requestId: string) => void;
   presetPlace?: DatePlace;
 }
 
-export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
+export function DateWizard({
+  membershipTier,
+  onCancel,
+  onCreated,
+  presetPlace,
+}: DateWizardProps) {
   const [step, setStep] = useState(0);
   const [matches, setMatches] = useState<DateMatch[]>([]);
   const [activeMatch, setActiveMatch] = useState<DateMatch | null>(null);
@@ -262,7 +272,7 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
     onSubmit: async ({ value }) => {
       const response = await datingApi.createRequest({
         ...value,
-        partyMembers: value.partyMembers.filter((member) =>
+        partyMembers: value.partyMembers.filter((member: PartyMember) =>
           Boolean(member.email?.trim() || member.phone?.trim())
         ),
         scheduledAt: new Date(value.scheduledAt).toISOString(),
@@ -273,7 +283,10 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
         )
       );
       setStep(2);
-      toast.success("Intro videos are exchanged when a match request is sent.");
+      toast.success("Date request created!");
+      if (onCreated) {
+        onCreated(response.request.id);
+      }
     },
   });
 
@@ -297,7 +310,9 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
         if (under21 && form.getFieldValue("what").includes("drink")) {
           form.setFieldValue(
             "what",
-            form.getFieldValue("what").filter((item) => item !== "drink")
+            form
+              .getFieldValue("what")
+              .filter((item: DateWhat) => item !== "drink")
           );
         }
 
@@ -354,10 +369,15 @@ export function DateWizard({ membershipTier, presetPlace }: DateWizardProps) {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
+      <NavigationBlocker
+        description="You are in the middle of creating a date request. Leaving now will discard your selections."
+        shouldBlock={step > 0 && step < 3}
+        title="Discard Date Request?"
+      />
       <header className="flex flex-col gap-3">
         <Button
           className="w-fit"
-          onClick={() => history.back()}
+          onClick={() => (onCancel ? onCancel() : history.back())}
           type="button"
           variant="ghost"
         >

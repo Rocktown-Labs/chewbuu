@@ -1,6 +1,9 @@
+import "./instrument";
 import { auth } from "@chewbuu/auth";
 import { env } from "@chewbuu/env/server";
 import { apiReference } from "@scalar/hono-api-reference";
+import * as Sentry from "@sentry/hono/node";
+import { sentry } from "@sentry/hono/node";
 import { initLogger } from "evlog";
 import { createAuthMiddleware } from "evlog/better-auth";
 import type { BetterAuthInstance } from "evlog/better-auth";
@@ -13,10 +16,14 @@ import { createRouter } from "./lib/create-app";
 import indexRoute from "./routes";
 import aiRoute from "./routes/ai";
 import authRoute from "./routes/auth";
+import chatRoute from "./routes/chat";
 import datingRoute from "./routes/dating";
 import pricingRoute from "./routes/pricing";
+import realtimeRoute from "./routes/realtime";
+import reviewsRoute from "./routes/reviews";
 import streamRoute from "./routes/stream";
 import uploadRoute from "./routes/upload";
+import { workflowRouter } from "./routes/workflow";
 
 initLogger({
   env: { service: "chewbuu-server" },
@@ -29,6 +36,7 @@ const identifyUser = createAuthMiddleware(auth as BetterAuthInstance, {
 
 const app = createRouter();
 
+app.use(sentry(app));
 app.use(evlog());
 app.use("*", async (c, next) => {
   await identifyUser(c.get("log"), c.req.raw.headers, c.req.path);
@@ -53,6 +61,14 @@ app.doc("/openapi.json", {
   openapi: "3.0.0",
 });
 
+app.get("/debug-sentry", () => {
+  Sentry.logger.info("User triggered test error", {
+    action: "test_error_endpoint",
+  });
+  Sentry.metrics.count("test_counter", 1);
+  throw new Error("My first Sentry error!");
+});
+
 app.get(
   "/docs",
   apiReference({
@@ -67,10 +83,14 @@ const routes = app
   .route("/", indexRoute)
   .route("/", authRoute)
   .route("/", aiRoute)
+  .route("/", chatRoute)
   .route("/", datingRoute)
   .route("/", pricingRoute)
+  .route("/", realtimeRoute)
+  .route("/", reviewsRoute)
   .route("/", streamRoute)
-  .route("/", uploadRoute);
+  .route("/", uploadRoute)
+  .route("/workflows", workflowRouter);
 
 app.notFound(notFound);
 app.onError(onError);

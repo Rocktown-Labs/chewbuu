@@ -7,21 +7,28 @@ import {
   createRootRouteWithContext,
   useNavigate,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createMiddleware } from "@tanstack/react-start";
+import { RealtimeProvider } from "@upstash/realtime/client";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { evlogErrorHandler } from "evlog/nitro/v3";
-import { useEffect } from "react";
+import { Suspense, lazy } from "react";
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
 
+import { authPlugins } from "@/components/auth/auth-plugins";
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { NotFoundPage } from "@/components/not-found-page";
+import { ThemeProvider } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
-import { useThemeStore } from "@/lib/theme";
+import { getApiUrl } from "@/lib/dating-api";
 
 import Header from "../components/header";
 
 import appCss from "../index.css?url";
+
+const AppDevtools = import.meta.env.DEV
+  ? lazy(() => import("@/components/app-devtools"))
+  : () => null;
 
 interface RouterAppContext {
   auth?: never;
@@ -42,39 +49,49 @@ const AuthLink = ({ children, href, to, ...props }: AuthLinkProps) => (
 
 const RootDocument = () => {
   const navigate = useNavigate();
-  const initTheme = useThemeStore((s) => s.initTheme);
-
-  useEffect(() => {
-    initTheme();
-  }, [initTheme]);
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <AuthProvider
-          authClient={authClient}
-          basePaths={{
-            auth: "/auth",
-            organization: "/organization",
-            settings: "/settings",
-          }}
-          Link={AuthLink}
-          navigate={({ to, replace }) => navigate({ replace, to })}
-          redirectTo="/dashboard"
-        >
-          <div className="grid min-h-svh grid-rows-[auto_1fr]">
-            <Header />
-            <Outlet />
-          </div>
-        </AuthProvider>
-        <Toaster richColors />
-        <TanStackRouterDevtools position="bottom-left" />
-        <Analytics />
-        <SpeedInsights />
-        <Scripts />
+        <ThemeProvider defaultTheme="system" storageKey="theme">
+          <AuthProvider
+            authClient={authClient}
+            basePaths={{
+              auth: "/auth",
+              organization: "/organization",
+              settings: "/settings",
+            }}
+            Link={AuthLink}
+            navigate={({ to, replace }) => navigate({ replace, to })}
+            plugins={authPlugins}
+            redirectTo="/me"
+            socialProviders={["google"]}
+          >
+            <RealtimeProvider
+              api={{
+                url: getApiUrl("/realtime"),
+                withCredentials: true,
+              }}
+            >
+              <div className="grid min-h-svh grid-rows-[auto_1fr]">
+                <Header />
+                <Outlet />
+              </div>
+            </RealtimeProvider>
+          </AuthProvider>
+          <Toaster richColors />
+          {import.meta.env.DEV && (
+            <Suspense fallback={null}>
+              <AppDevtools />
+            </Suspense>
+          )}
+          <Analytics />
+          <SpeedInsights />
+          <Scripts />
+        </ThemeProvider>
       </body>
     </html>
   );
@@ -82,6 +99,7 @@ const RootDocument = () => {
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootDocument,
+  notFoundComponent: NotFoundPage,
   head: () => ({
     links: [
       {

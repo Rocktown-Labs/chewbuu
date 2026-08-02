@@ -50,8 +50,10 @@
   },
   "dependencies": {
     "@chewbuu/env": "workspace:*",
+    "@upstash/realtime": "^1.1.0",
+    "@upstash/redis": "^1.38.1",
     "dotenv": "catalog:",
-    "zod": "catalog:"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@chewbuu/config": "workspace:*",

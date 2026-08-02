@@ -6,7 +6,8 @@ interface ApiOptions {
 }
 
 export type MembershipTier = "social" | "mingle" | "sugar";
-export type DateWhat = "eat" | "drink" | "play" | "move" | "watch" | "talk";
+export type DateWhat = "eat" | "drink" | "play";
+export type PlaceSuggestWhat = DateWhat | "move" | "watch" | "talk";
 export type PaymentMode = "dutch" | "requester_covers";
 
 export interface DatingMedia {
@@ -23,13 +24,16 @@ export interface DatingProfilePayload {
   area: string;
   birthday: string;
   bio?: string;
+  username?: string;
   datingModes: string[];
   latitude?: string;
   longitude?: string;
   favoriteThings: string[];
   friendInvites: {
+    circleId?: string;
     email?: string;
     inviteToken?: string;
+    invitePurpose?: "circle_invite" | "friend_referral" | "spouse_invite";
     name?: string;
     phone?: string;
     relationship?: "friend" | "spouse";
@@ -43,6 +47,7 @@ export interface DatingProfilePayload {
   lookingFor: string[];
   maritalStatus?: string;
   media: DatingMedia[];
+  name?: string;
   politics?: string;
   religion?: string;
   safetyOptIn: boolean;
@@ -56,13 +61,27 @@ export interface DatingProfilePayload {
   race?: string;
 }
 
+export type DatingProfileDraftPayload = Partial<
+  Omit<DatingProfilePayload, "media" | "trustedContacts">
+> & {
+  media?: DatingMedia[];
+  trustedContacts?: { email?: string; name?: string; phone?: string }[];
+};
+
 export interface DatePlace {
   address?: string;
+  attributions?: string[];
+  googleMapsUri?: string;
   latitude?: number;
   longitude?: number;
   name: string;
+  openNow?: boolean;
+  photoUrl?: string;
   placeId: string;
+  priceLevel?: string;
   rating?: string;
+  userRatingCount?: number;
+  websiteUri?: string;
   types: string[];
 }
 
@@ -104,7 +123,44 @@ export interface DatingSummary {
     id: string;
     partySize: number;
     status: string;
+    matches?: DateMatch[];
   })[];
+}
+
+export interface ReviewCriterion {
+  key: string;
+  label: string;
+}
+
+export interface DateReviewPayload {
+  personComment?: string;
+  personCriteria: Record<string, number>;
+  personRating: number;
+  placeComment?: string;
+  placeCriteria: Record<string, number>;
+  placeRating: number;
+}
+
+export interface DateReview extends DateReviewPayload {
+  completedAt?: string;
+  dateRequestId: string;
+  id: string;
+  required: boolean;
+  userId: string;
+}
+
+export interface ReviewPrompt {
+  criteria: {
+    person: ReviewCriterion[];
+    place: ReviewCriterion[];
+  };
+  existingReview: DateReview | null;
+  places: DatePlace[];
+  request: {
+    id: string;
+    searchArea: string;
+    status: string;
+  };
 }
 
 export const getServerUrl = (url: string) => {
@@ -182,17 +238,32 @@ export const datingApi = {
       profile: DatingProfilePayload;
       readiness: DatingSummary["readiness"];
     }>("/dating/profile", { body, method: "PUT" }),
+  saveProfileDraft: (body: DatingProfileDraftPayload) =>
+    apiFetch<{
+      profile: DatingProfilePayload;
+      readiness: DatingSummary["readiness"];
+    }>("/dating/profile/draft", { body, method: "PUT" }),
   suggestPlaces: (body: {
     area: string;
     filters: string[];
     latitude?: string;
     longitude?: string;
-    what: DateWhat[];
+    searchKind?: "place" | "signal";
+    what: PlaceSuggestWhat[];
   }) =>
     apiFetch<{ places: DatePlace[] }>("/dating/places/suggest", {
       body,
       method: "POST",
     }),
+  checkIn: (body: {
+    code?: string;
+    dateRequestId?: string;
+    partnerId?: string;
+  }) =>
+    apiFetch<{ dateRequestId: string; message: string; success: boolean }>(
+      "/dating/check-in",
+      { body, method: "POST" }
+    ),
 };
 
 export const pricingApi = {
@@ -211,5 +282,15 @@ export const pricingApi = {
     apiFetch<{ plans: MembershipPlan[] }>("/admin/pricing/plans", {
       body: { plans },
       method: "PUT",
+    }),
+};
+
+export const reviewsApi = {
+  getPrompt: (requestId: string) =>
+    apiFetch<ReviewPrompt>(`/reviews/date-requests/${requestId}`),
+  submit: (requestId: string, body: DateReviewPayload) =>
+    apiFetch<{ review: DateReview }>(`/reviews/date-requests/${requestId}`, {
+      body,
+      method: "POST",
     }),
 };

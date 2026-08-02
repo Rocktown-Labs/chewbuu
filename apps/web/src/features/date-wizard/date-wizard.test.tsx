@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { AnchorHTMLAttributes } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DateWizard } from "./date-wizard";
@@ -10,21 +11,26 @@ const mocks = vi.hoisted(() => ({
   suggestPlaces: vi.fn(),
 }));
 
-vi.mock("@tanstack/react-router", async () => {
-  const React = await import("react");
-
-  return {
-    Link: ({
-      children,
-      to,
-      ...props
-    }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }) => (
-      <a href={to} {...props}>
-        {children}
-      </a>
-    ),
-  };
-});
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    to,
+    ...props
+  }: AnchorHTMLAttributes<HTMLAnchorElement> & {
+    to: string;
+  }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+  notFound: () => new Error("Not Found"),
+  useBlocker: () => ({
+    proceed: vi.fn(),
+    reset: vi.fn(),
+    state: "idle",
+    status: "idle",
+  }),
+}));
 
 vi.mock("@/lib/dating-api", () => ({
   datingApi: {

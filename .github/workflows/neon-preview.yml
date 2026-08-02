@@ -1,0 +1,96 @@
+name: Neon Preview Branch & Migration Management
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - closed
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    name: Setup Branch Name
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.branch_name.outputs.current_branch }}
+    steps:
+      - name: Get branch name
+        id: branch_name
+        uses: tj-actions/branch-names@v8
+
+  manage_neon_branch:
+    name: Create & Migrate Neon Preview Branch
+    needs: setup
+    if: |
+      github.event_name == 'pull_request' && (
+        github.event.action == 'opened' ||
+        github.event.action == 'reopened' ||
+        github.event.action == 'synchronize'
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Get branch expiration date (14 days from now)
+        id: get_expiration_date
+        run: echo "EXPIRES_AT=$(date -u --date '+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
+      - name: Create or Reuse Neon Branch
+        id: create_neon_branch
+        uses: neondatabase/create-branch-action@v6
+        continue-on-error: true
+        with:
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch_name: preview/pr-${{ github.event.number }}
+          expires_at: ${{ env.EXPIRES_AT }}
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+
+      - name: Run Database Migrations
+        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+        run: bun --cwd packages/db db:migrate
+        env:
+          DATABASE_URL: "${{ steps.create_neon_branch.outputs.db_url_with_pooler }}"
+
+  delete_neon_branch:
+    name: Delete Neon Preview Branch on PR Close or Merge
+    needs: setup
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Vercel-managed branch (preview/<head_ref>)
+        uses: neondatabase/delete-branch-action@v3
+        continue-on-error: true
+        with:
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: preview/${{ github.head_ref }}
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+
+      - name: Delete PR number branch (preview/pr-<number>)
+        uses: neondatabase/delete-branch-action@v3
+        continue-on-error: true
+        with:
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: preview/pr-${{ github.event.number }}
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+
+      - name: Delete hyphenated branch (preview-pr-<number>)
+        uses: neondatabase/delete-branch-action@v3
+        continue-on-error: true
+        with:
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: preview-pr-${{ github.event.number }}
+          project_id: ${{ vars.NEON_PROJECT_ID }}

@@ -3,6 +3,7 @@ import {
   useAuth,
   useFetchOptions,
   useSignInEmail,
+  useSignInUsername,
 } from "@better-auth-ui/react";
 import { Button } from "@chewbuu/ui/components/button";
 import {
@@ -27,6 +28,8 @@ import { useIsMutating } from "@tanstack/react-query";
 import { useState } from "react";
 import type { SyntheticEvent } from "react";
 
+import { authClient } from "@/lib/auth-client";
+
 import { ProviderButtons } from "./provider-buttons";
 import type { SocialLayout } from "./provider-buttons";
 
@@ -50,7 +53,6 @@ export function SignIn({
   socialPosition = "bottom",
 }: SignInProps) {
   const {
-    authClient,
     basePaths,
     emailAndPassword,
     localization,
@@ -65,6 +67,10 @@ export function SignIn({
   const { fetchOptions, resetFetchOptions } = useFetchOptions();
 
   const [password, setPassword] = useState("");
+
+  const usernamePluginEnabled = plugins.some(
+    (plugin) => plugin.id === "username"
+  );
 
   const { mutate: signInEmail, isPending: signInEmailPending } = useSignInEmail(
     authClient,
@@ -84,6 +90,15 @@ export function SignIn({
       onSuccess: () => navigate({ to: redirectTo }),
     }
   );
+
+  const { mutate: signInUsername, isPending: signInUsernamePending } =
+    useSignInUsername(authClient, {
+      onError: () => {
+        setPassword("");
+        resetFetchOptions();
+      },
+      onSuccess: () => navigate({ to: redirectTo }),
+    });
 
   const signInMutating = useIsMutating({
     mutationKey: authMutationKeys.signIn.all,
@@ -106,11 +121,21 @@ export function SignIn({
     e.preventDefault();
 
     const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
+    const identifier = formData.get("email") as string;
     const rememberMe = formData.get("rememberMe") === "on";
 
+    if (usernamePluginEnabled && !identifier.includes("@")) {
+      signInUsername({
+        password,
+        username: identifier,
+        ...(emailAndPassword?.rememberMe ? { rememberMe } : {}),
+        fetchOptions,
+      });
+      return;
+    }
+
     signInEmail({
-      email,
+      email: identifier,
       password,
       ...(emailAndPassword?.rememberMe ? { rememberMe } : {}),
       fetchOptions,
@@ -154,15 +179,21 @@ export function SignIn({
               <FieldGroup>
                 <Field data-invalid={!!fieldErrors.email}>
                   <Label htmlFor="email" className="font-semibold text-xs ml-1">
-                    {localization.auth.email}
+                    {usernamePluginEnabled
+                      ? "Email or username"
+                      : localization.auth.email}
                   </Label>
 
                   <Input
                     id="email"
                     name="email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder={localization.auth.emailPlaceholder}
+                    type={usernamePluginEnabled ? "text" : "email"}
+                    autoComplete="username"
+                    placeholder={
+                      usernamePluginEnabled
+                        ? "you@example.com or @username"
+                        : localization.auth.emailPlaceholder
+                    }
                     required
                     disabled={isPending}
                     className="rounded-full h-10 px-4 text-sm bg-background border border-border"
@@ -275,7 +306,9 @@ export function SignIn({
                     disabled={isPending}
                     className="rounded-full h-10 font-bold bg-primary text-primary-foreground"
                   >
-                    {signInEmailPending && <Spinner />}
+                    {(signInEmailPending || signInUsernamePending) && (
+                      <Spinner />
+                    )}
 
                     {localization.auth.signIn}
                   </Button>

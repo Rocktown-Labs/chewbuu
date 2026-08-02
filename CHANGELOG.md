@@ -4,6 +4,132 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-07-20
+
+### Added
+
+- Added a Postgres-backed chat persistence foundation with Upstash Redis Streams/SSE realtime delivery for friend DMs and date rooms.
+- Added Kibo UI-inspired `StoriesBar` component (`apps/web/src/components/ui/stories.tsx`) featuring unread gradient rings for creator food recaps.
+- Added Kibo UI-inspired `ReelPlayer` full-screen vertical video modal (`apps/web/src/components/ui/reel.tsx`) for watching recaps and video replies, complete with venue badge, creator avatar, and instant "Plan Date at Spot" CTA.
+- Re-architected Home Dashboard (`/me`) featuring a horizontal schedule ribbon, live location weather forecast badge (`☀️ 76°F · Clear & Sunny`), upcoming date itinerary card, date stats metrics (streak, monthly bookings, fav spots, recaps), and AI recommendation queue prompt.
+- Added top header notification bell navigation to open `/me?tab=notifications`.
+- Added in-workspace New Date Drawer modal dialog that lets users plan dates with `DateWizard` directly inside `/me` without navigating away.
+- Added mobile-first `HorizontalStepper` component (`Request` -> `Matcher` -> `Choice` -> `Date`) with status badges, step locking, and URL route search param persistence (`/me?tab=matches&dateId=...&step=...`).
+- Added interactive spot search on `DateConfirmScreen` (`Choice` step) powered by live Google Places API searches (`datingApi.suggestPlaces`).
+- Added requester video intro play overlay button (`▶`) on date request cards and a full-screen video player modal.
+- Added requester profile overlay modal with easy back-navigation ("← Back to Date Feed").
+- Added filter pills (`All`, `Received`, `Sent`, `Active`) with count badges to the `Dates & Requests` feed hub.
+- Added Tinder-style "I'm Interested" / "Accept" feed card CTAs for received requests and "Review Candidate Rooms" for sent requests that transition directly into step 2 (`Matcher`).
+- Added TanStack Router `NavigationBlocker` integration across form creation flows (`/date/new`, onboarding, and recap forms).
+
+### Changed
+
+- Redesigned the Request Summary View into a visual Date Itinerary Timeline stepper showing stop numbers, categories, scheduled time, and area.
+- Enforced strict itinerary venue privacy: senders see full venue details, while receivers see category placeholders with lock badges until a match choice is confirmed.
+- Fixed Date Detail back arrow `←` navigation to cleanly clear search params (`dateId`, `step`) and return seamlessly to the date request feed without getting stuck.
+- Redesigned Date Feed cards to feature a large hero video/photo preview thumbnail on the left, date details, and horizontal footer layout inspired by modern card designs.
+- Updated Date Feed card avatar logic: "Sent" requests display the logged-in user's profile avatar so users instantly know they sent it, while "Received" requests display the sender's avatar and match score.
+- Enforced strict URL route state persistence on browser refresh so users stay on their current tab (`/me?tab=...`), date ID, step, and filter without defaulting back to feed.
+- Refactored Date Feed cards to enforce strict venue privacy: venue names and images are kept private until a match choice is confirmed.
+- Updated Date step progression so completed step inputs lock as users progress.
+- Enhanced Date Confirmation flow to lock finalized date details and trigger success toast and calendar schedule updates.
+
+- Added hideable/collapsible venue check-in QR code widget with transparent Chewbuu logo state, partner scanning camera view, and `/dating/check-in` server API check-in integration.
+- Added multi-spot and multi-person Accordion review views with photo/video recap attachments and rating/comment validation.
+- Added full-screen single-page Profile & Onboarding Settings screen (`/me/profile`) allowing users to view and update all onboarding fields.
+- Added mobile sidebar navigation drawer overlay triggered by tapping the header logo on mobile screen sizes.
+- Redesigned Chats and Date rooms for Chewbuu’s dating flow: video-first intro exchange, 3-reply unlock, pick/friend/continue/block CTAs, shadcn Message/Bubble/Attachment/Marker/MessageScroller composition, and real camera/mic capture.
+- Added three walkable demo date scenarios (sent request, received request, friend path) with nested matcher chats and a pre-date confirm screen (sender/receiver POVs, spot adjust/suggest, DiceUI QR check-in, reschedule/cancel penalty dialogs, Open-Meteo weather + Maps directions).
+- Added `@diceui/qr-code` to `@chewbuu/ui` for venue check-in codes with Chewbuu logo overlay.
+- Added Sentry error monitoring and tracing for `apps/web` (TanStack Start React) with client-side Session Replay, server-side error capture via `wrapFetchWithSentry`, TanStack Router browser tracing, and global middleware instrumentation.
+- Added Sentry error monitoring, tracing, and profiling for `apps/server` (Hono) via `@sentry/hono/node` with the `sentry()` middleware and `nodeProfilingIntegration`.
+- Added `instrument.client.ts`, `client.tsx`, `server.ts`, `start.ts`, and `instrument.server.mjs` entry files for the web app's Sentry integration.
+- Added `instrument.ts` for the Hono server's Sentry initialization.
+- Added `sentryTanstackStart` Vite plugin configured for the `chewbuu-web` project.
+- Added `/debug-sentry` test route on the Hono server for manual Sentry validation.
+- Added `/api/sentry-example` test route on the web app for manual Sentry tracing validation.
+- Added `SENTRY_DSN` and `SENTRY_AUTH_TOKEN` to the server env schema.
+
+### Changed
+
+- Expanded full-view layout on Date details and Chat routes by completely hiding the right sidebar and auto-collapsing the left sidebar to icon width (`lg:col-span-11`).
+- Simplified mobile bottom tab bar to exact 5 tabs: Feed, Spots, Dates, Chats, and Calendar.
+- Removed duplicate top header bar on Chats view to let inner chat room header serve as primary header.
+- Updated Dating Readiness checklist to require Better Auth `username`, turning the Profile Details dot red until set.
+- Replaced the X-style sky-blue chat pane with a mobile-first Friends / Date rooms experience, active-date banners that deep-link back to the date page, and no unused call buttons.
+
+## [0.6.4] - 2026-07-19
+
+### Added
+
+- Integrated client-side probabilistic `BloomFilter` data structure and `@tanstack/react-pacer`'s `useDebouncedValue` hook for instant username availability validation during onboarding.
+- Added `username` and `displayUsername` columns to `user` database schema and configured Better Auth `username()` server and client plugins.
+- Added date request scheduling overlap validation to block booking dates within 2 hours of existing ones.
+- Added Vercel Workflow SDK durable workflow scaffolding (`onboardingWorkflow`, `dateMatchingWorkflow`, `recapProcessingWorkflow`, `reviewProcessingWorkflow`) with a `/workflows` Hono router for async invite dispatch, match expiry, recap fan-out, and review aggregation.
+- Added a virtualized `DateRecapFeed` component with infinite-query pagination and Vercel Blob responsive images for the `/me` feed.
+- Added Better Auth `passkey()` server plugin and client passkey support, including a passkey sign-in button on auth views and a passkey management card in profile settings.
+- Added better-auth-ui plugin configuration wiring the username sign-up field, passkey auth button, and Google social provider into the app's auth screens.
+- Added lefthook pre-push hooks that run typechecks and the full test suite before code reaches GitHub.
+
+### Fixed
+
+- Fixed the `/me` route crash (`Can't find variable: tier`) by deriving the `tier` alias from the resolved membership tier.
+- Fixed the dating profile save flow so media-based `canDate` state is computed correctly alongside the new onboarding gates.
+- Fixed the `@tanstack/react-pacer` debouncer options call signature in the username availability checker.
+
+### Changed
+
+- Configured Better Auth session cookie caching (`session.cookieCache`), rate limiting (`rateLimit`), and Google OAuth social provider setup.
+- Added synchronous `beforeLoad` redirects from `/`, `/auth/sign-in`, and `/auth/sign-up` to `/me` for authenticated users.
+- Redesigned the Calendar view to a full-width Month Grid calendar with navigation controls, view selector, today action, and meal-type banner coloring (breakfast, lunch, dinner).
+- Filtered calendar events and date cards list to only show confirmed, review-due, and completed dates.
+- Redesigned date cards below the calendar to simple, flat row dividers featuring large partner avatars, calendar and map pin icons, and badges for location spots.
+- Aligned sidebar navigation links to place the Feed option next to the Calendar title.
+- Restructured the date history detail view into a clean step-by-step navigation tab bar (Setup Details, Match Candidates, Places & Recap) to simplify dating state progression.
+- Implemented a premium custom Video-DM Chat Room component featuring a nested active conversations sidebar, side-by-side intro video mockups, simulated 2-minute video response recorder with timer and pulsing recording indicator, and structured choose/decline CTA prompts.
+- Onboarding readiness now requires a Better Auth username and a safety contact before a profile is marked complete or allowed to date.
+- Sign-in now accepts an email address or a username when the username plugin is enabled.
+- Onboarding now persists the collected username to Better Auth and seeds the field from the session user.
+- Expanded `bun run check-types` coverage to the web app via a new `check-types` script so the pre-push gate type-checks every app and package.
+
+## [0.6.3] - 2026-07-18
+
+### Added
+
+- Added a two-step end-of-date review flow with person/place criteria, comments, and a dedicated reviews API.
+- Added a mock Dates detail view showing date request history, match decisions, date-room history, review entry, and recap content.
+- Added review storage fields and reliability scoring counters for future match ranking penalties on cancels, reschedules, and flakes.
+- Added real Stream friend DM bootstrapping from the Chats route for preview testing live messages between users.
+- Added authenticated private Vercel Blob profile media upload and streaming routes.
+- Added `/me` as the primary authenticated social app route, with `/dashboard` kept as a compatibility redirect.
+- Added active date-request cards and unread request badges to the feed/Dates navigation.
+- Expanded Spots with photo-led sections, richer Google Places metadata, and a protected Google Places photo proxy.
+- Added an authenticated R2 media fallback route for uploaded profile media when no public R2 URL is configured.
+- Added circle and referral tracking storage so onboarding friend invites can feed future free-premium and restaurant-referral rewards.
+- Added first-class `/me` social routes for chats, date details, spots categories, calendar, notifications, and profile.
+- Added a draft profile save endpoint so onboarding progress can persist before required media is ready.
+
+### Changed
+
+- Updated authenticated navigation and auth/onboarding redirects to use `/me`.
+- Updated profile media uploads to use Vercel Blob client uploads for longer intro videos.
+- Updated onboarding media uploads to use the Vercel Blob route in hosted previews.
+- Reframed chat copy around persistent friend DMs and date-request match rooms.
+- Reframed feed and Spots copy around friend recaps, active date requests, and future spot partners.
+- Updated onboarding Friends & Safety so Social users can invite friends as referrals while premium users can turn friend invites into circle members.
+- Updated Stream chat loading to run client-side from the `/me` shell so previews do not SSR-crash on the Stream bundle.
+
+### Fixed
+
+- Fixed uploaded media fallback URLs so attachments no longer save with the dead `storage.chewbuu.local` placeholder.
+- Fixed the Chats route to let Stream own active channel selection so the full message list and composer render.
+- Fixed private Blob video uploads by stripping recorder codec parameters before storage.
+- Fixed Google Places photo loading to proxy media without exposing the server API key.
+- Fixed coordinate-biased Places suggestions so filters and spot searches still shape the results.
+- Fixed the dating summary API to include each request's selected places so the feed's upcoming dates widget no longer crashes on `places.slice`.
+- Linked dashboard readiness checklist items back to the relevant onboarding steps.
+- Removed the duplicate sidebar Chewbuu wordmark from the authenticated app shell.
+
 ## [0.6.2] - 2026-07-18
 
 ### Added

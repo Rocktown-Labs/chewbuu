@@ -1,11 +1,14 @@
 import { expo } from "@better-auth/expo";
+import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
-import { createDb } from "@chewbuu/db";
+import { createDb, ensureSchemaMigrated } from "@chewbuu/db";
 import * as schema from "@chewbuu/db/schema/auth";
 import { env } from "@chewbuu/env/server";
+import { Redis } from "@upstash/redis";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin } from "better-auth/plugins";
+import { admin } from "better-auth/plugins/admin";
+import { username } from "better-auth/plugins/username";
 import { eq } from "drizzle-orm";
 import Stripe from "stripe";
 
@@ -39,12 +42,42 @@ const buildStripePlans = () => [
   },
 ];
 
+export const getRedisClient = () => {
+  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
+    return null;
+  }
+  return new Redis({
+    token: env.UPSTASH_REDIS_REST_TOKEN,
+    url: env.UPSTASH_REDIS_REST_URL,
+  });
+};
+
 export const createAuth = () => {
+  void ensureSchemaMigrated();
   const db = createDb();
   const adminEmails = parseAdminEmails(env.BETTER_AUTH_ADMIN_EMAILS);
   const stripeEnabled = Boolean(
     env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET
   );
+  const redis = getRedisClient();
+
+  const secondaryStorage = redis
+    ? {
+        delete: async (key: string) => {
+          await redis.del(key);
+        },
+        get: async (key: string) => {
+          const val = await redis.get<string | object>(key);
+          if (!val) return null;
+          return typeof val === "string" ? val : JSON.stringify(val);
+        },
+        set: async (key: string, value: string, ttl?: number) => {
+          await (ttl
+            ? redis.set(key, value, { ex: ttl })
+            : redis.set(key, value));
+        },
+      }
+    : undefined;
 
   return betterAuth({
     advanced: {
@@ -64,8 +97,8 @@ export const createAuth = () => {
         "*.chewbuu.com",
         "*.vercel.app",
       ],
-      protocol: process.env.NODE_ENV === "development" ? "http" : "https",
       fallback: env.BETTER_AUTH_URL,
+      protocol: process.env.NODE_ENV === "development" ? "http" : "https",
     },
     database: drizzleAdapter(db, {
       provider: "pg",
@@ -97,6 +130,8 @@ export const createAuth = () => {
     },
     plugins: [
       expo(),
+      username(),
+      passkey(),
       admin({
         adminRoles: ["admin"],
         defaultRole: "user",
@@ -115,12 +150,47 @@ export const createAuth = () => {
           ]
         : []),
     ],
+    rateLimit: {
+      customRules: {
+        "/sign-in/email": {
+          max: 10,
+          window: 60,
+        },
+        "/sign-up/email": {
+          max: 5,
+          window: 60,
+        },
+      },
+      enabled: true,
+      max: 100,
+      storage: secondaryStorage ? "secondary-storage" : "memory",
+      window: 60,
+    },
+    secondaryStorage,
     secret: env.BETTER_AUTH_SECRET,
+    session: {
+      cookieCache: {
+        enabled: true,
+        maxAge: 5 * 60,
+      },
+      expiresIn: 7 * 24 * 60 * 60,
+      storeSessionInDatabase: true,
+      updateAge: 24 * 60 * 60,
+    },
+    socialProviders: {
+      google: {
+        clientId: process.env.GOOGLE_CLIENT_ID || "demo-google-client-id",
+        clientSecret:
+          process.env.GOOGLE_CLIENT_SECRET || "demo-google-client-secret",
+        enabled: true,
+      },
+    },
     trustedOrigins: [
       env.CORS_ORIGIN,
       "chewbuu://",
       "exp://",
       "http://localhost:8081",
+      "https://*.vercel.app",
     ],
     user: {
       additionalFields: {

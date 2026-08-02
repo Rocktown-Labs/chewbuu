@@ -12,9 +12,12 @@
   "scripts": {},
   "dependencies": {
     "@better-auth/expo": "catalog:",
+    "@better-auth/passkey": "1.6.23",
     "@better-auth/stripe": "^1.6.23",
     "@chewbuu/db": "workspace:*",
     "@chewbuu/env": "workspace:*",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.2",

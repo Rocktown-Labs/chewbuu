@@ -11,14 +11,16 @@
     "prefix": ""
   },
   "iconLibrary": "lucide",
+  "menuColor": "default",
+  "menuAccent": "subtle",
   "aliases": {
     "components": "@chewbuu/ui/components",
     "utils": "@chewbuu/ui/lib/utils",
-    "hooks": "@chewbuu/ui/hooks",
+    "ui": "@chewbuu/ui/components",
     "lib": "@chewbuu/ui/lib",
-    "ui": "@chewbuu/ui/components"
+    "hooks": "@chewbuu/ui/hooks"
   },
-  "menuColor": "default",
-  "menuAccent": "subtle",
-  "registries": {}
+  "registries": {
+    "@diceui": "https://diceui.com/r/{style}/{name}.json"
+  }
 }

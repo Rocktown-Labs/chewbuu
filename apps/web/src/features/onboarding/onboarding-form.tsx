@@ -1,5 +1,3 @@
-import { uploadFile } from "@better-upload/client";
-import { Avatar, AvatarFallback } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button } from "@chewbuu/ui/components/button";
 import {
@@ -18,6 +16,7 @@ import {
 } from "@chewbuu/ui/components/field";
 import { Input } from "@chewbuu/ui/components/input";
 import { Progress } from "@chewbuu/ui/components/progress";
+import { ScrollArea, ScrollBar } from "@chewbuu/ui/components/scroll-area";
 import {
   Select,
   SelectContent,
@@ -27,8 +26,14 @@ import {
 } from "@chewbuu/ui/components/select";
 import { Slider } from "@chewbuu/ui/components/slider";
 import { Textarea } from "@chewbuu/ui/components/textarea";
-import { useForm } from "@tanstack/react-form";
-import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  type FormAsyncValidateOrFn,
+  type FormValidateOrFn,
+  type ReactFormExtendedApi,
+  useForm,
+} from "@tanstack/react-form";
+import { useNavigate, useRouter } from "@tanstack/react-router";
+import { upload } from "@vercel/blob/client";
 import {
   Camera,
   Check,
@@ -50,17 +55,19 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { NavigationBlocker } from "@/components/navigation-blocker";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
   getApiUrl,
   pricingApi,
   type DatePlace,
-  type DateWhat,
   type DatingMedia,
   type DatingProfilePayload,
   type MembershipPlan,
+  type PlaceSuggestWhat,
 } from "@/lib/dating-api";
+import { useUsernameChecker } from "@/lib/use-username-checker";
 
 import { useOnboardingStore } from "./onboarding-store";
 
@@ -73,6 +80,9 @@ const steps = [
   "Friends",
   "Premium",
 ] as const;
+const onboardingStepByHash = new Map(
+  steps.map((label, index) => [label.toLowerCase(), index])
+);
 const areaPattern = /^[a-zA-Z .'-]+,\s?[A-Z]{2}$/;
 const sexOptions = [
   "Female",
@@ -290,6 +300,7 @@ const defaultPlans: MembershipPlan[] = [
 
 const defaultValues = {
   name: "",
+  username: "",
   email: "",
   phone: "",
   occupation: "",
@@ -300,8 +311,8 @@ const defaultValues = {
   ageRangeMax: MAXIMUM_MATCH_AGE,
   ageRangeMin: MINIMUM_AGE,
   datingModes: ["solo"],
-  favoriteThings: [],
-  friendInvites: [],
+  favoriteThings: [] as string[],
+  friendInvites: [] as DatingProfilePayload["friendInvites"],
   height: "",
   interestDetails: {} as Record<string, string[]>,
   interestedIn: [] as string[],
@@ -326,8 +337,27 @@ const defaultValues = {
   distanceMiles: 25,
 };
 
-type OnboardingFormApi = any;
-type UploadRoute = "introVideo" | "photo" | "profilePhoto";
+type OnboardingFormValues = typeof defaultValues;
+type OnboardingSyncValidator =
+  | FormValidateOrFn<OnboardingFormValues>
+  | undefined;
+type OnboardingAsyncValidator =
+  | FormAsyncValidateOrFn<OnboardingFormValues>
+  | undefined;
+type OnboardingFormApi = ReactFormExtendedApi<
+  OnboardingFormValues,
+  OnboardingSyncValidator,
+  OnboardingSyncValidator,
+  OnboardingAsyncValidator,
+  OnboardingSyncValidator,
+  OnboardingAsyncValidator,
+  OnboardingSyncValidator,
+  OnboardingAsyncValidator,
+  OnboardingSyncValidator,
+  OnboardingAsyncValidator,
+  OnboardingAsyncValidator,
+  unknown
+>;
 
 const getAge = (birthdayString: string) => {
   const today = new Date();
@@ -371,14 +401,66 @@ const formatValue = (value: string) =>
 
 const formatIdentity = (value: string) => value;
 
-const fileUrlFromUpload = (result: Awaited<ReturnType<typeof uploadFile>>) => {
-  const baseUrl =
-    typeof result.metadata.publicBaseUrl === "string"
-      ? result.metadata.publicBaseUrl.replace(/\/$/, "")
-      : "";
-  const { key } = result.file.objectInfo;
+const cleanUploadFileName = (name: string) =>
+  name
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9._-]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "")
+    .slice(0, 80);
 
-  return baseUrl ? `${baseUrl}/${key}` : `https://storage.chewbuu.local/${key}`;
+const getUploadType = (file: File, kind: DatingMedia["kind"]) => {
+  if (kind === "intro_video") {
+    return file.type.includes("mp4") ? "video/mp4" : "video/webm";
+  }
+
+  if (file.type === "image/svg+xml") {
+    throw new Error("SVG images are not supported. Use a JPG, PNG, or WebP.");
+  }
+
+  if (
+    file.type &&
+    !["image/jpeg", "image/png", "image/webp"].includes(file.type)
+  ) {
+    throw new Error("Use a JPG, PNG, or WebP image.");
+  }
+
+  return file.type || "image/jpeg";
+};
+
+const ensureUploadExtension = (fileName: string, contentType: string) => {
+  const cleanName = cleanUploadFileName(fileName) || "upload";
+
+  if (cleanName.includes(".")) {
+    return cleanName;
+  }
+
+  const extension = contentType.includes("mp4")
+    ? "mp4"
+    : contentType.includes("webm")
+      ? "webm"
+      : contentType.includes("png")
+        ? "png"
+        : contentType.includes("webp")
+          ? "webp"
+          : "jpg";
+
+  return `${cleanName}.${extension}`;
+};
+
+const uploadProfileMedia = async (file: File, kind: DatingMedia["kind"]) => {
+  const contentType = getUploadType(file, kind);
+  const pathname = `profiles/client/${kind}/${crypto.randomUUID()}-${ensureUploadExtension(file.name, contentType)}`;
+  const blob = await upload(pathname, file, {
+    access: "private",
+    clientPayload: JSON.stringify({ slot: kind }),
+    contentType,
+    handleUploadUrl: getApiUrl("/upload/blob/client"),
+    multipart: kind === "intro_video",
+  });
+
+  return getApiUrl(
+    `/upload/blob?pathname=${encodeURIComponent(blob.pathname)}`
+  );
 };
 
 const createEmptyPhoto = (sortOrder: number): DatingMedia => ({
@@ -417,8 +499,8 @@ const formatPhoneNumber = (value: string) => {
 
 export function OnboardingForm() {
   const navigate = useNavigate();
+  const router = useRouter();
   const {
-    profile: persistedProfile,
     step: persistedStep,
     setStep: setPersistedStep,
     setProfile: setPersistedProfile,
@@ -428,8 +510,18 @@ export function OnboardingForm() {
   const [step, setStep] = useState(persistedStep);
   const [plans, setPlans] = useState<MembershipPlan[]>(defaultPlans);
   const [underageBirthday, setUnderageBirthday] = useState("");
+  const [isLeavingOnboarding, setIsLeavingOnboarding] = useState(false);
   const { data: session } = authClient.useSession();
-  const isOnboarded = Boolean(session?.user?.hasCompletedOnboarding);
+
+  const leaveOnboarding = useCallback(
+    async (to: "/me") => {
+      setIsLeavingOnboarding(true);
+      await authClient.getSession();
+      await router.invalidate();
+      await navigate({ replace: true, to });
+    },
+    [navigate, router]
+  );
 
   const form = useForm({
     defaultValues,
@@ -459,28 +551,48 @@ export function OnboardingForm() {
         }
       }
 
+      // Claim the username on Better Auth so it is unique across the platform
+      if (
+        session?.user &&
+        value.username &&
+        value.username !== session.user.username
+      ) {
+        try {
+          const { error: usernameError } = await authClient.updateUser({
+            username: value.username,
+          });
+
+          if (usernameError) {
+            toast.error(
+              usernameError.message ??
+                "That username is taken. Pick another one."
+            );
+            updateStep(0);
+            return;
+          }
+        } catch (error) {
+          console.error("Failed to update username in auth:", error);
+          toast.error("Could not save your username. Try again.");
+          return;
+        }
+      }
+
       await datingApi.saveProfile({
         ...value,
         media,
       });
       clearPersistedOnboarding();
       toast.success("Profile ready. Go find a real date.");
-      await navigate({ to: "/dashboard" });
+      await leaveOnboarding("/me");
     },
   });
 
   // Sync form values to Zustand store as the user edits
   useEffect(() => {
-    const unsub = form.store.subscribe((state) => {
+    const subscription = form.store.subscribe((state) => {
       setPersistedProfile(state.values);
     });
-    return () => {
-      if (typeof unsub === "function") {
-        unsub();
-      } else if (unsub && typeof (unsub as any).unsubscribe === "function") {
-        (unsub as any).unsubscribe();
-      }
-    };
+    return () => subscription.unsubscribe();
   }, [form.store, setPersistedProfile]);
 
   // Load existing profile from API on mount and merge with local persisted values
@@ -498,6 +610,10 @@ export function OnboardingForm() {
         if (session?.user) {
           form.setFieldValue("name", merged.name || session.user.name || "");
           form.setFieldValue("email", merged.email || session.user.email || "");
+          form.setFieldValue(
+            "username",
+            merged.username || session.user.username || ""
+          );
         } else {
           form.setFieldValue("name", merged.name || "");
           form.setFieldValue("email", merged.email || "");
@@ -558,10 +674,21 @@ export function OnboardingForm() {
     void loadPlans();
   }, []);
 
-  const updateStep = (newStep: number) => {
-    setStep(newStep);
-    setPersistedStep(newStep);
-  };
+  const updateStep = useCallback(
+    (newStep: number) => {
+      setStep(newStep);
+      setPersistedStep(newStep);
+    },
+    [setPersistedStep]
+  );
+
+  useEffect(() => {
+    const hash = window.location.hash.replace("#", "").toLowerCase();
+    const hashStep = onboardingStepByHash.get(hash);
+    if (typeof hashStep === "number") {
+      updateStep(hashStep);
+    }
+  }, [updateStep]);
 
   const progress = ((step + 1) / steps.length) * 100;
 
@@ -750,15 +877,19 @@ export function OnboardingForm() {
 
     try {
       toast.loading("Saving progress...", { id: "finish-later" });
-      await datingApi.saveProfile({
+      await datingApi.saveProfileDraft({
         ...values,
         media,
       });
       toast.success("Progress saved.", { id: "finish-later" });
-    } catch {
-      toast.dismiss("finish-later");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not save progress.",
+        { id: "finish-later" }
+      );
+      return;
     }
-    await navigate({ to: "/dashboard" });
+    await leaveOnboarding("/me");
   };
 
   if (underageBirthday) {
@@ -773,6 +904,11 @@ export function OnboardingForm() {
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-7 px-4 py-8">
+      <NavigationBlocker
+        description="You have onboarding setup in progress. If you leave now, you will lose unsaved step entries."
+        shouldBlock={!isLeavingOnboarding && step > 0 && step < 4}
+        title="Unsaved Onboarding Progress"
+      />
       <header className="grid gap-5 lg:grid-cols-[1fr_320px] lg:items-end">
         <div className="flex flex-col gap-3">
           <Badge
@@ -861,24 +997,13 @@ export function OnboardingForm() {
               Back
             </Button>
             <div className="flex flex-wrap items-center gap-3">
-              {isOnboarded && (
-                <Button
-                  className="rounded-full px-5 h-10 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white border-none cursor-pointer"
-                  type="button"
-                  onClick={async () => {
-                    await form.handleSubmit();
-                  }}
-                >
-                  Save & Exit
-                </Button>
-              )}
               <Button
                 className="rounded-full px-5 h-10 font-semibold"
                 onClick={handleFinishLater}
                 type="button"
                 variant="ghost"
               >
-                Finish later
+                Save for later
               </Button>
               {step < steps.length - 1 ? (
                 <Button
@@ -910,6 +1035,52 @@ export function OnboardingForm() {
         </form>
       </div>
     </main>
+  );
+}
+
+function UsernameInput({ field }: { field: any }) {
+  const { status } = useUsernameChecker(field.state.value || "");
+  const inputStateClass =
+    status === "available"
+      ? "border-emerald-500 focus-visible:ring-emerald-500/35"
+      : status === "taken" || status === "invalid"
+        ? "border-destructive focus-visible:ring-destructive/35"
+        : "";
+  return (
+    <Field>
+      <FieldLabel htmlFor={field.name}>Username</FieldLabel>
+      <div className="relative">
+        <Input
+          aria-invalid={status === "taken" || status === "invalid"}
+          className={`h-10 rounded-full px-4 text-sm ${inputStateClass}`}
+          id={field.name}
+          onBlur={field.handleBlur}
+          onChange={(event) => field.handleChange(event.target.value)}
+          placeholder="e.g. alex_vibe"
+          value={field.state.value || ""}
+        />
+      </div>
+      {status === "checking" ? (
+        <FieldDescription className="text-[10px]">
+          Checking availability...
+        </FieldDescription>
+      ) : null}
+      {status === "available" ? (
+        <FieldDescription className="text-[10px] text-emerald-600">
+          Username is available.
+        </FieldDescription>
+      ) : null}
+      {status === "taken" ? (
+        <FieldDescription className="text-[10px] text-destructive">
+          Username is not available.
+        </FieldDescription>
+      ) : null}
+      {status === "invalid" ? (
+        <FieldDescription className="text-[10px] text-destructive">
+          Use at least 3 letters, numbers, or underscores.
+        </FieldDescription>
+      ) : null}
+    </Field>
   );
 }
 
@@ -1009,6 +1180,9 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
                 />
               </Field>
             )}
+          </form.Field>
+          <form.Field name="username">
+            {(field) => <UsernameInput field={field} />}
           </form.Field>
           <form.Field name="email">
             {(field) => (
@@ -1188,7 +1362,6 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
                 index={0}
                 kind="profile_photo"
                 label="Profile photo"
-                route="profilePhoto"
               />
               <MediaSlot
                 accept="video/*"
@@ -1197,7 +1370,6 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
                 index={1}
                 kind="intro_video"
                 label="Intro video"
-                route="introVideo"
               />
             </div>
 
@@ -1206,8 +1378,8 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
                 <div>
                   <h3 className="font-semibold text-lg">Real photo slots</h3>
                   <p className="text-muted-foreground text-sm">
-                    Add up to six more photos from your camera roll to enrich
-                    your profile.
+                    Add up to six more photos from your camera roll or camera to
+                    enrich your profile.
                   </p>
                 </div>
                 <Button
@@ -1248,7 +1420,6 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
                       key={index}
                       kind="photo"
                       label={`Extra Photo ${index - 1}`}
-                      route="photo"
                     />
                   ))}
               </div>
@@ -1544,11 +1715,13 @@ function MultiPillSelect({
 function InterestsStep({ form }: { form: OnboardingFormApi }) {
   return (
     <form.Subscribe
-      selector={(state) => [
-        state.values.interestDetails,
-        state.values.area,
-        state.values.birthday,
-      ]}
+      selector={(state) =>
+        [
+          state.values.interestDetails,
+          state.values.area,
+          state.values.birthday,
+        ] as const
+      }
     >
       {([interestDetails, areaValue, birthdayValue]) => (
         <InterestsStepContent
@@ -1583,17 +1756,18 @@ function InterestsStepContent({
         : interestCategories,
     [age]
   );
-  const [activeCategory, setActiveCategory] = useState(
-    availableInterestCategories[0].label
-  );
+  const [activeCategory, setActiveCategory] = useState<
+    (typeof interestCategories)[number]["label"]
+  >(availableInterestCategories[0].label);
   const [customInterest, setCustomInterest] = useState("");
   const [placesByQuery, setPlacesByQuery] = useState<
     Record<string, DatePlace[]>
   >({});
-  const [activePlaceQuery, setActivePlaceQuery] = useState("");
+  const [searchedPlaceQueries, setSearchedPlaceQueries] = useState<string[]>(
+    []
+  );
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [placeSearch, setPlaceSearch] = useState("");
-  const [placePage, setPlacePage] = useState(1);
 
   const active = useMemo(
     () =>
@@ -1617,11 +1791,10 @@ function InterestsStepContent({
   );
   const placeCacheKey = (query: string) =>
     `${active.label}:${area}:${query.trim().toLowerCase()}`;
-  const activePlaceResults = activePlaceQuery
-    ? (placesByQuery[placeCacheKey(activePlaceQuery)] ?? [])
-    : [];
-  const visiblePlaces = activePlaceResults.slice(0, placePage * 5);
-  const hasMorePlaces = visiblePlaces.length < activePlaceResults.length;
+  const searchedPlaceSections = searchedPlaceQueries.map((query) => ({
+    places: placesByQuery[placeCacheKey(query)] ?? [],
+    query,
+  }));
 
   const toggleValue = (value: string) => {
     const nextValues = selected.includes(value)
@@ -1644,11 +1817,9 @@ function InterestsStepContent({
       return;
     }
 
-    setActivePlaceQuery(trimmedQuery);
-    setPlacePage(1);
-
     const cacheKey = placeCacheKey(trimmedQuery);
     if (placesByQuery[cacheKey]) {
+      setSearchedPlaceQueries([trimmedQuery]);
       return;
     }
 
@@ -1659,15 +1830,56 @@ function InterestsStepContent({
         filters: [trimmedQuery],
         latitude: (form.state.values.latitude as string) || undefined,
         longitude: (form.state.values.longitude as string) || undefined,
-        what: [active.label.toLowerCase() as DateWhat],
+        searchKind: "place",
+        what: [active.label.toLowerCase() as PlaceSuggestWhat],
       });
       setPlacesByQuery((current) => ({
         ...current,
         [cacheKey]: res.places || [],
       }));
+      setSearchedPlaceQueries([trimmedQuery]);
     } catch (error) {
       console.error("Failed to suggest places:", error);
       toast.error("Could not find local spots for that interest.");
+    } finally {
+      setIsLoadingPlaces(false);
+    }
+  };
+
+  const fetchPlacesForSelected = async () => {
+    const queries = selected.filter((item) => item.trim().length > 0);
+    if (queries.length === 0) {
+      toast.message("Choose at least one interest first.");
+      return;
+    }
+
+    setIsLoadingPlaces(true);
+    try {
+      const entries = await Promise.all(
+        queries.map(async (query) => {
+          const cacheKey = placeCacheKey(query);
+          if (placesByQuery[cacheKey]) {
+            return [cacheKey, placesByQuery[cacheKey]] as const;
+          }
+          const res = await datingApi.suggestPlaces({
+            area,
+            filters: [query],
+            latitude: (form.state.values.latitude as string) || undefined,
+            longitude: (form.state.values.longitude as string) || undefined,
+            what: [active.label.toLowerCase() as PlaceSuggestWhat],
+          });
+          return [cacheKey, res.places || []] as const;
+        })
+      );
+
+      setPlacesByQuery((current) => ({
+        ...current,
+        ...Object.fromEntries(entries),
+      }));
+      setSearchedPlaceQueries(queries);
+    } catch (error) {
+      console.error("Failed to suggest places:", error);
+      toast.error("Could not find local spots for those interests.");
     } finally {
       setIsLoadingPlaces(false);
     }
@@ -1703,8 +1915,7 @@ function InterestsStepContent({
               onClick={() => {
                 setActiveCategory(category.label);
                 setPlaceSearch("");
-                setActivePlaceQuery("");
-                setPlacePage(1);
+                setSearchedPlaceQueries([]);
               }}
               className={`rounded-full px-4 py-2 border text-sm font-semibold transition-all duration-200 ${
                 isActive
@@ -1776,34 +1987,43 @@ function InterestsStepContent({
           <div className="mt-4 border-t border-border pt-4">
             <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
               <MapPin className="size-4 text-primary" />
-              Find favorite local {active.label.toLowerCase()} spots in {area}
+              Favorite local {active.label.toLowerCase()} spots
+              <span className="font-semibold text-muted-foreground">
+                (Optional)
+              </span>
             </h4>
             <p className="mb-3 text-muted-foreground text-xs/relaxed">
-              Pick or add the foods, drinks, activities, or movement styles you
-              like first. Then search one signal at a time so we do not burn
-              through Places calls while you are still deciding.
+              Pick the signals you like, then find places around {area}. You can
+              also search a specific spot, city, or state when a favorite is a
+              little outside your usual area.
             </p>
             {selected.length > 0 ? (
-              <div className="mb-3 flex flex-wrap gap-2">
-                {selected.map((item) => (
-                  <Button
-                    className="rounded-full"
-                    disabled={isLoadingPlaces}
-                    key={item}
-                    onClick={() => void fetchPlacesForQuery(item)}
-                    size="sm"
-                    type="button"
-                    variant={activePlaceQuery === item ? "default" : "outline"}
-                  >
-                    {placesByQuery[placeCacheKey(item)] ? "Show" : "Find"}{" "}
-                    {item}
-                  </Button>
-                ))}
+              <div className="mb-3 flex flex-col gap-2">
+                <div className="flex flex-wrap gap-2">
+                  {selected.map((item) => (
+                    <Badge
+                      className="rounded-full px-2.5 py-1 text-[10px]"
+                      key={item}
+                      variant="secondary"
+                    >
+                      {item}
+                    </Badge>
+                  ))}
+                </div>
+                <Button
+                  className="w-fit rounded-full"
+                  disabled={isLoadingPlaces}
+                  onClick={() => void fetchPlacesForSelected()}
+                  size="sm"
+                  type="button"
+                >
+                  Search selected {active.label.toLowerCase()} signals
+                </Button>
               </div>
             ) : (
               <p className="mb-3 rounded-2xl border border-dashed border-border bg-muted/20 p-3 text-muted-foreground text-xs">
-                No local spot search yet. Select a chip above or add a custom
-                interest, then search for places that match it.
+                Select a chip above or add your own signal, then search for
+                local places that match it.
               </p>
             )}
             <div className="flex flex-col gap-2 mb-3 sm:flex-row">
@@ -1816,7 +2036,7 @@ function InterestsStepContent({
                     void fetchPlacesForQuery(placeSearch);
                   }
                 }}
-                placeholder={`Search a specific local ${active.label.toLowerCase()} idea...`}
+                placeholder='Search a spot, city, or idea. Try "Purple Onion Cabot AR"...'
                 value={placeSearch}
               />
               <Button
@@ -1833,58 +2053,66 @@ function InterestsStepContent({
               <p className="text-xs text-muted-foreground animate-pulse">
                 Searching near you...
               </p>
-            ) : !activePlaceQuery ? (
+            ) : searchedPlaceSections.length === 0 ? (
               <p className="text-xs text-muted-foreground italic">
-                Choose an interest above to load local places.
-              </p>
-            ) : activePlaceResults.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">
-                No spots found for {activePlaceQuery}. Try a different signal.
+                Search selected signals or type a specific place idea to see
+                local results.
               </p>
             ) : (
-              <div className="flex flex-col gap-3">
-                <div className="grid gap-2 grid-cols-1 md:grid-cols-2">
-                  {visiblePlaces.map((place) => {
-                    const isFav = activeFavoritePlaces.includes(place.name);
-                    return (
-                      <button
-                        className={`flex items-center justify-between p-3 rounded-xl border text-left text-xs transition duration-250 ${
-                          isFav
-                            ? "border-primary bg-primary/5 text-primary-foreground font-medium"
-                            : "border-border bg-card text-foreground hover:border-border-hover"
-                        }`}
-                        key={place.placeId}
-                        onClick={() => togglePlaceFavorite(place.name)}
-                        type="button"
-                      >
-                        <div>
-                          <p className="font-bold text-foreground">
-                            {place.name}
-                          </p>
-                          {place.address && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {place.address}
-                            </p>
-                          )}
+              <div className="flex flex-col gap-5">
+                {searchedPlaceSections.map(({ places, query }) => (
+                  <section className="flex flex-col gap-2" key={query}>
+                    <div className="flex items-center justify-between gap-3">
+                      <h5 className="font-bold text-xs">Results for {query}</h5>
+                      <Badge className="rounded-full text-[10px]">
+                        Showing {Math.min(places.length, 6)} of {places.length}
+                      </Badge>
+                    </div>
+                    {places.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-border bg-muted/15 p-3 text-muted-foreground text-xs">
+                        No spots found for {query}. Try a named place, nearby
+                        city, or broader search.
+                      </p>
+                    ) : (
+                      <ScrollArea className="w-full pb-3">
+                        <div className="flex w-max gap-2">
+                          {places.slice(0, 6).map((place) => {
+                            const isFav = activeFavoritePlaces.includes(
+                              place.name
+                            );
+                            return (
+                              <button
+                                className={`flex h-20 w-64 shrink-0 items-center justify-between rounded-xl border p-3 text-left text-xs transition duration-250 sm:w-72 ${
+                                  isFav
+                                    ? "border-primary bg-primary/5 font-medium text-primary-foreground"
+                                    : "border-border bg-card text-foreground hover:border-border-hover"
+                                }`}
+                                key={`${query}-${place.placeId}`}
+                                onClick={() => togglePlaceFavorite(place.name)}
+                                type="button"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate font-bold text-foreground">
+                                    {place.name}
+                                  </p>
+                                  {place.address ? (
+                                    <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
+                                      {place.address}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <Heart
+                                  className={`ml-2 size-4 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                                />
+                              </button>
+                            );
+                          })}
                         </div>
-                        <Heart
-                          className={`size-4 ml-2 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-                {hasMorePlaces && (
-                  <Button
-                    className="w-fit rounded-full"
-                    onClick={() => setPlacePage((current) => current + 1)}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                  >
-                    Show next 5
-                  </Button>
-                )}
+                        <ScrollBar orientation="horizontal" />
+                      </ScrollArea>
+                    )}
+                  </section>
+                ))}
               </div>
             )}
           </div>
@@ -2061,12 +2289,14 @@ function ValuesStep({ form }: { form: OnboardingFormApi }) {
 function FriendsStep({ form }: { form: OnboardingFormApi }) {
   return (
     <form.Subscribe
-      selector={(state) => [
-        state.values.friendInvites,
-        state.values.maritalStatus,
-        state.values.membershipTier,
-        state.values.trustedContacts,
-      ]}
+      selector={(state) =>
+        [
+          state.values.friendInvites,
+          state.values.maritalStatus,
+          (state.values as { membershipTier?: string }).membershipTier,
+          state.values.trustedContacts,
+        ] as const
+      }
     >
       {([friendInvites, maritalStatus, membershipTier, trustedContacts]) => {
         const invites = (friendInvites || []) as {
@@ -2133,32 +2363,30 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                 />
                 <div>
                   <h3 className="font-semibold text-base">
-                    Invite friends for circles and group dates
+                    Tell friends about Chewbuu
                   </h3>
                   <p className="text-muted-foreground text-sm">
-                    Mingle and Sugar members can start circles and invite up to
-                    three friends into group dates. Friends join your circle
-                    once they create their account and finish onboarding — until
-                    then their invite stays pending.
+                    Invite up to three friends while you sign up. Mingle and
+                    Sugar members can add them to a named circle for group
+                    dates; Social members still get referral credit when friends
+                    join Chewbuu.
                   </p>
                 </div>
               </div>
-              {canStartCircle ? (
-                <DynamicPeopleList
-                  addLabel="Add friend"
-                  form={form}
-                  items={friends}
-                  path="friendInvites"
-                  relationship="friend"
-                  showName={false}
-                />
-              ) : (
-                <div className="rounded-2xl border border-dashed border-border bg-muted/25 p-4 text-muted-foreground text-sm">
-                  You can join someone else's circle on Social. Choose Mingle or
-                  Sugar on the upgrade step when you are ready to start your own
-                  circle and send friend invites.
-                </div>
-              )}
+              <DynamicPeopleList
+                addLabel="Add friend"
+                form={form}
+                items={friends}
+                maxItems={3}
+                path="friendInvites"
+                relationship="friend"
+                showName={false}
+              />
+              <div className="mt-4 rounded-2xl border border-dashed border-border bg-muted/25 p-4 text-muted-foreground text-sm">
+                {canStartCircle
+                  ? "Your friend invites can become circle members after they create an account and finish onboarding."
+                  : "You can be added to someone else's circle on Social. Upgrade later to create your own circle and move referred friends into it."}
+              </div>
             </div>
 
             <div className="rounded-2xl border bg-background p-5 shadow-sm">
@@ -2194,6 +2422,15 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
   );
 }
 
+interface StripeUpgradeActions {
+  stripe: {
+    upgrade: (input: {
+      priceId: string;
+      callbackURL: string;
+    }) => Promise<{ error: { message: string } | null }>;
+  };
+}
+
 function PremiumStep({
   plans,
   form,
@@ -2217,7 +2454,16 @@ function PremiumStep({
     return `$${annualPrice}/yr`;
   };
 
-  const planDetails = {
+  const planDetails: Record<
+    MembershipPlan["tier"],
+    {
+      tagline: string;
+      highlight: boolean;
+      badge?: string;
+      ctaLabel: string;
+      features: string[];
+    }
+  > = {
     social: {
       tagline: "Solo dating, standard speed",
       highlight: false,
@@ -2274,9 +2520,11 @@ function PremiumStep({
 
     try {
       toast.loading("Redirecting to checkout...", { id: "checkout" });
-      const res = await authClient.stripe.upgrade({
+      const res = await (
+        authClient as unknown as StripeUpgradeActions
+      ).stripe.upgrade({
         priceId,
-        callbackURL: `${window.location.origin}/dashboard`,
+        callbackURL: `${window.location.origin}/me`,
       });
       if (res.error) {
         toast.error(res.error.message, { id: "checkout" });
@@ -2506,7 +2754,6 @@ function MediaSlot({
   index,
   kind,
   label,
-  route,
 }: {
   accept: string;
   form: OnboardingFormApi;
@@ -2514,7 +2761,6 @@ function MediaSlot({
   index: number;
   kind: DatingMedia["kind"];
   label: string;
-  route: UploadRoute;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -2531,14 +2777,7 @@ function MediaSlot({
 
     setIsUploading(true);
     try {
-      const result = await uploadFile({
-        api: getApiUrl("/upload"),
-        credentials: "include",
-        file,
-        metadata: { slot: kind },
-        route,
-      });
-      const url = fileUrlFromUpload(result);
+      const url = await uploadProfileMedia(file, kind);
 
       form.setFieldValue(`media[${index}]`, {
         isPrimary: kind === "profile_photo",
@@ -2630,6 +2869,16 @@ function MediaSlot({
             >
               <Upload className="size-3.5 mr-1 inline" />
               {isUploading ? "Uploading" : "Upload Photo"}
+            </Button>
+            <Button
+              className="rounded-full font-semibold"
+              disabled={isUploading}
+              onClick={() => setIsCaptureOpen(true)}
+              size="sm"
+              type="button"
+            >
+              <Camera className="size-3.5 mr-1 inline" />
+              Take Photo
             </Button>
           </>
         ) : (
@@ -2913,6 +3162,22 @@ function LiveCaptureDialog({
     void getDevices();
   }, [isOpen, selectedDeviceId]);
 
+  const refreshVideoDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter((d) => d.kind === "videoinput");
+      setVideoDevices(videoInputs);
+      if (videoInputs.length > 0 && !selectedDeviceId) {
+        const activeTrackDeviceId = streamRef.current
+          ?.getVideoTracks()[0]
+          ?.getSettings().deviceId;
+        setSelectedDeviceId(activeTrackDeviceId ?? videoInputs[0].deviceId);
+      }
+    } catch (error) {
+      console.error("Error refreshing camera devices:", error);
+    }
+  }, [selectedDeviceId]);
+
   const startCamera = useCallback(async () => {
     try {
       setError(null);
@@ -2942,6 +3207,7 @@ function LiveCaptureDialog({
 
       streamRef.current = mediaStream;
       setStream(mediaStream);
+      await refreshVideoDevices();
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
@@ -2951,7 +3217,7 @@ function LiveCaptureDialog({
         "Camera and Microphone access are required. Please check your browser permissions."
       );
     }
-  }, [clearTimer, mode, selectedDeviceId, stopStream]);
+  }, [clearTimer, mode, refreshVideoDevices, selectedDeviceId, stopStream]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -3040,11 +3306,12 @@ function LiveCaptureDialog({
       }
 
       const mimeType = mediaRecorder.mimeType || "video/webm";
-      const blob = new Blob(chunks, { type: mimeType });
+      const uploadType = mimeType.includes("mp4") ? "video/mp4" : "video/webm";
+      const blob = new Blob(chunks, { type: uploadType });
       const url = URL.createObjectURL(blob);
-      const extension = mimeType.includes("mp4") ? "mp4" : "webm";
+      const extension = uploadType.includes("mp4") ? "mp4" : "webm";
       const file = new File([blob], `intro-video.${extension}`, {
-        type: mimeType,
+        type: uploadType,
       });
       setRecordedUrl(url);
       setCapturedFile(file);
@@ -3106,7 +3373,7 @@ function LiveCaptureDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="relative mt-4 aspect-square md:aspect-video w-full rounded-2xl bg-black overflow-hidden border border-border flex items-center justify-center">
+        <div className="relative mx-auto mt-4 aspect-[3/4] w-full max-w-80 overflow-hidden rounded-2xl border border-border bg-black flex items-center justify-center">
           {error ? (
             <div className="p-4 text-center text-sm text-destructive font-medium">
               {error}

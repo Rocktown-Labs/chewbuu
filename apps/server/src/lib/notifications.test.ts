@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const sessionUser = {
   dailyDateLimit: 2,
+  displayUsername: "taylor",
   email: "user@example.com",
   hasCompletedOnboarding: false,
   hasIntroVideo: false,
@@ -9,6 +10,7 @@ const sessionUser = {
   id: "user-1",
   membershipTier: "social",
   name: "Taylor",
+  username: "taylor",
 };
 
 const loadNotifications = async () => {

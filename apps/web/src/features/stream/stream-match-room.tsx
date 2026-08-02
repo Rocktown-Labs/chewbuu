@@ -212,7 +212,6 @@ function StreamMatchProviders({
 }
 
 function MatchRoomShell({
-  auth,
   conversation,
 }: {
   auth: StreamTokenResponse;

@@ -6,27 +6,26 @@ import * as HttpStatusCodes from "stoker/http-status-codes";
 
 import { getSessionUser } from "../lib/auth-session";
 import { createRouter } from "../lib/create-app";
-import {
-  getStreamClients,
-  toStreamId,
-  upsertStreamUser,
-  upsertSyntheticStreamUser,
-} from "../lib/stream";
+import { toStreamId } from "../lib/stream";
 
 const streamRoute = createRouter();
 
-const assertStreamClients = () => {
-  const clients = getStreamClients();
-
-  if (!clients) {
-    throw new HTTPException(HttpStatusCodes.SERVICE_UNAVAILABLE, {
-      message:
-        "Stream is not configured yet. Add STREAM_API_KEY and STREAM_API_SECRET.",
-    });
-  }
-
-  return clients;
-};
+const demoFriends = [
+  {
+    id: "demo-avery-price",
+    image:
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=256&q=80",
+    name: "Avery Price",
+    text: "Hey, I saw your recap from The Root. Want to try that new taco spot this week?",
+  },
+  {
+    id: "demo-maya-ellis",
+    image:
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=256&q=80",
+    name: "Maya Ellis",
+    text: "I am down for coffee, karaoke, or both. Your move.",
+  },
+] as const;
 
 const getOwnedMatch = async (matchId: string, userId: string) => {
   const [row] = await db
@@ -58,44 +57,29 @@ const getOwnedMatch = async (matchId: string, userId: string) => {
 
 streamRoute.get("/stream/token", async (c) => {
   const sessionUser = await getSessionUser(c.req.raw.headers);
-  const clients = assertStreamClients();
-  const streamUser = await upsertStreamUser(clients, sessionUser);
-  const tokenPayload = { user_id: streamUser.id };
-  const token = clients.streamClient.generateUserToken(tokenPayload);
+  const streamUserId = toStreamId(sessionUser.id);
 
   return c.json({
-    apiKey: clients.apiKey,
-    chatToken: clients.chatClient.createToken(streamUser.id),
-    feedToken: token,
-    name: streamUser.name,
-    userId: streamUser.id,
-    videoToken: token,
+    apiKey: "chewbuu_local_key",
+    chatToken: "chewbuu_local_chat_token",
+    feedToken: "chewbuu_local_feed_token",
+    name: sessionUser.name || sessionUser.email,
+    userId: streamUserId,
+    videoToken: "chewbuu_local_video_token",
   });
 });
 
 streamRoute.post("/stream/matches/:matchId/conversation", async (c) => {
   const sessionUser = await getSessionUser(c.req.raw.headers);
   const match = await getOwnedMatch(c.req.param("matchId"), sessionUser.id);
-  const clients = assertStreamClients();
-  const requester = await upsertStreamUser(clients, sessionUser);
-  const matchedUser = await upsertSyntheticStreamUser(clients, {
-    displayName: match.displayName,
-    id: match.userId,
-    image: match.profilePhotoUrl,
-  });
+  const requesterId = toStreamId(sessionUser.id);
+  const matchedUserId = toStreamId(match.userId);
   const channelId = toStreamId(`match_${match.id}`);
-  const channel = clients.chatClient.channel("messaging", channelId, {
-    created_by_id: requester.id,
-    members: [requester.id, matchedUser.id],
-    name: `${sessionUser.name} & ${match.displayName}`,
-  } as never);
-
-  await channel.watch();
 
   return c.json({
     callId: channelId,
     callType: "default",
-    channelCid: channel.cid,
+    channelCid: `messaging:${channelId}`,
     channelId,
     channelType: "messaging",
     match: {
@@ -109,9 +93,26 @@ streamRoute.post("/stream/matches/:matchId/conversation", async (c) => {
       userId: match.userId,
       videoRepliesRequired: match.videoRepliesRequired,
     },
-    matchedUserId: matchedUser.id,
-    requesterId: requester.id,
+    matchedUserId,
+    requesterId,
   });
+});
+
+streamRoute.post("/stream/chats/demo-friends", async (c) => {
+  const sessionUser = await getSessionUser(c.req.raw.headers);
+  const requesterId = toStreamId(sessionUser.id);
+
+  const channels = demoFriends.map((friend) => {
+    const friendId = toStreamId(friend.id);
+    const channelId = toStreamId(`friend_${requesterId}_${friendId}`);
+    return {
+      cid: `messaging:${channelId}`,
+      friendName: friend.name,
+      id: channelId,
+    };
+  });
+
+  return c.json({ channels });
 });
 
 export default streamRoute;

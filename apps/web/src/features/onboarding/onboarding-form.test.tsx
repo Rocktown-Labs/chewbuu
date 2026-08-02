@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { AnchorHTMLAttributes } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OnboardingForm } from "./onboarding-form";
@@ -9,7 +10,9 @@ const mocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
   getPlans: vi.fn(),
   navigate: vi.fn(),
+  routerInvalidate: vi.fn(),
   saveProfile: vi.fn(),
+  saveProfileDraft: vi.fn(),
   session: {
     data: {
       user: {
@@ -20,27 +23,36 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@tanstack/react-router", async () => {
-  const React = await import("react");
-
-  return {
-    Link: ({
-      children,
-      to,
-      ...props
-    }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }) => (
-      <a href={to} {...props}>
-        {children}
-      </a>
-    ),
-    useNavigate: () => mocks.navigate,
-  };
-});
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    children,
+    to,
+    ...props
+  }: AnchorHTMLAttributes<HTMLAnchorElement> & {
+    to: string;
+  }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+  notFound: () => new Error("Not Found"),
+  useBlocker: () => ({
+    proceed: vi.fn(),
+    reset: vi.fn(),
+    state: "idle",
+    status: "idle",
+  }),
+  useNavigate: () => mocks.navigate,
+  useRouter: () => ({
+    invalidate: mocks.routerInvalidate,
+  }),
+}));
 
 vi.mock("@/lib/dating-api", () => ({
   datingApi: {
     getProfile: mocks.getProfile,
     saveProfile: mocks.saveProfile,
+    saveProfileDraft: mocks.saveProfileDraft,
   },
   getServerUrl: (url: string) => url,
   pricingApi: {
@@ -75,7 +87,9 @@ describe("OnboardingForm", () => {
     mocks.getProfile.mockResolvedValue(null);
     mocks.getPlans.mockResolvedValue({ plans: [] });
     mocks.navigate.mockReset();
+    mocks.routerInvalidate.mockReset();
     mocks.saveProfile.mockReset();
+    mocks.saveProfileDraft.mockReset();
   });
 
   it("renders the redesigned basics step with profile validation fields", async () => {
@@ -110,6 +124,26 @@ describe("OnboardingForm", () => {
       screen.getByRole("button", { name: /camera shutter/i })
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /record live/i })).toBeVisible();
+  });
+
+  it("lets Social users add friend referrals during onboarding", async () => {
+    const user = userEvent.setup();
+
+    render(<OnboardingForm />);
+
+    await screen.findByRole("heading", {
+      name: /tell chewbuu who is going out/i,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Friends" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /chewbuu is better with friends/i,
+      })
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: /add friend/i })).toBeVisible();
+    expect(screen.getByText(/referral credit/i)).toBeVisible();
   });
 
   it("shows an 18 and older stop screen after basics for underage users", async () => {

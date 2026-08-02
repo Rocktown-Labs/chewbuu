@@ -1,7 +1,9 @@
 import { db } from "@chewbuu/db";
-import { and, eq, ilike, or, sql } from "@chewbuu/db/orm";
+import { and, eq, ilike, inArray, or, sql } from "@chewbuu/db/orm";
 import { user } from "@chewbuu/db/schema/auth";
 import {
+  circle,
+  circleMember,
   dateMatch,
   dateRequest,
   dateRequestPartyMember,
@@ -10,6 +12,7 @@ import {
   friendInvite,
   profile,
   profileMedia,
+  referral,
   trustedContact,
 } from "@chewbuu/db/schema/dating";
 import { env } from "@chewbuu/env/server";
@@ -51,8 +54,17 @@ const trustedContactSchema = z.object({
   phone: z.string().optional(),
 });
 
+const trustedContactDraftSchema = z.object({
+  email: z.email().optional().or(z.literal("")),
+  name: z.string().optional(),
+  phone: z.string().optional(),
+});
+
 const friendInviteSchema = z.object({
   email: z.email().optional().or(z.literal("")),
+  invitePurpose: z
+    .enum(["friend_referral", "circle_invite", "spouse_invite"])
+    .optional(),
   name: z.string().optional(),
   phone: z.string().optional(),
   relationship: z.enum(["friend", "spouse"]).default("friend"),
@@ -96,12 +108,14 @@ const profilePayloadSchema = z
     longitude: z.string().optional(),
     maritalStatus: z.string().optional(),
     media: z.array(mediaSchema).max(7).default([]),
+    name: z.string().optional(),
     politics: z.string().optional(),
     religion: z.string().optional(),
     safetyOptIn: z.boolean().default(false),
     sex: requiredString,
     sexuality: requiredString,
     trustedContacts: z.array(trustedContactSchema).max(2).default([]),
+    username: z.string().optional(),
     weight: z.string().optional(),
     wantsKids: z.string().optional(),
     phone: z.string().optional(),
@@ -152,13 +166,65 @@ const profilePayloadSchema = z
     }
   });
 
+const profileDraftPayloadSchema = z.object({
+  ageRangeMax: z
+    .number()
+    .int()
+    .min(minimumProfileAge)
+    .max(maximumMatchAge)
+    .optional(),
+  ageRangeMin: z
+    .number()
+    .int()
+    .min(minimumProfileAge)
+    .max(maximumMatchAge)
+    .optional(),
+  area: z.string().optional(),
+  bio: z.string().optional(),
+  birthday: z.string().optional(),
+  datingModes: stringArray,
+  distanceMiles: z.number().int().min(1).max(250).default(25),
+  favoriteThings: stringArray,
+  friendInvites: z.array(friendInviteSchema).max(12).default([]),
+  height: z.string().optional(),
+  interestDetails: z.record(z.string(), z.array(z.string())).default({}),
+  interestedIn: stringArray,
+  interests: stringArray,
+  kids: z.string().optional(),
+  latitude: z.string().optional(),
+  lookingFor: stringArray,
+  longitude: z.string().optional(),
+  maritalStatus: z.string().optional(),
+  media: z.array(mediaSchema).max(7).default([]),
+  name: z.string().optional(),
+  politics: z.string().optional(),
+  religion: z.string().optional(),
+  safetyOptIn: z.boolean().default(false),
+  sex: z.string().optional(),
+  sexuality: z.string().optional(),
+  trustedContacts: z.array(trustedContactDraftSchema).max(2).default([]),
+  username: z.string().optional(),
+  weight: z.string().optional(),
+  wantsKids: z.string().optional(),
+  phone: z.string().optional(),
+  occupation: z.string().optional(),
+  race: z.string().optional(),
+});
+
 const placeSchema = z.object({
   address: z.string().optional(),
+  attributions: z.array(z.string()).optional(),
+  googleMapsUri: z.string().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   name: requiredString,
+  openNow: z.boolean().optional(),
+  photoUrl: z.string().optional(),
   placeId: requiredString,
+  priceLevel: z.string().optional(),
   rating: z.string().optional(),
+  userRatingCount: z.number().optional(),
+  websiteUri: z.string().optional(),
   types: stringArray,
 });
 
@@ -167,6 +233,7 @@ const placeSuggestSchema = z.object({
   filters: stringArray,
   latitude: z.string().optional(),
   longitude: z.string().optional(),
+  searchKind: z.enum(["place", "signal"]).default("signal"),
   what: z
     .array(z.enum(["eat", "drink", "play", "move", "watch", "talk"]))
     .min(1),
@@ -197,24 +264,39 @@ const dateRequestPayloadSchema = z.object({
 });
 
 type MediaInput = z.infer<typeof mediaSchema>;
+type ProfileDraftInput = z.infer<typeof profileDraftPayloadSchema>;
 type ProfileInput = z.infer<typeof profilePayloadSchema>;
 type RequestInput = z.infer<typeof dateRequestPayloadSchema>;
-type PlaceSuggestionInput = z.infer<typeof placeSuggestSchema>;
+type PlaceSuggestionInput = z.input<typeof placeSuggestSchema>;
 type PlaceSuggestion = z.infer<typeof placeSchema>;
 type GooglePlace = {
+  currentOpeningHours?: {
+    openNow?: boolean;
+  };
   displayName?: {
     text?: string;
   };
   formattedAddress?: string;
+  googleMapsUri?: string;
   id?: string;
   location?: {
     latitude?: number;
     longitude?: number;
   };
   name?: string;
+  photos?: {
+    authorAttributions?: {
+      displayName?: string;
+      uri?: string;
+    }[];
+    name?: string;
+  }[];
+  priceLevel?: string;
   primaryType?: string;
   rating?: number;
   types?: string[];
+  userRatingCount?: number;
+  websiteUri?: string;
 };
 type GooglePlacesTextSearchResponse = {
   places?: GooglePlace[];
@@ -292,6 +374,32 @@ const assertCanDate = async (sessionUser: SessionUser, input: RequestInput) => {
       message: "Daily date booking limit reached.",
     });
   }
+
+  const targetTime = new Date(input.scheduledAt).getTime();
+  const twoHours = 2 * 60 * 60 * 1000;
+
+  const existingRequests: { scheduledAt: Date | string; status: string }[] =
+    isTestRuntime()
+      ? (memory.requests.get(sessionUser.id) ?? [])
+      : await db
+          .select({
+            scheduledAt: dateRequest.scheduledAt,
+            status: dateRequest.status,
+          })
+          .from(dateRequest)
+          .where(eq(dateRequest.userId, sessionUser.id));
+
+  for (const req of existingRequests) {
+    if (req.status === "declined" || req.status === "cancelled") {
+      continue;
+    }
+    const reqTime = new Date(req.scheduledAt).getTime();
+    if (Math.abs(reqTime - targetTime) < twoHours) {
+      throw new HTTPException(HttpStatusCodes.FORBIDDEN, {
+        message: "You already have a date booked within 2 hours of this time.",
+      });
+    }
+  }
 };
 
 type StoredProfile = ProfileInput & {
@@ -308,9 +416,11 @@ type StoredRequest = RequestInput & {
 };
 
 type StoredInvite = {
+  circleId: null | string;
   email: string | null;
   id: string;
   inviteToken: string;
+  invitePurpose: "circle_invite" | "friend_referral" | "spouse_invite";
   name: string | null;
   phone: string | null;
   relationship: "friend" | "spouse";
@@ -320,7 +430,10 @@ type StoredInvite = {
 
 export const mergeInviteRowsForSave = (
   existingInvites: StoredInvite[],
-  inputInvites: ProfileInput["friendInvites"],
+  inputInvites: (ProfileInput["friendInvites"][number] & {
+    circleId?: null | string;
+    invitePurpose?: StoredInvite["invitePurpose"];
+  })[],
   userId: string
 ): StoredInvite[] => {
   const existingInviteByKey = new Map(
@@ -331,9 +444,14 @@ export const mergeInviteRowsForSave = (
     const existingInvite = existingInviteByKey.get(inviteKey(item));
 
     return {
+      circleId: item.circleId ?? existingInvite?.circleId ?? null,
       email: item.email || null,
       id: existingInvite?.id ?? nowId(),
       inviteToken: existingInvite?.inviteToken ?? nowId(),
+      invitePurpose:
+        item.invitePurpose ??
+        existingInvite?.invitePurpose ??
+        (item.relationship === "spouse" ? "spouse_invite" : "friend_referral"),
       name: item.name ?? null,
       phone: item.phone ?? null,
       relationship: item.relationship,
@@ -341,6 +459,19 @@ export const mergeInviteRowsForSave = (
       userId,
     };
   });
+};
+
+export const invitePurposeForMembership = (
+  invite: ProfileInput["friendInvites"][number],
+  membershipTier: string
+): StoredInvite["invitePurpose"] => {
+  if (invite.relationship === "spouse") {
+    return "spouse_invite";
+  }
+
+  return membershipTier === "mingle" || membershipTier === "sugar"
+    ? "circle_invite"
+    : "friend_referral";
 };
 
 const memory = {
@@ -402,18 +533,45 @@ const buildMatches = (requestId: string) => [
   },
 ];
 
+const draftProfileDefaults = {
+  area: "",
+  birthday: "",
+  datingModes: [],
+  distanceMiles: 25,
+  favoriteThings: [],
+  friendInvites: [],
+  interestDetails: {},
+  interestedIn: [],
+  interests: [],
+  lookingFor: [],
+  media: [],
+  safetyOptIn: false,
+  sex: "",
+  sexuality: "",
+  trustedContacts: [],
+} satisfies ProfileInput;
+
 const getReadiness = async (sessionUser: SessionUser) => {
+  const hasUsername = !!(sessionUser.username || sessionUser.displayUsername);
+
   if (isTestRuntime()) {
     const storedProfile = memory.profiles.get(sessionUser.id);
     const pendingReviews = 0;
+    const hasSafetyContact = !!(
+      storedProfile?.safetyOptIn || storedProfile?.trustedContacts?.length
+    );
+    const baseOnboarded =
+      storedProfile?.onboarded ?? sessionUser.hasCompletedOnboarding;
+    const isFullyOnboarded = hasUsername && hasSafetyContact && baseOnboarded;
 
     return {
       canDate:
-        storedProfile?.canDate ??
-        (sessionUser.hasCompletedOnboarding &&
-          sessionUser.hasIntroVideo &&
-          sessionUser.hasProfilePhoto),
-      onboarded: storedProfile?.onboarded ?? sessionUser.hasCompletedOnboarding,
+        (storedProfile?.canDate ??
+          (sessionUser.hasCompletedOnboarding &&
+            sessionUser.hasIntroVideo &&
+            sessionUser.hasProfilePhoto)) &&
+        isFullyOnboarded,
+      onboarded: isFullyOnboarded,
       pendingReviews,
     };
   }
@@ -429,14 +587,27 @@ const getReadiness = async (sessionUser: SessionUser) => {
     .where(
       and(eq(dateReview.userId, sessionUser.id), eq(dateReview.required, true))
     );
+  const safetyContacts = await db
+    .select({ id: trustedContact.id })
+    .from(trustedContact)
+    .where(eq(trustedContact.userId, sessionUser.id))
+    .limit(1);
+
+  const hasSafetyContact = !!(
+    storedProfile?.safetyOptIn || safetyContacts.length > 0
+  );
+  const baseOnboarded =
+    storedProfile?.onboarded ?? sessionUser.hasCompletedOnboarding;
+  const isFullyOnboarded = hasUsername && hasSafetyContact && baseOnboarded;
 
   return {
     canDate:
-      storedProfile?.canDate ??
-      (sessionUser.hasCompletedOnboarding &&
-        sessionUser.hasIntroVideo &&
-        sessionUser.hasProfilePhoto),
-    onboarded: storedProfile?.onboarded ?? sessionUser.hasCompletedOnboarding,
+      (storedProfile?.canDate ??
+        (sessionUser.hasCompletedOnboarding &&
+          sessionUser.hasIntroVideo &&
+          sessionUser.hasProfilePhoto)) &&
+      isFullyOnboarded,
+    onboarded: isFullyOnboarded,
     pendingReviews: pendingReviews.filter((review) => !review.completedAt)
       .length,
   };
@@ -459,16 +630,79 @@ const countBookedToday = async (userId: string) => {
   return requests.filter((request) => request.scheduledAt >= start).length;
 };
 
+const canOwnCircles = (membershipTier: string) =>
+  membershipTier === "mingle" || membershipTier === "sugar";
+
+const getOrCreateOnboardingCircleId = async (sessionUser: SessionUser) => {
+  const [existingCircle] = await db
+    .select()
+    .from(circle)
+    .where(eq(circle.ownerUserId, sessionUser.id))
+    .limit(1);
+
+  if (existingCircle) {
+    return existingCircle.id;
+  }
+
+  const circleId = nowId();
+  await db.insert(circle).values({
+    id: circleId,
+    name: `${sessionUser.name || "My"} Chewbuu Circle`,
+    ownerUserId: sessionUser.id,
+  });
+  await db.insert(circleMember).values({
+    circleId,
+    id: nowId(),
+    role: "owner",
+    userId: sessionUser.id,
+  });
+
+  return circleId;
+};
+
+const buildReferralRows = (inviteRows: StoredInvite[]) =>
+  inviteRows.map((invite) => ({
+    friendInviteId: invite.id,
+    id: nowId(),
+    referredEmail: invite.email,
+    referredPhone: invite.phone,
+    referralType: invite.relationship === "spouse" ? "spouse" : "friend",
+    referrerUserId: invite.userId,
+    rewardStatus: "unqualified",
+    source: "onboarding",
+    status: invite.status === "joined" ? "accepted" : "invited",
+  }));
+
 const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
   const mediaState = hasRequiredMedia(input.media);
   const { canDate } = mediaState;
+  const hasUsername = !!(
+    input.username ||
+    sessionUser.username ||
+    sessionUser.displayUsername
+  );
+  const hasSafetyContact = !!(
+    input.safetyOptIn || input.trustedContacts.length > 0
+  );
   const onboarded =
-    sessionUser.hasCompletedOnboarding ||
-    !!(input.birthday && input.sex && input.sexuality && input.area);
+    hasUsername &&
+    hasSafetyContact &&
+    (sessionUser.hasCompletedOnboarding ||
+      !!(input.birthday && input.sex && input.sexuality && input.area));
+  const inputWithInvitePurposes = {
+    ...input,
+    friendInvites: input.friendInvites.map((invite) => ({
+      ...invite,
+      invitePurpose: invitePurposeForMembership(
+        invite,
+        sessionUser.membershipTier
+      ),
+    })),
+  };
 
   if (isTestRuntime()) {
     const storedProfile = {
-      ...input,
+      ...inputWithInvitePurposes,
       canDate,
       onboarded,
       userId: sessionUser.id,
@@ -574,12 +808,19 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
 
     const storedRelationship: StoredInvite["relationship"] =
       relationship === "spouse" ? "spouse" : "friend";
+    const storedInvitePurpose: StoredInvite["invitePurpose"] =
+      invite.invitePurpose === "circle_invite" ||
+      invite.invitePurpose === "spouse_invite"
+        ? invite.invitePurpose
+        : "friend_referral";
 
     return [
       {
+        circleId: invite.circleId,
         email: invite.email,
         id: invite.id,
         inviteToken: invite.inviteToken,
+        invitePurpose: storedInvitePurpose,
         name: invite.name,
         phone: invite.phone,
         relationship: storedRelationship,
@@ -588,9 +829,25 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
       },
     ];
   });
+  const shouldCreateCircle = inputWithInvitePurposes.friendInvites.some(
+    (invite) => invite.relationship !== "spouse"
+  );
+  const onboardingCircleId =
+    shouldCreateCircle && canOwnCircles(sessionUser.membershipTier)
+      ? await getOrCreateOnboardingCircleId(sessionUser)
+      : null;
+  const normalizedInvites = inputWithInvitePurposes.friendInvites.map(
+    (invite) => {
+      return {
+        ...invite,
+        circleId:
+          invite.invitePurpose === "circle_invite" ? onboardingCircleId : null,
+      };
+    }
+  );
   const inviteRows = mergeInviteRowsForSave(
     existingInviteRows,
-    input.friendInvites,
+    normalizedInvites,
     sessionUser.id
   );
 
@@ -598,6 +855,14 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
   await db
     .delete(trustedContact)
     .where(eq(trustedContact.userId, sessionUser.id));
+  await db
+    .delete(referral)
+    .where(
+      and(
+        eq(referral.referrerUserId, sessionUser.id),
+        eq(referral.source, "onboarding")
+      )
+    );
   await db.delete(friendInvite).where(eq(friendInvite.userId, sessionUser.id));
 
   if (input.media.length > 0) {
@@ -627,6 +892,7 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
 
   if (inviteRows.length > 0) {
     await db.insert(friendInvite).values(inviteRows);
+    await db.insert(referral).values(buildReferralRows(inviteRows));
   }
 
   const notificationRecipients = inviteRows
@@ -673,11 +939,230 @@ const saveProfile = async (sessionUser: SessionUser, input: ProfileInput) => {
   }
 
   return {
-    ...input,
+    ...inputWithInvitePurposes,
     canDate,
     onboarded,
     userId: sessionUser.id,
   };
+};
+
+const saveProfileDraft = async (
+  sessionUser: SessionUser,
+  input: ProfileDraftInput
+) => {
+  const mediaState = hasRequiredMedia(input.media);
+  const completedOnboarding = sessionUser.hasCompletedOnboarding;
+  const trustedContacts = input.trustedContacts.filter(
+    (item): item is { email?: string; name: string; phone?: string } =>
+      !!item.name?.trim() && !!(item.email?.trim() || item.phone?.trim())
+  );
+  const inputWithInvitePurposes = {
+    ...input,
+    friendInvites: input.friendInvites.map((invite) => ({
+      ...invite,
+      invitePurpose: invitePurposeForMembership(
+        invite,
+        sessionUser.membershipTier
+      ),
+    })),
+    trustedContacts,
+  };
+  const storedDraft: StoredProfile = {
+    ...draftProfileDefaults,
+    ...inputWithInvitePurposes,
+    area: input.area ?? "",
+    birthday: input.birthday ?? "",
+    canDate: completedOnboarding && mediaState.canDate,
+    onboarded: completedOnboarding,
+    sex: input.sex ?? "",
+    sexuality: input.sexuality ?? "",
+    trustedContacts,
+    userId: sessionUser.id,
+  };
+
+  if (isTestRuntime()) {
+    memory.profiles.set(sessionUser.id, storedDraft);
+    return storedDraft;
+  }
+
+  const profileId = nowId();
+
+  await db
+    .insert(profile)
+    .values({
+      ageRangeMax: input.ageRangeMax,
+      ageRangeMin: input.ageRangeMin,
+      area: input.area,
+      bio: input.bio,
+      birthday: input.birthday,
+      canDate: storedDraft.canDate,
+      datingModes: input.datingModes,
+      distanceMiles: input.distanceMiles,
+      favoriteThings: input.favoriteThings,
+      height: input.height,
+      id: profileId,
+      interestDetails: input.interestDetails,
+      interestedIn: input.interestedIn,
+      interests: input.interests,
+      introVideoUrl: input.media.find((item) => item.kind === "intro_video")
+        ?.url,
+      kids: input.kids,
+      latitude: input.latitude,
+      lookingFor: input.lookingFor,
+      longitude: input.longitude,
+      maritalStatus: input.maritalStatus,
+      onboarded: completedOnboarding,
+      onboardingCompletedAt: completedOnboarding ? new Date() : null,
+      politics: input.politics,
+      profilePhotoUrl: input.media.find((item) => item.kind === "profile_photo")
+        ?.url,
+      religion: input.religion,
+      safetyOptIn: input.safetyOptIn,
+      sex: input.sex,
+      sexuality: input.sexuality,
+      userId: sessionUser.id,
+      weight: input.weight,
+      wantsKids: input.wantsKids,
+      phone: input.phone,
+      occupation: input.occupation,
+      race: input.race,
+    })
+    .onConflictDoUpdate({
+      set: {
+        ageRangeMax: input.ageRangeMax,
+        ageRangeMin: input.ageRangeMin,
+        area: input.area,
+        bio: input.bio,
+        birthday: input.birthday,
+        canDate: storedDraft.canDate,
+        datingModes: input.datingModes,
+        distanceMiles: input.distanceMiles,
+        favoriteThings: input.favoriteThings,
+        height: input.height,
+        interestDetails: input.interestDetails,
+        interestedIn: input.interestedIn,
+        interests: input.interests,
+        introVideoUrl: input.media.find((item) => item.kind === "intro_video")
+          ?.url,
+        kids: input.kids,
+        latitude: input.latitude,
+        lookingFor: input.lookingFor,
+        longitude: input.longitude,
+        maritalStatus: input.maritalStatus,
+        onboarded: completedOnboarding,
+        onboardingCompletedAt: completedOnboarding ? new Date() : null,
+        politics: input.politics,
+        profilePhotoUrl: input.media.find(
+          (item) => item.kind === "profile_photo"
+        )?.url,
+        religion: input.religion,
+        safetyOptIn: input.safetyOptIn,
+        sex: input.sex,
+        sexuality: input.sexuality,
+        updatedAt: new Date(),
+        weight: input.weight,
+        wantsKids: input.wantsKids,
+        phone: input.phone,
+        occupation: input.occupation,
+        race: input.race,
+      },
+      target: profile.userId,
+    });
+
+  const existingInvites = await db
+    .select()
+    .from(friendInvite)
+    .where(eq(friendInvite.userId, sessionUser.id));
+  const existingInviteRows = existingInvites.flatMap((invite) => {
+    const { relationship } = invite;
+
+    if (relationship !== "friend" && relationship !== "spouse") {
+      return [];
+    }
+
+    const storedRelationship: StoredInvite["relationship"] =
+      relationship === "spouse" ? "spouse" : "friend";
+    const storedInvitePurpose: StoredInvite["invitePurpose"] =
+      invite.invitePurpose === "circle_invite" ||
+      invite.invitePurpose === "spouse_invite"
+        ? invite.invitePurpose
+        : "friend_referral";
+
+    return [
+      {
+        circleId: invite.circleId,
+        email: invite.email,
+        id: invite.id,
+        inviteToken: invite.inviteToken,
+        invitePurpose: storedInvitePurpose,
+        name: invite.name,
+        phone: invite.phone,
+        relationship: storedRelationship,
+        status: invite.status,
+        userId: invite.userId,
+      },
+    ];
+  });
+  const inviteRows = mergeInviteRowsForSave(
+    existingInviteRows,
+    inputWithInvitePurposes.friendInvites,
+    sessionUser.id
+  );
+
+  await db.delete(profileMedia).where(eq(profileMedia.userId, sessionUser.id));
+  await db
+    .delete(trustedContact)
+    .where(eq(trustedContact.userId, sessionUser.id));
+  await db
+    .delete(referral)
+    .where(
+      and(
+        eq(referral.referrerUserId, sessionUser.id),
+        eq(referral.source, "onboarding")
+      )
+    );
+  await db.delete(friendInvite).where(eq(friendInvite.userId, sessionUser.id));
+
+  if (input.media.length > 0) {
+    await db.insert(profileMedia).values(
+      input.media.map((item) => ({
+        id: nowId(),
+        isPrimary: item.isPrimary,
+        kind: item.kind,
+        sortOrder: item.sortOrder,
+        url: item.url,
+        userId: sessionUser.id,
+      }))
+    );
+  }
+
+  if (trustedContacts.length > 0) {
+    await db.insert(trustedContact).values(
+      trustedContacts.map((item) => ({
+        email: item.email || null,
+        id: nowId(),
+        name: item.name,
+        phone: item.phone,
+        userId: sessionUser.id,
+      }))
+    );
+  }
+
+  if (inviteRows.length > 0) {
+    await db.insert(friendInvite).values(inviteRows);
+    await db.insert(referral).values(buildReferralRows(inviteRows));
+  }
+
+  await db
+    .update(user)
+    .set({
+      hasCompletedOnboarding: completedOnboarding,
+      hasIntroVideo: completedOnboarding && mediaState.hasIntroVideo,
+      hasProfilePhoto: completedOnboarding && mediaState.hasProfilePhoto,
+    })
+    .where(eq(user.id, sessionUser.id));
+
+  return storedDraft;
 };
 
 // Circle activation: an invited friend only becomes a circle member once they
@@ -687,6 +1172,39 @@ const syncCircleJoins = async (
   sessionUser: SessionUser,
   joinerPhone?: string
 ) => {
+  const acceptInvite = async (invite: {
+    circleId: null | string;
+    id: string;
+    userId: string;
+  }) => {
+    await db
+      .update(friendInvite)
+      .set({ status: "joined" })
+      .where(eq(friendInvite.id, invite.id));
+    await db
+      .update(referral)
+      .set({
+        acceptedAt: new Date(),
+        referredUserId: sessionUser.id,
+        rewardStatus: "qualified",
+        status: "accepted",
+        updatedAt: new Date(),
+      })
+      .where(eq(referral.friendInviteId, invite.id));
+
+    if (invite.circleId) {
+      await db
+        .insert(circleMember)
+        .values({
+          circleId: invite.circleId,
+          id: nowId(),
+          inviteId: invite.id,
+          userId: sessionUser.id,
+        })
+        .onConflictDoNothing();
+    }
+  };
+
   // Joiner side: this user just finished onboarding, so flip any pending
   // invites other users sent to this email/phone.
   const phoneDigits = joinerPhone?.replaceAll(/\D/g, "");
@@ -704,10 +1222,7 @@ const syncCircleJoins = async (
     isJoinableInvite(invite, { email: sessionUser.email, phone: joinerPhone })
   );
   for (const invite of joinableIncoming) {
-    await db
-      .update(friendInvite)
-      .set({ status: "joined" })
-      .where(eq(friendInvite.id, invite.id));
+    await acceptInvite(invite);
   }
 
   // Inviter side: this user's own pending invites may point at people who
@@ -730,13 +1245,42 @@ const syncCircleJoins = async (
         .update(friendInvite)
         .set({ status: "joined" })
         .where(eq(friendInvite.id, invite.id));
+      await db
+        .update(referral)
+        .set({
+          acceptedAt: new Date(),
+          referredUserId: invitee.id,
+          rewardStatus: "qualified",
+          status: "accepted",
+          updatedAt: new Date(),
+        })
+        .where(eq(referral.friendInviteId, invite.id));
+      if (invite.circleId) {
+        await db
+          .insert(circleMember)
+          .values({
+            circleId: invite.circleId,
+            id: nowId(),
+            inviteId: invite.id,
+            userId: invitee.id,
+          })
+          .onConflictDoNothing();
+      }
     }
   }
 };
 
 const getProfile = async (sessionUser: SessionUser) => {
   if (isTestRuntime()) {
-    return memory.profiles.get(sessionUser.id) ?? null;
+    const storedProfile = memory.profiles.get(sessionUser.id);
+    return storedProfile
+      ? {
+          ...storedProfile,
+          email: sessionUser.email,
+          name: storedProfile.name ?? sessionUser.name,
+          username: sessionUser.username ?? sessionUser.displayUsername ?? "",
+        }
+      : null;
   }
 
   const [storedProfile] = await db
@@ -760,9 +1304,12 @@ const getProfile = async (sessionUser: SessionUser) => {
   return storedProfile
     ? {
         ...storedProfile,
+        email: sessionUser.email,
         friendInvites: invites,
         media,
+        name: sessionUser.name,
         trustedContacts: contacts,
+        username: sessionUser.username ?? sessionUser.displayUsername ?? "",
       }
     : null;
 };
@@ -770,7 +1317,7 @@ const getProfile = async (sessionUser: SessionUser) => {
 const fallbackPlaceSuggestions = (
   input: PlaceSuggestionInput
 ): PlaceSuggestion[] => {
-  const joined = input.filters.join(", ");
+  const joined = (input.filters ?? []).join(", ");
   const baseTypes = input.what;
   const primaryName = baseTypes.includes("drink")
     ? "The Golden Booth"
@@ -782,29 +1329,40 @@ const fallbackPlaceSuggestions = (
     {
       address: `${input.area} dining district`,
       name: primaryName,
+      openNow: true,
       placeId: `mock-${baseTypes.join("-")}-1`,
+      priceLevel: "PRICE_LEVEL_MODERATE",
       rating: "4.7",
+      userRatingCount: 128,
       types: [...baseTypes, joined || "date spot"],
     },
     {
       address: `${input.area} main street`,
       name: "Good Company Social",
+      openNow: true,
       placeId: `mock-${baseTypes.join("-")}-2`,
+      priceLevel: "PRICE_LEVEL_INEXPENSIVE",
       rating: "4.5",
+      userRatingCount: 94,
       types: [...baseTypes, "good for groups"],
     },
     {
       address: `${input.area} near you`,
       name: "The Third Place",
+      openNow: false,
       placeId: `mock-${baseTypes.join("-")}-3`,
+      priceLevel: "PRICE_LEVEL_MODERATE",
       rating: "4.6",
+      userRatingCount: 76,
       types: [...baseTypes, "easy first date"],
     },
   ];
 };
 
 const getGooglePlacesApiKey = () => {
-  const key = env.GOOGLE_PLACES_API_KEY?.trim();
+  const key = (
+    env.GOOGLE_PLACES_API_KEY ?? process.env.GOOGLE_PLACES_API_KEY
+  )?.trim();
   return key && key !== '""' ? key : undefined;
 };
 
@@ -826,22 +1384,49 @@ const CATEGORY_INCLUDED_TYPE: Record<string, string | undefined> = {
   watch: undefined,
 };
 
+const GOOGLE_PLACES_FIELD_MASK = [
+  "places.id",
+  "places.name",
+  "places.displayName",
+  "places.formattedAddress",
+  "places.shortFormattedAddress",
+  "places.rating",
+  "places.userRatingCount",
+  "places.types",
+  "places.primaryType",
+  "places.location",
+  "places.photos",
+  "places.currentOpeningHours",
+  "places.priceLevel",
+  "places.googleMapsUri",
+  "places.websiteUri",
+].join(",");
+
+const toPlacePhotoProxyUrl = (photoName: string) =>
+  `/dating/places/photos?name=${encodeURIComponent(photoName)}`;
+
 export const buildGooglePlacesTextQuery = (input: PlaceSuggestionInput) => {
-  const filters = input.filters.join(" ");
+  const filters = (input.filters ?? []).join(" ");
+  if (input.searchKind === "place" && filters) {
+    return `${filters} near ${input.area}`;
+  }
+
   const categoryIntent = input.what
     .map((item) => CATEGORY_KEYWORDS[item] ?? item)
     .join(" ");
   const descriptors = [filters, categoryIntent].filter(Boolean).join(" ");
 
-  return `${descriptors} in ${input.area}`;
+  return `${descriptors} near ${input.area}`;
 };
 
 export const normalizeGooglePlaces = (
-  places: GooglePlace[] | undefined
+  places: GooglePlace[] | undefined,
+  googlePlacesApiKey = ""
 ): PlaceSuggestion[] =>
   (places ?? []).flatMap((place) => {
     const placeId = place.id ?? place.name?.replace("places/", "");
     const name = place.displayName?.text;
+    const [primaryPhoto] = place.photos ?? [];
 
     if (!placeId || !name) {
       return [];
@@ -862,17 +1447,37 @@ export const normalizeGooglePlaces = (
               longitude: place.location.longitude,
             }
           : {}),
+        ...(place.googleMapsUri ? { googleMapsUri: place.googleMapsUri } : {}),
         name,
+        ...(typeof place.currentOpeningHours?.openNow === "boolean"
+          ? { openNow: place.currentOpeningHours.openNow }
+          : {}),
+        ...(primaryPhoto?.authorAttributions?.length
+          ? {
+              attributions: primaryPhoto.authorAttributions.flatMap(
+                (attribution) =>
+                  attribution.displayName ? [attribution.displayName] : []
+              ),
+            }
+          : {}),
+        ...(primaryPhoto?.name && googlePlacesApiKey
+          ? { photoUrl: toPlacePhotoProxyUrl(primaryPhoto.name) }
+          : {}),
         placeId,
+        ...(place.priceLevel ? { priceLevel: place.priceLevel } : {}),
         ...(typeof place.rating === "number"
           ? { rating: place.rating.toFixed(1) }
           : {}),
+        ...(typeof place.userRatingCount === "number"
+          ? { userRatingCount: place.userRatingCount }
+          : {}),
+        ...(place.websiteUri ? { websiteUri: place.websiteUri } : {}),
         types: Array.from(new Set(types)).slice(0, 6),
       },
     ];
   });
 
-const googlePlacesTextSearch = async (
+const googlePlacesSearch = async (
   input: PlaceSuggestionInput
 ): Promise<PlaceSuggestion[]> => {
   const googlePlacesApiKey = getGooglePlacesApiKey();
@@ -884,9 +1489,16 @@ const googlePlacesTextSearch = async (
   const includedType = input.what
     .map((item) => CATEGORY_INCLUDED_TYPE[item])
     .find(Boolean);
+  const lat = input.latitude ? Number(input.latitude) : undefined;
+  const lng = input.longitude ? Number(input.longitude) : undefined;
+  const hasCoordinates =
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    !Number.isNaN(lat) &&
+    !Number.isNaN(lng);
 
   const body: Record<string, unknown> = {
-    pageSize: 8,
+    pageSize: 12,
     textQuery: buildGooglePlacesTextQuery(input),
   };
 
@@ -894,9 +1506,7 @@ const googlePlacesTextSearch = async (
     body.includedType = includedType;
   }
 
-  const lat = input.latitude ? Number(input.latitude) : undefined;
-  const lng = input.longitude ? Number(input.longitude) : undefined;
-  if (lat && lng && !Number.isNaN(lat) && !Number.isNaN(lng)) {
+  if (hasCoordinates) {
     body.locationBias = {
       circle: {
         center: { latitude: lat, longitude: lng },
@@ -913,8 +1523,7 @@ const googlePlacesTextSearch = async (
         headers: {
           "content-type": "application/json",
           "x-goog-api-key": googlePlacesApiKey,
-          "x-goog-fieldmask":
-            "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.primaryType,places.location",
+          "x-goog-fieldmask": GOOGLE_PLACES_FIELD_MASK,
         },
         method: "POST",
       }
@@ -932,7 +1541,7 @@ const googlePlacesTextSearch = async (
       return fallbackPlaceSuggestions(input);
     }
 
-    const places = normalizeGooglePlaces(data.places);
+    const places = normalizeGooglePlaces(data.places, googlePlacesApiKey);
     return places.length > 0 ? places : fallbackPlaceSuggestions(input);
   } catch (error) {
     console.error("Google Places request failed:", error);
@@ -1023,13 +1632,47 @@ const createDateRequest = async (
 
 const listRequests = async (sessionUser: SessionUser) => {
   if (isTestRuntime()) {
-    return memory.requests.get(sessionUser.id) ?? [];
+    const reqs = memory.requests.get(sessionUser.id) ?? [];
+    return reqs.map((req) => ({
+      ...req,
+      matches: memory.matches.get(req.id) ?? buildMatches(req.id),
+    }));
   }
 
-  return db
+  const requests = await db
     .select()
     .from(dateRequest)
     .where(eq(dateRequest.userId, sessionUser.id));
+
+  if (requests.length === 0) {
+    return [];
+  }
+
+  const places = await db
+    .select()
+    .from(dateRequestPlace)
+    .where(
+      inArray(
+        dateRequestPlace.requestId,
+        requests.map((request) => request.id)
+      )
+    );
+
+  const matches = await db
+    .select()
+    .from(dateMatch)
+    .where(
+      inArray(
+        dateMatch.requestId,
+        requests.map((request) => request.id)
+      )
+    );
+
+  return requests.map((request) => ({
+    ...request,
+    places: places.filter((place) => place.requestId === request.id),
+    matches: matches.filter((match) => match.requestId === request.id),
+  }));
 };
 
 const listMatches = async (requestId: string) => {
@@ -1069,6 +1712,22 @@ const router = createRouter()
     }
     const body = parsed.data;
     const savedProfile = await saveProfile(sessionUser, body);
+    const readiness = await getReadiness({
+      ...sessionUser,
+      username: body.username ?? sessionUser.username,
+    });
+
+    return c.json({ profile: savedProfile, readiness });
+  })
+  .put("/dating/profile/draft", async (c) => {
+    const sessionUser = await getSessionUser(c.req.raw.headers);
+    const parsed = profileDraftPayloadSchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      throw new HTTPException(HttpStatusCodes.UNPROCESSABLE_ENTITY, {
+        message: parsed.error.issues[0]?.message ?? "Profile draft is invalid.",
+      });
+    }
+    const savedProfile = await saveProfileDraft(sessionUser, parsed.data);
     const readiness = await getReadiness(sessionUser);
 
     return c.json({ profile: savedProfile, readiness });
@@ -1077,7 +1736,45 @@ const router = createRouter()
     await getSessionUser(c.req.raw.headers);
     const body = placeSuggestSchema.parse(await c.req.json());
 
-    return c.json({ places: await googlePlacesTextSearch(body) });
+    return c.json({ places: await googlePlacesSearch(body) });
+  })
+  .get("/dating/places/photos", async (c) => {
+    await getSessionUser(c.req.raw.headers);
+    const googlePlacesApiKey = getGooglePlacesApiKey();
+    const photoName = c.req.query("name");
+
+    if (!googlePlacesApiKey || !photoName?.startsWith("places/")) {
+      throw new HTTPException(HttpStatusCodes.NOT_FOUND, {
+        message: "Place photo is unavailable.",
+      });
+    }
+
+    const photoResponse = await fetch(
+      `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=960`,
+      {
+        headers: {
+          "x-goog-api-key": googlePlacesApiKey,
+        },
+        redirect: "follow",
+      }
+    );
+
+    if (!(photoResponse.ok && photoResponse.body)) {
+      throw new HTTPException(HttpStatusCodes.NOT_FOUND, {
+        message: "Place photo is unavailable.",
+      });
+    }
+
+    const headers = new Headers();
+    const contentType = photoResponse.headers.get("content-type");
+    const cacheControl = photoResponse.headers.get("cache-control");
+    if (contentType) {
+      headers.set("content-type", contentType);
+    }
+    headers.set("cache-control", cacheControl ?? "private, max-age=3600");
+    headers.set("x-content-type-options", "nosniff");
+
+    return new Response(photoResponse.body, { headers });
   })
   .get("/dating/requests", async (c) => {
     const sessionUser = await getSessionUser(c.req.raw.headers);
@@ -1098,6 +1795,32 @@ const router = createRouter()
     const matches = await listMatches(c.req.param("id"));
 
     return c.json({ matches });
+  })
+  .post("/dating/check-in", async (c) => {
+    const sessionUser = await getSessionUser(c.req.raw.headers);
+    const body = (await c.req.json().catch(() => ({}))) as {
+      code?: string;
+      dateRequestId?: string;
+      partnerId?: string;
+    };
+
+    if (!isTestRuntime() && body.dateRequestId) {
+      await db
+        .update(dateRequest)
+        .set({ status: "checked_in" })
+        .where(
+          and(
+            eq(dateRequest.id, body.dateRequestId),
+            eq(dateRequest.userId, sessionUser.id)
+          )
+        );
+    }
+
+    return c.json({
+      dateRequestId: body.dateRequestId ?? "demo-date",
+      message: "Check-in confirmed! Enjoy your date.",
+      success: true,
+    });
   });
 
 export default router;

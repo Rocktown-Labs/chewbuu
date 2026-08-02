@@ -1,5 +1,5 @@
 import { AuthProvider as AuthProviderPrimitive } from "@better-auth-ui/react";
-import type { AuthProviderProps } from "@better-auth-ui/react";
+import type { AuthPlugin, AuthProviderProps } from "@better-auth-ui/react";
 import type {
   ComponentPropsWithoutRef,
   ComponentType,
@@ -28,6 +28,14 @@ declare module "@better-auth-ui/core" {
   /** Widen `AdditionalField.label` to `ReactNode` in the shadcn package. */
   interface AdditionalFieldRegister {
     label: ReactNode;
+  }
+
+  /**
+   * Register the React-flavored auth plugin type (auth buttons, captcha slot,
+   * settings cards) so `useAuth().plugins` exposes component slots.
+   */
+  interface AuthPluginRegister {
+    chewbuu: AuthPlugin;
   }
 }
 
