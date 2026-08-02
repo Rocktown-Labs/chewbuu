@@ -63,7 +63,6 @@ import {
   Eye,
   Compass,
   ExternalLink,
-  Flame,
   Heart,
   Home,
   LogOut,
@@ -846,31 +845,26 @@ function HomeDashboardView({
       </div>
 
       {/* Dynamic Interactive Hero Stat Cards */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Date Streak -> Analytics Drawer */}
         <button
           aria-label="View date streak analytics and badges"
-          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-amber-500/60 hover:shadow-md cursor-pointer text-left"
+          className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-amber-500/30 bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-amber-500/60 hover:shadow-md"
           onClick={onOpenAnalytics}
           type="button"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500 text-white font-extrabold shadow-md group-hover:scale-110 transition">
-              <Flame className="size-5 animate-pulse" />
-            </div>
-            <Badge className="rounded-full bg-amber-500/20 text-amber-600 font-extrabold text-[10px] border-0">
-              🔥 3 In a Row
-            </Badge>
-          </div>
+          <Badge className="w-fit rounded-full border-0 bg-amber-500/20 font-extrabold text-[10px] text-amber-600">
+            🔥 3 In a Row
+          </Badge>
 
-          <div className="mt-4">
-            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mt-5">
+            <span className="font-extrabold text-[10px] uppercase text-muted-foreground">
               Streak Analytics
             </span>
-            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+            <h4 className="font-extrabold text-lg leading-snug text-foreground">
               3 Date Streak
             </h4>
-            <p className="mt-1.5 flex items-center text-xs font-bold text-amber-600 group-hover:underline">
+            <p className="mt-1 flex items-center text-[11px] font-bold text-amber-600 group-hover:underline">
               View Badges & Stats <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
@@ -879,27 +873,22 @@ function HomeDashboardView({
         {/* Card 2: This Month Bookings -> Calendar Tab */}
         <button
           aria-label="Open monthly calendar schedule"
-          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/15 via-sky-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-primary/60 hover:shadow-md cursor-pointer text-left"
+          className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-primary/30 bg-gradient-to-br from-primary/15 via-sky-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-primary/60 hover:shadow-md"
           onClick={() => onNavigateTab("calendar")}
           type="button"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground font-extrabold shadow-md group-hover:scale-110 transition">
-              <CalendarHeart className="size-5" />
-            </div>
-            <Badge className="rounded-full bg-primary/20 text-primary font-extrabold text-[10px] border-0">
-              📅 4 Booked
-            </Badge>
-          </div>
+          <Badge className="w-fit rounded-full border-0 bg-primary/20 font-extrabold text-[10px] text-primary">
+            📅 4 Booked
+          </Badge>
 
-          <div className="mt-4">
-            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mt-5">
+            <span className="font-extrabold text-[10px] uppercase text-muted-foreground">
               Monthly Schedule
             </span>
-            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+            <h4 className="font-extrabold text-lg leading-snug text-foreground">
               4 Confirmed
             </h4>
-            <p className="mt-1.5 flex items-center text-xs font-bold text-primary group-hover:underline">
+            <p className="mt-1 flex items-center text-[11px] font-bold text-primary group-hover:underline">
               Open Calendar <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
@@ -908,27 +897,22 @@ function HomeDashboardView({
         {/* Card 3: Favorite Spots -> Spots Tab */}
         <button
           aria-label="Explore local favorite spots"
-          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-emerald-500/60 hover:shadow-md cursor-pointer text-left"
+          className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-emerald-500/60 hover:shadow-md"
           onClick={() => onNavigateTab("spots")}
           type="button"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500 text-white font-extrabold shadow-md group-hover:scale-110 transition">
-              <Star className="size-5" />
-            </div>
-            <Badge className="rounded-full bg-emerald-500/20 text-emerald-600 font-extrabold text-[10px] border-0">
-              ⭐ 12 Saved
-            </Badge>
-          </div>
+          <Badge className="w-fit rounded-full border-0 bg-emerald-500/20 font-extrabold text-[10px] text-emerald-600">
+            ⭐ 12 Saved
+          </Badge>
 
-          <div className="mt-4">
-            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mt-5">
+            <span className="font-extrabold text-[10px] uppercase text-muted-foreground">
               Local Venues
             </span>
-            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+            <h4 className="font-extrabold text-lg leading-snug text-foreground">
               12 Fav Spots
             </h4>
-            <p className="mt-1.5 flex items-center text-xs font-bold text-emerald-600 group-hover:underline">
+            <p className="mt-1 flex items-center text-[11px] font-bold text-emerald-600 group-hover:underline">
               Explore Local Spots <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
@@ -937,27 +921,22 @@ function HomeDashboardView({
         {/* Card 4: Recaps Posted -> Profile Tab */}
         <button
           aria-label="View published recaps on profile"
-          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/15 via-pink-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-purple-500/60 hover:shadow-md cursor-pointer text-left"
+          className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-purple-500/30 bg-gradient-to-br from-purple-500/15 via-pink-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-purple-500/60 hover:shadow-md"
           onClick={() => onNavigateTab("profile")}
           type="button"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-purple-500 text-white font-extrabold shadow-md group-hover:scale-110 transition">
-              <Sparkles className="size-5" />
-            </div>
-            <Badge className="rounded-full bg-purple-500/20 text-purple-600 font-extrabold text-[10px] border-0">
-              📸 5 Recaps
-            </Badge>
-          </div>
+          <Badge className="w-fit rounded-full border-0 bg-purple-500/20 font-extrabold text-[10px] text-purple-600">
+            📸 5 Recaps
+          </Badge>
 
-          <div className="mt-4">
-            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mt-5">
+            <span className="font-extrabold text-[10px] uppercase text-muted-foreground">
               Food Recaps
             </span>
-            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+            <h4 className="font-extrabold text-lg leading-snug text-foreground">
               5 Published
             </h4>
-            <p className="mt-1.5 flex items-center text-xs font-bold text-purple-600 group-hover:underline">
+            <p className="mt-1 flex items-center text-[11px] font-bold text-purple-600 group-hover:underline">
               My Profile Recaps <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>

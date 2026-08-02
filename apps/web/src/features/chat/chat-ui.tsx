@@ -680,15 +680,15 @@ export function DecisionCtaPanel({
   onPick: () => void;
 }) {
   return (
-    <div className="mx-3 mb-2 rounded-2xl border border-primary/25 bg-primary/8 p-3 sm:mx-4">
-      <p className="font-bold text-xs">Your move</p>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">
+    <div className="mx-3 mb-2 rounded-lg border border-primary/20 bg-primary/8 p-2.5 sm:mx-4">
+      <p className="font-bold text-[11px]">Your move</p>
+      <p className="mt-0.5 text-[10px] text-muted-foreground">
         3 video replies exchanged. Pick them for the date, add as a friend, keep
         chatting, or block.
       </p>
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-2 grid grid-cols-4 gap-1.5">
         <Button
-          className="rounded-full text-xs"
+          className="h-8 min-w-0 rounded-full bg-amber-300 px-2 text-[10px] font-bold text-amber-950 hover:bg-amber-200"
           disabled={disabled}
           onClick={onPick}
           size="sm"
@@ -698,7 +698,7 @@ export function DecisionCtaPanel({
           Pick for date
         </Button>
         <Button
-          className="rounded-full text-xs"
+          className="h-8 min-w-0 rounded-full border-emerald-500/35 bg-emerald-500/10 px-2 text-[10px] font-bold text-emerald-200 hover:bg-emerald-500/20"
           disabled={disabled}
           onClick={onFriend}
           size="sm"
@@ -709,7 +709,7 @@ export function DecisionCtaPanel({
           Add friend
         </Button>
         <Button
-          className="rounded-full text-xs"
+          className="h-8 min-w-0 rounded-full bg-sky-500/15 px-2 text-[10px] font-bold text-sky-200 hover:bg-sky-500/25"
           disabled={disabled}
           onClick={onContinue}
           size="sm"
@@ -720,7 +720,7 @@ export function DecisionCtaPanel({
           Keep chatting
         </Button>
         <Button
-          className="rounded-full text-xs"
+          className="h-8 min-w-0 rounded-full px-2 text-[10px] font-bold text-red-200 hover:bg-red-500/15 hover:text-red-100"
           disabled={disabled}
           onClick={onBlock}
           size="sm"
