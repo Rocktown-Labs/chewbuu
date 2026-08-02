@@ -382,6 +382,101 @@ export const videoMessage = pgTable(
   ]
 );
 
+export const chatRoom = pgTable(
+  "chat_room",
+  {
+    activeDateId: text("active_date_id").references(() => dateRequest.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    matchId: text("match_id").references(() => dateMatch.id, {
+      onDelete: "set null",
+    }),
+    phase: text("phase").default("continued").notNull(),
+    title: text("title").notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("chat_room_activeDateId_idx").on(table.activeDateId),
+    index("chat_room_kind_idx").on(table.kind),
+    index("chat_room_matchId_idx").on(table.matchId),
+  ]
+);
+
+export const chatParticipant = pgTable(
+  "chat_participant",
+  {
+    avatarUrl: text("avatar_url"),
+    displayName: text("display_name").notNull(),
+    id: text("id").primaryKey(),
+    roomId: text("room_id")
+      .notNull()
+      .references(() => chatRoom.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => user.id, {
+      onDelete: "cascade",
+    }),
+  },
+  (table) => [
+    index("chat_participant_roomId_idx").on(table.roomId),
+    index("chat_participant_userId_idx").on(table.userId),
+    uniqueIndex("chat_participant_roomId_userId_idx").on(
+      table.roomId,
+      table.userId
+    ),
+  ]
+);
+
+export const chatMessage = pgTable(
+  "chat_message",
+  {
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    durationSec: integer("duration_sec"),
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    mediaThumbUrl: text("media_thumb_url"),
+    mediaUrl: text("media_url"),
+    roomId: text("room_id")
+      .notNull()
+      .references(() => chatRoom.id, { onDelete: "cascade" }),
+    senderId: text("sender_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    systemIcon: text("system_icon"),
+    text: text("text"),
+  },
+  (table) => [
+    index("chat_message_roomId_createdAt_idx").on(
+      table.roomId,
+      table.createdAt
+    ),
+    index("chat_message_senderId_idx").on(table.senderId),
+  ]
+);
+
+export const chatReadState = pgTable(
+  "chat_read_state",
+  {
+    lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+    roomId: text("room_id")
+      .notNull()
+      .references(() => chatRoom.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("chat_read_state_roomId_userId_idx").on(
+      table.roomId,
+      table.userId
+    ),
+  ]
+);
+
 export const profileRelations = relations(profile, ({ one }) => ({
   user: one(user, {
     fields: [profile.userId],

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added a Postgres-backed chat persistence foundation with Upstash Redis Streams/SSE realtime delivery for friend DMs and date rooms.
 - Added Kibo UI-inspired `StoriesBar` component (`apps/web/src/components/ui/stories.tsx`) featuring unread gradient rings for creator food recaps.
 - Added Kibo UI-inspired `ReelPlayer` full-screen vertical video modal (`apps/web/src/components/ui/reel.tsx`) for watching recaps and video replies, complete with venue badge, creator avatar, and instant "Plan Date at Spot" CTA.
 - Re-architected Home Dashboard (`/me`) featuring a horizontal schedule ribbon, live location weather forecast badge (`☀️ 76°F · Clear & Sunny`), upcoming date itinerary card, date stats metrics (streak, monthly bookings, fav spots, recaps), and AI recommendation queue prompt.

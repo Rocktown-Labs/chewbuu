@@ -36,6 +36,10 @@ export const env = createEnv({
     CORS_ORIGIN: z.url(),
     DATABASE_URL: z.string().min(1),
     GOOGLE_PLACES_API_KEY: z.string().optional(),
+    KV_REST_API_READ_ONLY_TOKEN: z.string().optional(),
+    KV_REST_API_TOKEN: z.string().optional(),
+    KV_REST_API_URL: z.url().optional(),
+    KV_URL: z.string().optional(),
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
@@ -59,6 +63,7 @@ export const env = createEnv({
     SENT_DM_FROM: z.string().optional(),
     SENTRY_AUTH_TOKEN: z.string().optional(),
     SENTRY_DSN: z.string().optional(),
+    REDIS_URL: z.string().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
     UPSTASH_REDIS_REST_URL: z.url().optional(),
   },

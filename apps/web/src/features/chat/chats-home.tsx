@@ -14,8 +14,12 @@ import {
 } from "@chewbuu/ui/components/tabs";
 import { cn } from "@chewbuu/ui/lib/utils";
 import { Heart, MessageCircle, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
+import { chatApi, toChatMessage, toChatThread } from "@/lib/chat-api";
+import type { ApiChatMessage } from "@/lib/chat-api";
+import { useChatRealtime } from "@/lib/realtime-client";
 
 import type {
   ChatMessage,
@@ -58,6 +62,9 @@ export function DashboardChats({
   const [selectedId, setSelectedId] = useState<string | null>(
     activeChannelId ?? null
   );
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [realtimeConfigured, setRealtimeConfigured] = useState(false);
+  const [realtimeRoomIds, setRealtimeRoomIds] = useState<string[]>([]);
   const [mobileShowThread, setMobileShowThread] = useState(
     Boolean(activeChannelId)
   );
@@ -72,6 +79,10 @@ export function DashboardChats({
     (thread) => thread.kind === "date_room"
   );
   const activeList = tab === "friends" ? friendThreads : dateThreads;
+  const realtimeChannels = useMemo(
+    () => realtimeRoomIds.map((roomId) => `chat:${roomId}`),
+    [realtimeRoomIds]
+  );
 
   const selected =
     threads.find((thread) => thread.id === selectedId) ??
@@ -103,36 +114,101 @@ export function DashboardChats({
     );
   };
 
-  const appendMessage = (threadId: string, message: ChatMessage) => {
-    updateThread(threadId, (thread) => {
-      const messages = [...thread.messages, message];
-      const phase =
-        thread.kind === "date_room"
-          ? thread.phase === "continued" ||
-            thread.phase === "picked" ||
-            thread.phase === "friended" ||
-            thread.phase === "blocked"
-            ? thread.phase
-            : derivePhaseFromMessages(messages)
-          : thread.phase;
-      return {
-        ...thread,
-        lastMessage:
-          message.kind === "text"
-            ? (message.text ?? "")
-            : message.kind === "video" || message.kind === "intro_video"
-              ? "🎥 Video"
-              : message.kind === "voice"
-                ? "🎤 Voice note"
-                : message.kind === "photo"
-                  ? "📷 Photo"
-                  : (message.text ?? thread.lastMessage),
-        messages,
-        phase,
-        time: "Now",
-      };
-    });
-  };
+  const appendMessage = useCallback(
+    (threadId: string, message: ChatMessage) => {
+      setThreads((prev) =>
+        prev.map((thread) => {
+          if (thread.id !== threadId) return thread;
+          if (thread.messages.some((item) => item.id === message.id)) {
+            return thread;
+          }
+
+          const messages = [...thread.messages, message];
+          const phase =
+            thread.kind === "date_room"
+              ? thread.phase === "continued" ||
+                thread.phase === "picked" ||
+                thread.phase === "friended" ||
+                thread.phase === "blocked"
+                ? thread.phase
+                : derivePhaseFromMessages(messages)
+              : thread.phase;
+          return {
+            ...thread,
+            lastMessage:
+              message.kind === "text"
+                ? (message.text ?? "")
+                : message.kind === "video" || message.kind === "intro_video"
+                  ? "Video"
+                  : message.kind === "voice"
+                    ? "Voice note"
+                    : message.kind === "photo"
+                      ? "Photo"
+                      : (message.text ?? thread.lastMessage),
+            messages,
+            phase,
+            time: "Now",
+          };
+        })
+      );
+    },
+    []
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    const loadRooms = async () => {
+      try {
+        const initial = await chatApi.getRooms();
+        const response =
+          initial.rooms.length > 0
+            ? initial
+            : await chatApi.bootstrapDemoFriends();
+
+        if (!active || response.rooms.length === 0) {
+          return;
+        }
+
+        setCurrentUserId(response.currentUserId);
+        setRealtimeConfigured(response.realtimeConfigured);
+        setRealtimeRoomIds(response.rooms.map((room) => room.id));
+        setThreads(
+          response.rooms.map((room) =>
+            toChatThread(room, response.currentUserId)
+          )
+        );
+        setSelectedId((current) => current ?? response.rooms[0]?.id ?? null);
+      } catch {
+        if (active) {
+          setRealtimeRoomIds([]);
+        }
+      }
+    };
+
+    void loadRooms();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleRealtimeMessage = useCallback(
+    ({ data }: { channel: string; data: ApiChatMessage }) => {
+      if (!currentUserId) return;
+      appendMessage(data.roomId, toChatMessage(data, currentUserId));
+    },
+    [appendMessage, currentUserId]
+  );
+
+  useChatRealtime<ApiChatMessage>({
+    channels: realtimeChannels,
+    enabled: Boolean(
+      realtimeConfigured && currentUserId && realtimeRoomIds.length > 0
+    ),
+    event: "chat.message",
+    onData: handleRealtimeMessage,
+  });
 
   const handleDecision = (
     thread: ChatThread,
@@ -409,13 +485,36 @@ export function DashboardChats({
               ) : null}
               <ChatComposer
                 dateMode={selected.kind === "date_room"}
-                onSendMedia={({
+                onSendMedia={async ({
                   durationSec,
                   kind,
                   mediaUrl,
                   text,
                   thumbUrl,
                 }) => {
+                  if (currentUserId && realtimeRoomIds.includes(selected.id)) {
+                    try {
+                      const response = await chatApi.sendMessage(selected.id, {
+                        durationSec,
+                        kind,
+                        mediaThumbUrl: thumbUrl,
+                        mediaUrl,
+                        text,
+                      });
+                      appendMessage(
+                        selected.id,
+                        toChatMessage(response.message, currentUserId)
+                      );
+                      return;
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Could not send media."
+                      );
+                    }
+                  }
+
                   appendMessage(
                     selected.id,
                     createMediaMessage({
@@ -427,9 +526,29 @@ export function DashboardChats({
                     })
                   );
                 }}
-                onSendText={(text) =>
-                  appendMessage(selected.id, createTextMessage(text))
-                }
+                onSendText={async (text) => {
+                  if (currentUserId && realtimeRoomIds.includes(selected.id)) {
+                    try {
+                      const response = await chatApi.sendMessage(selected.id, {
+                        kind: "text",
+                        text,
+                      });
+                      appendMessage(
+                        selected.id,
+                        toChatMessage(response.message, currentUserId)
+                      );
+                      return;
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Could not send message."
+                      );
+                    }
+                  }
+
+                  appendMessage(selected.id, createTextMessage(text));
+                }}
                 onSkipTheirReply={
                   selected.kind === "date_room"
                     ? () => {
