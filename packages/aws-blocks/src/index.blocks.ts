@@ -758,6 +758,32 @@ const getAge = (birthday: string) => {
   return age;
 };
 
+const distanceBetweenMiles = (
+  firstLatitude: string | null,
+  firstLongitude: string | null,
+  secondLatitude: string | null,
+  secondLongitude: string | null
+) => {
+  const coordinates = [
+    firstLatitude,
+    firstLongitude,
+    secondLatitude,
+    secondLongitude,
+  ].map((value) => (value === null ? Number.NaN : Number(value)));
+  if (coordinates.some(Number.isNaN)) return null;
+  const [lat1, lon1, lat2, lon2] = coordinates.map(
+    (value) => (value * Math.PI) / 180
+  ) as [number, number, number, number];
+  const latitudeDelta = lat2 - lat1;
+  const longitudeDelta = lon2 - lon1;
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(longitudeDelta / 2) ** 2;
+  return (
+    3958.8 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
+  );
+};
+
 const saveProfile = async (
   sessionUser: SessionUser,
   input: unknown,
@@ -953,11 +979,21 @@ const createDateRequest = async (
         .selectFrom("profile")
         .innerJoin("user", "user.id", "profile.user_id")
         .select([
+          "profile.age_range_max as ageRangeMax",
+          "profile.age_range_min as ageRangeMin",
+          "profile.area",
+          "profile.birthday",
+          "profile.distance_miles as distanceMiles",
           "profile.user_id as userId",
+          "profile.interests",
+          "profile.interested_in as interestedIn",
+          "profile.sex",
           "user.name as displayName",
           "profile.intro_video_url as introVideoUrl",
           "profile.profile_photo_url as profilePhotoUrl",
           "profile.bio as profileSummary",
+          "profile.latitude",
+          "profile.longitude",
         ])
         .where("profile.user_id", "=", friendUserId)
         .executeTakeFirst()
@@ -982,7 +1018,7 @@ const createDateRequest = async (
     if (!directTarget) throw new Error("Friend profile not found");
   }
 
-  const candidates = friendUserId
+  const candidateRows = friendUserId
     ? directTarget
       ? [directTarget]
       : []
@@ -990,17 +1026,131 @@ const createDateRequest = async (
         .selectFrom("profile")
         .innerJoin("user", "user.id", "profile.user_id")
         .select([
+          "profile.age_range_max as ageRangeMax",
+          "profile.age_range_min as ageRangeMin",
+          "profile.area",
+          "profile.birthday",
+          "profile.distance_miles as distanceMiles",
           "profile.user_id as userId",
+          "profile.interests",
+          "profile.interested_in as interestedIn",
+          "profile.sex",
           "user.name as displayName",
           "profile.intro_video_url as introVideoUrl",
           "profile.profile_photo_url as profilePhotoUrl",
           "profile.bio as profileSummary",
+          "profile.latitude",
+          "profile.longitude",
         ])
         .where("profile.user_id", "!=", sessionUser.id)
         .where("profile.can_date", "=", true)
         .where("profile.onboarded", "=", true)
-        .limit(3)
         .execute();
+
+  const requesterProfile = friendUserId
+    ? null
+    : await db
+        .selectFrom("profile")
+        .selectAll()
+        .where("user_id", "=", sessionUser.id)
+        .executeTakeFirst();
+  const pendingCandidateRows = friendUserId
+    ? []
+    : await db
+        .selectFrom("date_review")
+        .select("user_id")
+        .where("required", "=", true)
+        .where("completed_at", "is", null)
+        .execute();
+  const pendingCandidateIds = new Set(
+    pendingCandidateRows.map((row) => row.user_id)
+  );
+  const requesterAge = requesterProfile?.birthday
+    ? getAge(requesterProfile.birthday)
+    : null;
+  const candidates = candidateRows
+    .filter((candidate) => {
+      if (friendUserId) return true;
+      if (pendingCandidateIds.has(candidate.userId)) return false;
+      const requesterInterestedIn = requesterProfile?.interested_in ?? [];
+      const candidateInterestedIn = candidate.interestedIn ?? [];
+      if (
+        requesterInterestedIn.length > 0 &&
+        (!candidate.sex || !requesterInterestedIn.includes(candidate.sex))
+      ) {
+        return false;
+      }
+      if (
+        candidateInterestedIn.length > 0 &&
+        !candidateInterestedIn.includes(requesterProfile?.sex ?? "")
+      ) {
+        return false;
+      }
+      const candidateAge = candidate.birthday
+        ? getAge(candidate.birthday)
+        : null;
+      if (requesterAge === null || candidateAge === null) return false;
+      if (
+        requesterProfile?.age_range_min !== null &&
+        requesterProfile?.age_range_min !== undefined &&
+        candidateAge < requesterProfile.age_range_min
+      ) {
+        return false;
+      }
+      if (
+        requesterProfile?.age_range_max !== null &&
+        requesterProfile?.age_range_max !== undefined &&
+        candidateAge > requesterProfile.age_range_max
+      ) {
+        return false;
+      }
+      if (
+        candidate.ageRangeMin !== null &&
+        candidateAge < candidate.ageRangeMin
+      ) {
+        return false;
+      }
+      if (
+        candidate.ageRangeMax !== null &&
+        candidateAge > candidate.ageRangeMax
+      ) {
+        return false;
+      }
+      const distance = distanceBetweenMiles(
+        requesterProfile?.latitude ?? null,
+        requesterProfile?.longitude ?? null,
+        candidate.latitude,
+        candidate.longitude
+      );
+      if (distance !== null) {
+        return distance <= (requesterProfile?.distance_miles ?? 25);
+      }
+      return Boolean(
+        requesterProfile?.area &&
+        candidate.area &&
+        requesterProfile.area.trim().toLowerCase() ===
+          candidate.area.trim().toLowerCase()
+      );
+    })
+    .toSorted((first, second) => {
+      const firstDistance = distanceBetweenMiles(
+        requesterProfile?.latitude ?? null,
+        requesterProfile?.longitude ?? null,
+        first.latitude,
+        first.longitude
+      );
+      const secondDistance = distanceBetweenMiles(
+        requesterProfile?.latitude ?? null,
+        requesterProfile?.longitude ?? null,
+        second.latitude,
+        second.longitude
+      );
+      return (
+        (firstDistance ?? Number.POSITIVE_INFINITY) -
+        (secondDistance ?? Number.POSITIVE_INFINITY)
+      );
+    })
+    .slice(0, 3);
 
   const matches = candidates.map((candidate) => ({
     compatibility: 80,
