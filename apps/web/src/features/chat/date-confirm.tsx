@@ -222,8 +222,11 @@ export function DateConfirmScreen({
         dateRequestId: partner.id,
         partnerId: partner.id,
       });
-    } catch {
-      // Fallback for offline or demo mode
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not check in."
+      );
+      return;
     }
     setCheckedIn(true);
     setCheckInMode("brand");

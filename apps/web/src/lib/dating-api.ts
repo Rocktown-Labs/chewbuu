@@ -157,6 +157,7 @@ export interface ReviewPrompt {
     place: ReviewCriterion[];
   };
   existingReview: DateReview | null;
+  people: { id: string; name: string; photoUrl: string | null }[];
   places: DatePlace[];
   request: {
     id: string;

@@ -92,6 +92,7 @@ export interface ProfileTable {
   birthday: string | null;
   can_date: boolean;
   created_at: Timestamp;
+  contribution_score: number;
   dating_modes: JsonColumn<string[]>;
   distance_miles: number;
   favorite_things: JsonColumn<string[]>;
@@ -107,6 +108,7 @@ export interface ProfileTable {
   onboarded: boolean;
   onboarding_completed_at: Timestamp | null;
   profile_photo_url: string | null;
+  reliability_score: number;
   safety_opt_in: boolean;
   sex: string | null;
   sexuality: string | null;

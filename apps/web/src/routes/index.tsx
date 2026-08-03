@@ -19,14 +19,7 @@ import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { pricingApi, type MembershipPlan } from "@/lib/dating-api";
 
-const HERO_IMAGES = [
-  "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=700&auto=format&fit=crop&q=70",
-  "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=700&auto=format&fit=crop&q=70",
-  "https://images.unsplash.com/photo-1528605248644-14dd04022da1?w=700&auto=format&fit=crop&q=70",
-  "https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?w=700&auto=format&fit=crop&q=70",
-  "https://images.unsplash.com/photo-1543269865-cbf427effbad?w=700&auto=format&fit=crop&q=70",
-  "https://images.unsplash.com/photo-1491438590914-bc09fcaaf77a?w=700&auto=format&fit=crop&q=70",
-];
+const HERO_IMAGES: string[] = [];
 
 const DATE_SPOT_PROMISES = [
   {
@@ -40,49 +33,6 @@ const DATE_SPOT_PROMISES = [
   {
     title: "Chat when there is a plan",
     text: "Request dates, review matches, save maybes for later, then chat with the people you actually want to meet.",
-  },
-];
-
-const fallbackPlans: MembershipPlan[] = [
-  {
-    active: true,
-    annualPriceCents: 0,
-    cta: "Create free profile",
-    description: "For verified solo dating with real places and recaps.",
-    features: [
-      "Solo date requests",
-      "Verified photo and video",
-      "2 bookings per day",
-    ],
-    monthlyPriceCents: 0,
-    name: "Social",
-    sortOrder: 0,
-    stats: ["Free", "Solo", "2/day"],
-    tier: "social",
-  },
-  {
-    active: true,
-    annualPriceCents: 19_000,
-    cta: "Join with friends",
-    description: "For circles, friend invites, and double-date energy.",
-    features: ["Group dates", "Dating circles", "8 bookings per day"],
-    monthlyPriceCents: 1900,
-    name: "Mingle",
-    sortOrder: 1,
-    stats: ["Groups", "Circles", "8/day"],
-    tier: "mingle",
-  },
-  {
-    active: true,
-    annualPriceCents: 39_000,
-    cta: "Unlock Sugar",
-    description: "For premium date planning and requester-covers modes.",
-    features: ["Cover date costs", "Premium match pool", "24 bookings per day"],
-    monthlyPriceCents: 3900,
-    name: "Sugar",
-    sortOrder: 2,
-    stats: ["Premium", "Cover dates", "24/day"],
-    tier: "sugar",
   },
 ];
 
@@ -138,7 +88,7 @@ const FAQS = [
 
 const HomeComponent = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [plans, setPlans] = useState<MembershipPlan[]>(fallbackPlans);
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -146,7 +96,7 @@ const HomeComponent = () => {
         const { plans: nextPlans } = await pricingApi.getPlans();
         setPlans(nextPlans.filter((plan) => plan.active));
       } catch {
-        setPlans(fallbackPlans);
+        setPlans([]);
       }
     };
 

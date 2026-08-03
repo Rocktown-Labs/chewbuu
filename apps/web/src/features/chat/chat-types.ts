@@ -17,8 +17,6 @@ export type DateRoomPhase =
 
 export type DateScenarioRole = "sender" | "receiver";
 
-export type DateScenarioKind = "sent" | "received" | "friend";
-
 export type ChatThreadKind = "friend" | "date_room";
 
 export interface ChatPerson {
@@ -67,30 +65,6 @@ export interface ChatThread {
   time: string;
   title: string;
   unreadCount?: number;
-}
-
-export interface DateScenario {
-  acceptedMatchId?: string;
-  id: string;
-  kind: DateScenarioKind;
-  matches: ChatPerson[];
-  myVideoCount: number;
-  theirVideoCount: number;
-  phase: DateRoomPhase;
-  places: {
-    address: string;
-    name: string;
-    placeId: string;
-    rating?: string;
-  }[];
-  role: DateScenarioRole;
-  roomMessages: ChatMessage[];
-  scheduledAt: string;
-  searchArea: string;
-  status: string;
-  theirName: string;
-  title: string;
-  what: string[];
 }
 
 export const VIDEO_EXCHANGE_LIMIT = 3;

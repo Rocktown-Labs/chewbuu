@@ -18,6 +18,12 @@ import { z } from "zod";
 import { getDatabaseUrl, getDb } from "./database";
 import type { BlocksDatabase } from "./database";
 import { nextDateLifecycleStatus } from "./date-lifecycle";
+import {
+  adjustReliabilityScore,
+  calculateMatchScore,
+  distanceBetweenMiles,
+  hasLocation,
+} from "./matching";
 import type {
   ApiChatMessage,
   ApiChatParticipant,
@@ -155,6 +161,37 @@ const roomListCache = new KVStore(scope, "room-list-cache", {
   schema: z.object({ expiresAt: z.number(), roomIds: z.array(z.string()) }),
 });
 
+const placeSuggestionSchema = z.object({
+  address: z.string().optional(),
+  attributions: z.array(z.string()).optional(),
+  googleMapsUri: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  name: z.string(),
+  openNow: z.boolean().optional(),
+  photoUrl: z.string().optional(),
+  placeId: z.string(),
+  priceLevel: z.string().optional(),
+  rating: z.string().optional(),
+  types: z.array(z.string()),
+  userRatingCount: z.number().optional(),
+  websiteUri: z.string().optional(),
+});
+
+const placeSearchCache = new KVStore(scope, "place-search-cache", {
+  schema: z.object({
+    expiresAt: z.number(),
+    places: z.array(placeSuggestionSchema),
+  }),
+});
+
+const placeSearchRateLimit = new KVStore(scope, "place-search-rate-limit", {
+  schema: z.object({
+    count: z.number().int().nonnegative(),
+    windowStartedAt: z.number(),
+  }),
+});
+
 const notificationPresence = new KVStore(scope, "notification-presence", {
   schema: z.object({
     latestId: z.string().nullable(),
@@ -162,21 +199,6 @@ const notificationPresence = new KVStore(scope, "notification-presence", {
     updatedAt: z.number(),
   }),
 });
-
-const demoFriends = [
-  {
-    id: "demo-avery-price",
-    image:
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=256&q=80",
-    name: "Avery Price",
-  },
-  {
-    id: "demo-maya-ellis",
-    image:
-      "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=256&q=80",
-    name: "Maya Ellis",
-  },
-] as const;
 
 interface SessionUser {
   dailyDateLimit?: number;
@@ -566,7 +588,13 @@ const loadDatingSummary = async (
   const [profile, pendingReviews, requests] = await Promise.all([
     db
       .selectFrom("profile")
-      .select(["can_date as canDate", "onboarded"])
+      .select([
+        "area",
+        "can_date as canDate",
+        "latitude",
+        "longitude",
+        "onboarded",
+      ])
       .where("user_id", "=", sessionUser.id)
       .executeTakeFirst(),
     loadPendingReviews(sessionUser.id),
@@ -589,6 +617,9 @@ const loadDatingSummary = async (
       .orderBy("scheduled_at", "desc")
       .execute(),
   ]);
+  if (!profile || !hasLocation(profile)) {
+    throw new Error("Add your area and enable location before browsing dates.");
+  }
 
   const [matches, places, partyMembers] = requests.length
     ? await Promise.all([
@@ -758,32 +789,6 @@ const getAge = (birthday: string) => {
   return age;
 };
 
-const distanceBetweenMiles = (
-  firstLatitude: string | null,
-  firstLongitude: string | null,
-  secondLatitude: string | null,
-  secondLongitude: string | null
-) => {
-  const coordinates = [
-    firstLatitude,
-    firstLongitude,
-    secondLatitude,
-    secondLongitude,
-  ].map((value) => (value === null ? Number.NaN : Number(value)));
-  if (coordinates.some(Number.isNaN)) return null;
-  const [lat1, lon1, lat2, lon2] = coordinates.map(
-    (value) => (value * Math.PI) / 180
-  ) as [number, number, number, number];
-  const latitudeDelta = lat2 - lat1;
-  const longitudeDelta = lon2 - lon1;
-  const haversine =
-    Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(longitudeDelta / 2) ** 2;
-  return (
-    3958.8 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine))
-  );
-};
-
 const saveProfile = async (
   sessionUser: SessionUser,
   input: unknown,
@@ -799,10 +804,12 @@ const saveProfile = async (
     (item) => item.kind === "profile_photo"
   );
   const hasIntroVideo = body.media.some((item) => item.kind === "intro_video");
-  const canDate = hasProfilePhoto && hasIntroVideo;
+  const locationReady = hasLocation(body);
+  const canDate = hasProfilePhoto && hasIntroVideo && locationReady;
   const onboarded = Boolean(
     body.username &&
     body.area &&
+    locationReady &&
     body.birthday &&
     body.sex &&
     body.sexuality &&
@@ -822,6 +829,7 @@ const saveProfile = async (
         bio: body.bio ?? null,
         birthday: body.birthday,
         can_date: canDate,
+        contribution_score: 0,
         created_at: now,
         dating_modes: body.datingModes,
         distance_miles: body.distanceMiles,
@@ -847,6 +855,7 @@ const saveProfile = async (
         phone: body.phone ?? null,
         race: body.race ?? null,
         religion: body.religion ?? null,
+        reliability_score: 100,
         safety_opt_in: body.safetyOptIn,
         sex: body.sex,
         sexuality: body.sexuality,
@@ -961,6 +970,16 @@ const createDateRequest = async (
   }
 
   const db = await getDb();
+  const requesterProfile = await db
+    .selectFrom("profile")
+    .selectAll()
+    .where("user_id", "=", sessionUser.id)
+    .executeTakeFirst();
+  if (!requesterProfile || !hasLocation(requesterProfile)) {
+    throw new Error(
+      "Add your area and enable location before requesting a date."
+    );
+  }
   const requestId = crypto.randomUUID();
   const now = new Date();
   const partySize = body.partyMembers.length + 1;
@@ -994,6 +1013,8 @@ const createDateRequest = async (
           "profile.bio as profileSummary",
           "profile.latitude",
           "profile.longitude",
+          "profile.reliability_score as reliabilityScore",
+          "profile.contribution_score as contributionScore",
         ])
         .where("profile.user_id", "=", friendUserId)
         .executeTakeFirst()
@@ -1041,19 +1062,15 @@ const createDateRequest = async (
           "profile.bio as profileSummary",
           "profile.latitude",
           "profile.longitude",
+          "profile.reliability_score as reliabilityScore",
+          "profile.contribution_score as contributionScore",
         ])
         .where("profile.user_id", "!=", sessionUser.id)
         .where("profile.can_date", "=", true)
         .where("profile.onboarded", "=", true)
+        .where("profile.latitude", "is not", null)
+        .where("profile.longitude", "is not", null)
         .execute();
-
-  const requesterProfile = friendUserId
-    ? null
-    : await db
-        .selectFrom("profile")
-        .selectAll()
-        .where("user_id", "=", sessionUser.id)
-        .executeTakeFirst();
   const pendingCandidateRows = friendUserId
     ? []
     : await db
@@ -1117,31 +1134,23 @@ const createDateRequest = async (
         return false;
       }
       const distance = distanceBetweenMiles(
-        requesterProfile?.latitude ?? null,
-        requesterProfile?.longitude ?? null,
+        requesterProfile.latitude,
+        requesterProfile.longitude,
         candidate.latitude,
         candidate.longitude
       );
-      if (distance !== null) {
-        return distance <= (requesterProfile?.distance_miles ?? 25);
-      }
-      return Boolean(
-        requesterProfile?.area &&
-        candidate.area &&
-        requesterProfile.area.trim().toLowerCase() ===
-          candidate.area.trim().toLowerCase()
-      );
+      return distance !== null && distance <= requesterProfile.distance_miles;
     })
     .toSorted((first, second) => {
       const firstDistance = distanceBetweenMiles(
-        requesterProfile?.latitude ?? null,
-        requesterProfile?.longitude ?? null,
+        requesterProfile.latitude,
+        requesterProfile.longitude,
         first.latitude,
         first.longitude
       );
       const secondDistance = distanceBetweenMiles(
-        requesterProfile?.latitude ?? null,
-        requesterProfile?.longitude ?? null,
+        requesterProfile.latitude,
+        requesterProfile.longitude,
         second.latitude,
         second.longitude
       );
@@ -1153,12 +1162,38 @@ const createDateRequest = async (
     .slice(0, 3);
 
   const matches = candidates.map((candidate) => ({
-    compatibility: 80,
+    compatibility: calculateMatchScore(requesterProfile.interests, {
+      contributionScore: candidate.contributionScore,
+      distanceMiles:
+        distanceBetweenMiles(
+          requesterProfile.latitude,
+          requesterProfile.longitude,
+          candidate.latitude,
+          candidate.longitude
+        ) ?? Number.POSITIVE_INFINITY,
+      interests: candidate.interests,
+      reliabilityScore: candidate.reliabilityScore,
+    }),
+    ...(distanceBetweenMiles(
+      requesterProfile.latitude,
+      requesterProfile.longitude,
+      candidate.latitude,
+      candidate.longitude
+    ) !== null
+      ? {
+          distanceMiles: distanceBetweenMiles(
+            requesterProfile.latitude,
+            requesterProfile.longitude,
+            candidate.latitude,
+            candidate.longitude
+          ) as number,
+        }
+      : {}),
     displayName: candidate.displayName,
     id: crypto.randomUUID(),
     introVideoUrl: candidate.introVideoUrl ?? "",
     profilePhotoUrl: candidate.profilePhotoUrl,
-    profileSummary: candidate.profileSummary ?? "Ready for a great date.",
+    profileSummary: candidate.profileSummary ?? "",
     status: friendUserId ? "accepted" : "suggested",
     userId: candidate.userId,
     videoRepliesRequired: 3,
@@ -1515,49 +1550,6 @@ const loadRooms = async (userId: string) => {
   );
 };
 
-const createFriendRoom = async (
-  sessionUser: SessionUser,
-  friend: (typeof demoFriends)[number]
-) => {
-  const db = await getDb();
-  const roomId = `friend_${sessionUser.id}_${friend.id}`;
-  const now = new Date();
-  await db
-    .insertInto("chat_room")
-    .values({
-      id: roomId,
-      kind: "friend",
-      phase: "continued",
-      title: friend.name,
-      created_at: now,
-      updated_at: now,
-      active_date_id: null,
-      match_id: null,
-    })
-    .onConflict((conflict) => conflict.column("id").doNothing())
-    .execute();
-  await db
-    .insertInto("chat_participant")
-    .values([
-      {
-        avatar_url: null,
-        display_name: sessionUser.name || sessionUser.email,
-        id: `participant_${roomId}_${sessionUser.id}`,
-        room_id: roomId,
-        user_id: sessionUser.id,
-      },
-      {
-        avatar_url: friend.image,
-        display_name: friend.name,
-        id: `participant_${roomId}_${friend.id}`,
-        room_id: roomId,
-        user_id: null,
-      },
-    ])
-    .onConflict((conflict) => conflict.column("id").doNothing())
-    .execute();
-};
-
 const getOwnedRoom = async (roomId: string, userId: string) => {
   const db = await getDb();
   const room = await db
@@ -1587,7 +1579,7 @@ const sendMessageSchema = z
     message: "Message text or media is required.",
   });
 
-const placeSuggestionSchema = z.object({
+const placeSuggestionInputSchema = z.object({
   area: z.string().trim().min(1),
   filters: z.array(z.string().trim().min(1)).default([]),
   latitude: z.string().optional(),
@@ -1666,31 +1658,68 @@ export const buildBlocksPlaceSearchTextQuery = (
   return `${[filters, ...categories].filter(Boolean).join(" ")} near ${input.area}`;
 };
 
-const fallbackPlaces = (input: PlaceSuggestionInput): PlaceSuggestion[] => [
-  {
-    address: `${input.area} dining district`,
-    name: input.what.includes("drink") ? "The Golden Booth" : "Supper Club",
-    openNow: true,
-    placeId: `mock-${input.what.join("-")}-1`,
-    priceLevel: "PRICE_LEVEL_MODERATE",
-    rating: "4.7",
-    types: input.what,
-  },
-  {
-    address: `${input.area} main street`,
-    name: "Good Company Social",
-    openNow: true,
-    placeId: `mock-${input.what.join("-")}-2`,
-    priceLevel: "PRICE_LEVEL_INEXPENSIVE",
-    rating: "4.5",
-    types: input.what,
-  },
-];
+const acquirePlaceSearchRateLimit = async (userId: string) => {
+  const windowMs = 60_000;
+  const maxRequests = 30;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const current = await placeSearchRateLimit.get(userId);
+    const now = Date.now();
+    if (!current || now - current.windowStartedAt >= windowMs) {
+      try {
+        await placeSearchRateLimit.put(
+          userId,
+          { count: 1, windowStartedAt: now },
+          current ? { ifValueEquals: current } : { ifNotExists: true }
+        );
+        return;
+      } catch {
+        continue;
+      }
+    }
+    if (current.count >= maxRequests) {
+      throw new Error("Place search limit reached. Try again in a minute.");
+    }
+    try {
+      await placeSearchRateLimit.put(
+        userId,
+        { ...current, count: current.count + 1 },
+        { ifValueEquals: current }
+      );
+      return;
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("Place search is busy. Try again shortly.");
+};
 
-const suggestPlaces = async (input: unknown) => {
-  const body = placeSuggestionSchema.parse(input);
+const suggestPlaces = async (userId: string, input: unknown) => {
+  const body = placeSuggestionInputSchema.parse(input);
+  const db = await getDb();
+  const profile = await db
+    .selectFrom("profile")
+    .select(["area", "latitude", "longitude"])
+    .where("user_id", "=", userId)
+    .executeTakeFirst();
+  if (!profile || !hasLocation(profile)) {
+    throw new Error(
+      "Add your area and enable location before searching places."
+    );
+  }
+  await acquirePlaceSearchRateLimit(userId);
+  const cacheKey = JSON.stringify({
+    area: body.area.trim().toLowerCase(),
+    filters: [...body.filters].toSorted(),
+    latitude: body.latitude ?? profile.latitude,
+    longitude: body.longitude ?? profile.longitude,
+    searchKind: body.searchKind,
+    what: [...body.what].toSorted(),
+  });
+  const cached = await placeSearchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return { places: cached.places };
+
   const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
-  if (!apiKey) return { places: fallbackPlaces(body) };
+  if (!apiKey) throw new Error("Place search is not configured.");
 
   const textQuery = buildBlocksPlaceSearchTextQuery(body);
   const response = await fetch(
@@ -1706,7 +1735,7 @@ const suggestPlaces = async (input: unknown) => {
       method: "POST",
     }
   );
-  if (!response.ok) return { places: fallbackPlaces(body) };
+  if (!response.ok) throw new Error("Place search is temporarily unavailable.");
 
   const data = (await response.json()) as {
     places?: {
@@ -1759,7 +1788,11 @@ const suggestPlaces = async (input: unknown) => {
       } satisfies PlaceSuggestion,
     ];
   });
-  return { places: places.length ? places : fallbackPlaces(body) };
+  await placeSearchCache.put(cacheKey, {
+    expiresAt: Date.now() + 5 * 60_000,
+    places,
+  });
+  return { places };
 };
 
 const getPlacePhoto = async (
@@ -1844,7 +1877,7 @@ const getReviewPrompt = async (
 ): Promise<ReviewPromptResponse> => {
   const db = await getDb();
   const request = await getOwnedRequest(requestId, userId);
-  const [review, places] = await Promise.all([
+  const [review, places, people] = await Promise.all([
     db
       .selectFrom("date_review")
       .selectAll()
@@ -1856,9 +1889,24 @@ const getReviewPrompt = async (
       .selectAll()
       .where("request_id", "=", requestId)
       .execute(),
+    db
+      .selectFrom("date_match")
+      .select([
+        "user_id as id",
+        "display_name as name",
+        "profile_photo_url as photoUrl",
+      ])
+      .where("request_id", "=", requestId)
+      .where("status", "in", ["accepted", "friended"])
+      .execute(),
   ]);
   return {
     existingReview: review ? toReview(review) : null,
+    people: people.map((person) => ({
+      id: person.id,
+      name: person.name,
+      photoUrl: person.photoUrl,
+    })),
     places: places.map((place) => ({
       address: place.address ?? undefined,
       name: place.name,
@@ -1890,6 +1938,14 @@ const submitReview = async (
     .executeTakeFirst();
   const reviewId = existing?.id ?? crypto.randomUUID();
   const now = new Date();
+  const contributionDelta = Math.min(
+    10,
+    1 +
+      ((body.personComment?.trim().length ?? 0) >= 80 ? 2 : 0) +
+      ((body.placeComment?.trim().length ?? 0) >= 80 ? 2 : 0) +
+      Math.min(4, Object.keys(body.personCriteria).length) +
+      Math.min(4, body.mediaIds.length * 2)
+  );
   await db.transaction().execute(async (tx) => {
     await tx
       .insertInto("date_review")
@@ -1919,6 +1975,44 @@ const submitReview = async (
         })
       )
       .execute();
+    if (!existing) {
+      await tx
+        .updateTable("profile")
+        .set((expression) => ({
+          contribution_score: expression(
+            "contribution_score",
+            "+",
+            contributionDelta
+          ),
+        }))
+        .where("user_id", "=", userId)
+        .execute();
+    }
+    const reviewedMatch = await tx
+      .selectFrom("date_match")
+      .select("user_id")
+      .where("request_id", "=", requestId)
+      .where("user_id", "!=", userId)
+      .executeTakeFirst();
+    if (reviewedMatch) {
+      const reviewedProfile = await tx
+        .selectFrom("profile")
+        .select(["reliability_score"])
+        .where("user_id", "=", reviewedMatch.user_id)
+        .executeTakeFirst();
+      if (reviewedProfile) {
+        await tx
+          .updateTable("profile")
+          .set({
+            reliability_score: adjustReliabilityScore(
+              reviewedProfile.reliability_score,
+              body.personRating
+            ),
+          })
+          .where("user_id", "=", reviewedMatch.user_id)
+          .execute();
+      }
+    }
     if (body.mediaIds.length) {
       const media = await tx
         .selectFrom("date_media")
@@ -2745,16 +2839,6 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     };
   },
 
-  async bootstrapDemoFriends() {
-    const sessionUser = await requireSession(context.request.headers);
-    for (const friend of demoFriends)
-      await createFriendRoom(sessionUser, friend);
-    return {
-      currentUserId: sessionUser.id,
-      rooms: await loadRooms(sessionUser.id),
-    };
-  },
-
   async getMessages(roomId: string) {
     const sessionUser = await requireSession(context.request.headers);
     const db = await getDb();
@@ -2825,8 +2909,8 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async suggestPlaces(input: PlaceSuggestionInput) {
-    await requireSession(context.request.headers);
-    return suggestPlaces(input);
+    const sessionUser = await requireSession(context.request.headers);
+    return suggestPlaces(sessionUser.id, input);
   },
 
   async getPlacePhoto(photoName: string) {

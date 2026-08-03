@@ -89,8 +89,6 @@ export const toChatThread = (
 };
 
 export const chatApi = {
-  bootstrapDemoFriends: (): Promise<ChatRoomsResponse> =>
-    api.bootstrapDemoFriends(),
   getRooms: (): Promise<ChatRoomsResponse> => api.getRooms(),
   sendMessage: (
     roomId: string,

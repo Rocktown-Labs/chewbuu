@@ -79,7 +79,6 @@ export interface DateRequestInput {
 
 export interface AwsBlocksApi {
   [method: string]: (...args: any[]) => Promise<unknown>;
-  bootstrapDemoFriends: () => Promise<ChatRoomsResponse>;
   getRooms: () => Promise<ChatRoomsResponse>;
   getMessages: (roomId: string) => Promise<{ messages: ApiChatMessage[] }>;
   sendMessage: (
@@ -254,6 +253,7 @@ export interface ReviewResponse extends ReviewInput {
 
 export interface ReviewPromptResponse {
   existingReview: ReviewResponse | null;
+  people: { id: string; name: string; photoUrl: string | null }[];
   places: DatingRequestResponse["places"];
   request: { id: string; searchArea: string; status: string };
 }
@@ -364,6 +364,7 @@ export interface DatingSummaryResponse {
     id: string;
     matches: {
       compatibility: number;
+      distanceMiles?: number;
       displayName: string;
       id: string;
       introVideoUrl: string;
@@ -397,6 +398,7 @@ export interface DatingSummaryResponse {
 
 export interface DatingMatchResponse {
   compatibility: number;
+  distanceMiles?: number;
   displayName: string;
   id: string;
   introVideoUrl: string;

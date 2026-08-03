@@ -22,6 +22,7 @@ export const profile = pgTable(
     birthday: text("birthday"),
     canDate: boolean("can_date").default(false).notNull(),
     canceledDateCount: integer("canceled_date_count").default(0).notNull(),
+    contributionScore: integer("contribution_score").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     datingModes: jsonb("dating_modes").$type<string[]>().default([]).notNull(),
     distanceMiles: integer("distance_miles").default(25).notNull(),
@@ -76,6 +77,12 @@ export const profile = pgTable(
   (table) => [
     index("profile_userId_idx").on(table.userId),
     index("profile_canDate_idx").on(table.canDate),
+    index("profile_matching_location_idx").on(
+      table.canDate,
+      table.onboarded,
+      table.latitude,
+      table.longitude
+    ),
   ]
 );
 
