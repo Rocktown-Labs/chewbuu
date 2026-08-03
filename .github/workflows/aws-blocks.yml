@@ -48,4 +48,5 @@ jobs:
         run: bun run aws:deploy
         env:
           BLOCKS_DB_URL: ${{ secrets.BLOCKS_DB_URL }}
+          BLOCKS_SSM_PARAM_DB_URL: /chewbuu-prod-db-url
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
