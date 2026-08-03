@@ -49,6 +49,18 @@ jobs:
           account_id=$(aws sts get-caller-identity --query Account --output text)
           npx cdk bootstrap "aws://${account_id}/${AWS_REGION}"
 
+      - name: Wait for an in-progress Blocks stack
+        run: |
+          if aws cloudformation describe-stacks --stack-name chewbuu-prod >/dev/null 2>&1; then
+            status=$(aws cloudformation describe-stacks \
+              --stack-name chewbuu-prod \
+              --query 'Stacks[0].StackStatus' \
+              --output text)
+            if [ "$status" = "CREATE_IN_PROGRESS" ]; then
+              aws cloudformation wait stack-create-complete --stack-name chewbuu-prod
+            fi
+          fi
+
       - name: Deploy Blocks backend
         run: bun run aws:deploy
         env:
