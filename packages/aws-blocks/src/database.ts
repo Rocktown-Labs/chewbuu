@@ -5,9 +5,12 @@ import {
   fromExisting,
 } from "@aws-blocks/bb-data";
 import { Scope } from "@aws-blocks/blocks";
+import { getStackName } from "@aws-blocks/blocks/scripts";
 import type { ColumnType, Kysely } from "kysely";
 
 import { DATABASE_CA_CERT } from "../generated/database.ca";
+
+const dbConnectionParameterName = (stackName: string) => `/${stackName}-db-url`;
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 
@@ -57,9 +60,14 @@ export interface BlocksDatabase {
 }
 
 const scope = new Scope("chewbuu");
+let databaseParameterName = process.env.BLOCKS_SSM_PARAM_DB_URL;
+if (!databaseParameterName && process.env.BLOCKS_STAGE) {
+  databaseParameterName = dbConnectionParameterName(
+    getStackName({ sandbox: process.env.BLOCKS_STAGE !== "production" })
+  );
+}
 const databaseUrl = AppSetting.fromExisting(scope, "database-url", {
-  name:
-    process.env.BLOCKS_DB_PARAMETER_NAME ?? "/chewbuu/production/database-url",
+  name: databaseParameterName ?? "local",
   secret: true,
 });
 

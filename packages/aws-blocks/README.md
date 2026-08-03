@@ -10,7 +10,9 @@ Realtime is transport only. Chat messages are written to PostgreSQL through Bloc
 
 The existing Neon schema was introspected with the `bb-data` pull generator. Generated table types and metadata live under `generated/`; the application query layer uses the Blocks Kysely adapter. Better Auth still uses its existing Drizzle adapter against the same database until its adapter can be migrated independently.
 
-The current Neon database is external to the AWS stack. Before deploying, provision the connection string in SSM as the parameter named by `BLOCKS_DB_PARAMETER_NAME` (default `/chewbuu/production/database-url`). Set `DATABASE_CA_CERT` or commit the provider CA in `generated/database.ca.ts` so Lambda verifies the database certificate.
+The current Neon database is external to the AWS stack. The deploy script writes `BLOCKS_DB_URL` to a stack-scoped SSM SecureString. Set `DATABASE_CA_CERT` or commit the provider CA in `generated/database.ca.ts` so Lambda verifies the database certificate.
+
+The GitHub Actions deployment expects a `production` environment with `AWS_ROLE_ARN` and `BLOCKS_DB_URL` secrets, plus an `AWS_REGION` variable. GitHub OIDC is used; no long-lived AWS access key is required.
 
 ## Deployment topology
 
