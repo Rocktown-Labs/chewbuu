@@ -4,7 +4,7 @@ import type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middlew
 import { ApiNamespace, Realtime, Scope } from "@aws-blocks/blocks";
 import { z } from "zod";
 
-import { db } from "./database";
+import { getDb } from "./database";
 import type {
   ApiChatMessage,
   ApiChatParticipant,
@@ -149,6 +149,7 @@ const toRoom = async (
 });
 
 const loadRoomsFromDatabase = async (userId: string, roomIds?: string[]) => {
+  const db = await getDb();
   let roomQuery = db
     .selectFrom("chat_room as room")
     .innerJoin(
@@ -241,6 +242,7 @@ const createFriendRoom = async (
   sessionUser: SessionUser,
   friend: (typeof demoFriends)[number]
 ) => {
+  const db = await getDb();
   const roomId = `friend_${sessionUser.id}_${friend.id}`;
   const now = new Date();
   await db
@@ -280,6 +282,7 @@ const createFriendRoom = async (
 };
 
 const getOwnedRoom = async (roomId: string, userId: string) => {
+  const db = await getDb();
   const room = await db
     .selectFrom("chat_room as room")
     .innerJoin(
@@ -328,6 +331,7 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
 
   async getMessages(roomId: string) {
     const sessionUser = await requireSession(context.request.headers);
+    const db = await getDb();
     const room = await getOwnedRoom(roomId, sessionUser.id);
     const messages = await db
       .selectFrom("chat_message")
@@ -340,6 +344,7 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
 
   async sendMessage(roomId: string, input: SendChatMessageInput) {
     const sessionUser = await requireSession(context.request.headers);
+    const db = await getDb();
     const room = await getOwnedRoom(roomId, sessionUser.id);
     const body = sendMessageSchema.parse(input);
     const now = new Date();

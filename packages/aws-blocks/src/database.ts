@@ -87,4 +87,9 @@ const database = new Database(scope, "postgres", {
   }),
 });
 
-export const db: Kysely<BlocksDatabase> = createKyselyAdapter(database);
+let dbPromise: Promise<Kysely<BlocksDatabase>> | undefined;
+
+export const getDb = async (): Promise<Kysely<BlocksDatabase>> => {
+  dbPromise ??= Promise.resolve(createKyselyAdapter<BlocksDatabase>(database));
+  return dbPromise;
+};
