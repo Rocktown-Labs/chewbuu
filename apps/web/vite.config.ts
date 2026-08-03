@@ -9,6 +9,15 @@ import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const nodeObservabilityDependencies = [
+    "@opentelemetry/api",
+    "@opentelemetry/core",
+    "@opentelemetry/resources",
+    "@opentelemetry/sdk-trace-base",
+    "@opentelemetry/semantic-conventions",
+    "import-in-the-middle",
+    "require-in-the-middle",
+  ];
 
   return {
     server: {
@@ -41,16 +50,13 @@ export default defineConfig(({ mode }) => {
     ],
     // Bundle all SSR deps: Vercel functions have no node_modules at runtime
     ssr: {
-      external: [
-        "@opentelemetry/api",
-        "@opentelemetry/core",
-        "@opentelemetry/resources",
-        "@opentelemetry/sdk-trace-base",
-        "@opentelemetry/semantic-conventions",
-        "import-in-the-middle",
-        "require-in-the-middle",
-      ],
+      external: nodeObservabilityDependencies,
       ...(mode === "production" ? { noExternal: true } : {}),
+    },
+    build: {
+      rolldownOptions: {
+        external: nodeObservabilityDependencies,
+      },
     },
   };
 });
