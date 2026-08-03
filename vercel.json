@@ -5,7 +5,7 @@
       "root": "apps/web",
       "framework": "tanstack-start",
       "installCommand": "cd ../.. && bun install",
-      "buildCommand": "VITE_SERVER_URL=/api bun run build"
+      "buildCommand": "VITE_SERVER_URL=/api VITE_BLOCKS_API_URL=$BLOCKS_API_URL bun run build"
     },
     "server": {
       "root": "apps/server",

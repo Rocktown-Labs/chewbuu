@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -13,6 +15,13 @@ export default defineConfig(({ mode }) => {
       port: 3001,
     },
     resolve: {
+      alias: {
+        "@chewbuu/aws-blocks": path.resolve(
+          import.meta.dirname,
+          "../../packages/aws-blocks/src",
+          mode === "production" ? "client.aws.ts" : "client.ts"
+        ),
+      },
       tsconfigPaths: true,
     },
     plugins: [

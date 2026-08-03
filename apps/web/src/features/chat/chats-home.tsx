@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { chatApi, toChatMessage, toChatThread } from "@/lib/chat-api";
-import type { ApiChatMessage } from "@/lib/chat-api";
+import type { ApiChatMessage, ApiChatRoom } from "@/lib/chat-api";
 import { useChatRealtime } from "@/lib/realtime-client";
 
 import type {
@@ -65,6 +65,9 @@ export function DashboardChats({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [realtimeConfigured, setRealtimeConfigured] = useState(false);
   const [realtimeRoomIds, setRealtimeRoomIds] = useState<string[]>([]);
+  const [realtimeChannels, setRealtimeChannels] = useState<
+    ApiChatRoom["realtimeChannel"][]
+  >([]);
   const [mobileShowThread, setMobileShowThread] = useState(
     Boolean(activeChannelId)
   );
@@ -79,11 +82,6 @@ export function DashboardChats({
     (thread) => thread.kind === "date_room"
   );
   const activeList = tab === "friends" ? friendThreads : dateThreads;
-  const realtimeChannels = useMemo(
-    () => realtimeRoomIds.map((roomId) => `chat:${roomId}`),
-    [realtimeRoomIds]
-  );
-
   const selected =
     threads.find((thread) => thread.id === selectedId) ??
     activeList[0] ??
@@ -171,8 +169,9 @@ export function DashboardChats({
         }
 
         setCurrentUserId(response.currentUserId);
-        setRealtimeConfigured(response.realtimeConfigured);
+        setRealtimeConfigured(true);
         setRealtimeRoomIds(response.rooms.map((room) => room.id));
+        setRealtimeChannels(response.rooms.map((room) => room.realtimeChannel));
         setThreads(
           response.rooms.map((room) =>
             toChatThread(room, response.currentUserId)
@@ -206,7 +205,6 @@ export function DashboardChats({
     enabled: Boolean(
       realtimeConfigured && currentUserId && realtimeRoomIds.length > 0
     ),
-    event: "chat.message",
     onData: handleRealtimeMessage,
   });
 

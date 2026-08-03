@@ -1,3 +1,12 @@
+import { api } from "@chewbuu/aws-blocks";
+import type {
+  ApiChatMessage,
+  ApiChatRoom,
+  ChatRoomsResponse,
+  SendChatMessageInput,
+  SendChatMessageResponse,
+} from "@chewbuu/aws-blocks";
+
 import type {
   ChatMessage,
   ChatMessageKind,
@@ -5,58 +14,16 @@ import type {
   ChatThread,
   DateRoomPhase,
 } from "@/features/chat/chat-types";
-import { apiFetch } from "@/lib/dating-api";
 
-export interface ApiChatMessage {
-  createdAt: string;
-  durationSec?: number;
-  id: string;
-  kind: "photo" | "system" | "text" | "video" | "voice";
-  mediaThumbUrl?: string;
-  mediaUrl?: string;
-  roomId: string;
-  senderId: string;
-  systemIcon?: ChatMessage["systemIcon"];
-  text?: string;
-}
+export type {
+  ApiChatMessage,
+  ApiChatRoom,
+  ChatRoomsResponse,
+  SendChatMessageInput,
+  SendChatMessageResponse,
+} from "@chewbuu/aws-blocks";
 
-interface ApiChatParticipant {
-  avatarUrl?: string;
-  displayName: string;
-  id: string;
-  userId?: string;
-}
-
-interface ApiChatRoom {
-  activeDateId?: string;
-  id: string;
-  kind: "date_room" | "friend" | string;
-  matchId?: string;
-  messages: ApiChatMessage[];
-  participants: ApiChatParticipant[];
-  phase: DateRoomPhase | string;
-  title: string;
-  updatedAt: string;
-}
-
-export interface ChatRoomsResponse {
-  currentUserId: string;
-  realtimeConfigured: boolean;
-  rooms: ApiChatRoom[];
-}
-
-export interface SendChatMessageInput {
-  durationSec?: number;
-  kind?: Exclude<ChatMessageKind, "intro_video">;
-  mediaThumbUrl?: string;
-  mediaUrl?: string;
-  text?: string;
-}
-
-export interface SendChatMessageResponse {
-  message: ApiChatMessage;
-  realtime: { delivered: boolean };
-}
+type ApiChatParticipant = ApiChatRoom["participants"][number];
 
 const toMessageKind = (kind: ApiChatMessage["kind"]): ChatMessageKind => kind;
 
@@ -122,14 +89,11 @@ export const toChatThread = (
 };
 
 export const chatApi = {
-  bootstrapDemoFriends: () =>
-    apiFetch<ChatRoomsResponse>("/chat/rooms/demo-friends", {
-      method: "POST",
-    }),
-  getRooms: () => apiFetch<ChatRoomsResponse>("/chat/rooms"),
-  sendMessage: (roomId: string, body: SendChatMessageInput) =>
-    apiFetch<SendChatMessageResponse>(`/chat/rooms/${roomId}/messages`, {
-      body,
-      method: "POST",
-    }),
+  bootstrapDemoFriends: (): Promise<ChatRoomsResponse> =>
+    api.bootstrapDemoFriends(),
+  getRooms: (): Promise<ChatRoomsResponse> => api.getRooms(),
+  sendMessage: (
+    roomId: string,
+    body: SendChatMessageInput
+  ): Promise<SendChatMessageResponse> => api.sendMessage(roomId, body),
 };

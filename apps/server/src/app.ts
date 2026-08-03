@@ -16,10 +16,8 @@ import { createRouter } from "./lib/create-app";
 import indexRoute from "./routes";
 import aiRoute from "./routes/ai";
 import authRoute from "./routes/auth";
-import chatRoute from "./routes/chat";
 import datingRoute from "./routes/dating";
 import pricingRoute from "./routes/pricing";
-import realtimeRoute from "./routes/realtime";
 import reviewsRoute from "./routes/reviews";
 import streamRoute from "./routes/stream";
 import uploadRoute from "./routes/upload";
@@ -83,10 +81,8 @@ const routes = app
   .route("/", indexRoute)
   .route("/", authRoute)
   .route("/", aiRoute)
-  .route("/", chatRoute)
   .route("/", datingRoute)
   .route("/", pricingRoute)
-  .route("/", realtimeRoute)
   .route("/", reviewsRoute)
   .route("/", streamRoute)
   .route("/", uploadRoute)

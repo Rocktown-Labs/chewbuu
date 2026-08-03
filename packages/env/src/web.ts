@@ -10,6 +10,7 @@ const serverUrlSchema = z.union([
 
 export const env = createEnv({
   client: {
+    VITE_BLOCKS_API_URL: z.url().optional(),
     VITE_SERVER_URL: serverUrlSchema,
   },
   clientPrefix: "VITE_",

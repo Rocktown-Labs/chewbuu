@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added an AWS Blocks backend package with CDK/Lambda deployment entrypoints, local development, typed API calls, and production WebSocket realtime support for chat.
+
+### Changed
+
+- Migrated chat room reads and message writes from Hono/Upstash realtime to AWS Blocks while retaining the existing Neon/Drizzle history schema.
+- Kept Vercel for TanStack Start builds and previews, with `VITE_BLOCKS_API_URL` connecting the frontend to the AWS Blocks API.
+
 ## [0.7.0] - 2026-07-20
 
 ### Added
