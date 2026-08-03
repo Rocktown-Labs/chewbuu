@@ -17,7 +17,7 @@ export const blocksStack = await BlocksStack.create(
   app,
   getStackName({ projectRoot, sandbox: sandboxMode }),
   {
-    backendCDKPath: path.join(directory, "index.cdk.ts"),
+    backendCDKPath: path.join(directory, "index.ts"),
     backendHandlerPath: path.join(directory, "index.handler.ts"),
   }
 );
