@@ -1,10 +1,11 @@
+import { AppSetting } from "@aws-blocks/bb-app-setting";
 import { DistributedTable } from "@aws-blocks/bb-distributed-table";
 import { KVStore } from "@aws-blocks/bb-kv-store";
 import type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middleware";
 import { ApiNamespace, Realtime, Scope } from "@aws-blocks/blocks";
 import { z } from "zod";
 
-import { getDb } from "./database";
+import { getDatabaseUrl, getDb } from "./database";
 import type {
   ApiChatMessage,
   ApiChatParticipant,
@@ -13,6 +14,10 @@ import type {
 } from "./types";
 
 const scope = new Scope("chewbuu-api");
+const betterAuthSecret = AppSetting.fromExisting(scope, "better-auth-secret", {
+  name: process.env.BLOCKS_AUTH_SECRET_PARAMETER ?? "/chewbuu-prod-auth-secret",
+  secret: true,
+});
 
 const chatMessageSchema = z.object({
   createdAt: z.string(),
@@ -85,7 +90,20 @@ interface SessionUser {
   name: string;
 }
 
+let authEnvironmentPromise: Promise<void> | undefined;
+
+const initializeAuthEnvironment = async () => {
+  authEnvironmentPromise ??= (async () => {
+    process.env.DATABASE_URL ??= await getDatabaseUrl();
+    process.env.BETTER_AUTH_SECRET ??= await betterAuthSecret.get();
+    process.env.BETTER_AUTH_URL ??= "https://chewbuu.com/api/auth";
+    process.env.CORS_ORIGIN ??= "https://chewbuu.com";
+  })();
+  await authEnvironmentPromise;
+};
+
 const requireSession = async (headers: Headers): Promise<SessionUser> => {
+  await initializeAuthEnvironment();
   const { auth } = await import("@chewbuu/auth");
   const session = await auth.api.getSession({ headers });
   if (!session?.user) throw new Error("Authentication required");

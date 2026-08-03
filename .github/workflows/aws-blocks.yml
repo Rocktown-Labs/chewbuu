@@ -72,6 +72,18 @@ jobs:
             echo "BLOCKS_RT_CALLBACK_URL=${ws_url/wss:/https:}" >> "$GITHUB_ENV"
           fi
 
+      - name: Provision Better Auth secret
+        env:
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+        run: |
+          test -n "$BETTER_AUTH_SECRET"
+          aws ssm put-parameter \
+            --name /chewbuu-prod-auth-secret \
+            --type SecureString \
+            --overwrite \
+            --value "$BETTER_AUTH_SECRET" \
+            >/dev/null
+
       - name: Deploy Blocks backend
         run: bun run aws:deploy
         env:

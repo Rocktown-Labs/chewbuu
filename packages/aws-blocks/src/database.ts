@@ -71,13 +71,13 @@ const databaseUrl = AppSetting.fromExisting(scope, "database-url", {
   secret: true,
 });
 
-const resolveDatabaseUrl = async () =>
+export const getDatabaseUrl = async () =>
   process.env.DATABASE_URL ?? (await databaseUrl.get());
 
 const database = new Database(scope, "postgres", {
   connection: fromExisting({
     connectionString: process.env.DATABASE_URL ?? {
-      get: resolveDatabaseUrl,
+      get: getDatabaseUrl,
     },
     ssl:
       (process.env.DATABASE_CA_CERT ?? DATABASE_CA_CERT)
