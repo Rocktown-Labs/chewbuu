@@ -1379,6 +1379,10 @@ export function MePage({
         status === "completed" ||
         status === "review_due" ||
         status === "review due" ||
+        status === "active" ||
+        status === "checked_in" ||
+        status === "match_pending" ||
+        status === "matched" ||
         status === "matching" ||
         status === "action needed" ||
         Boolean(demoDateHistoryById[req.id])

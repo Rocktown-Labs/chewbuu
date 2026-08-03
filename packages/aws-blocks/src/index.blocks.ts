@@ -12,9 +12,11 @@ import {
   GetMeetingCommand,
 } from "@aws-sdk/client-chime-sdk-meetings";
 import { convertToModelMessages, generateText } from "ai";
+import type { Kysely, Transaction } from "kysely";
 import { z } from "zod";
 
 import { getDatabaseUrl, getDb } from "./database";
+import type { BlocksDatabase } from "./database";
 import { nextDateLifecycleStatus } from "./date-lifecycle";
 import type {
   ApiChatMessage,
@@ -46,6 +48,8 @@ import type {
   NotificationChannelClient,
   NotificationsResponse,
 } from "./types";
+
+type BlocksDbExecutor = Kysely<BlocksDatabase> | Transaction<BlocksDatabase>;
 
 const scope = new Scope("chewbuu-api");
 const chime = new ChimeSDKMeetingsClient({
@@ -338,7 +342,54 @@ const markNotificationsRead = async (
   return { unreadCount: await refreshNotificationPresence(userId) };
 };
 
-const runDateLifecycle = async (at?: string) => {
+const ensureAcceptedFriendship = async (
+  db: BlocksDbExecutor,
+  userId: string,
+  friendUserId: string,
+  now: Date
+) => {
+  const existing = await db
+    .selectFrom("friendship")
+    .select("id")
+    .where((expression) =>
+      expression.or([
+        expression("user_id", "=", userId).and(
+          expression("friend_user_id", "=", friendUserId)
+        ),
+        expression("user_id", "=", friendUserId).and(
+          expression("friend_user_id", "=", userId)
+        ),
+      ])
+    )
+    .executeTakeFirst();
+  if (existing) {
+    await db
+      .updateTable("friendship")
+      .set({ accepted_at: now, status: "accepted" })
+      .where("id", "=", existing.id)
+      .execute();
+    return;
+  }
+  await db
+    .insertInto("friendship")
+    .values({
+      accepted_at: now,
+      created_at: now,
+      friend_user_id: friendUserId,
+      id: crypto.randomUUID(),
+      status: "accepted",
+      user_id: userId,
+    })
+    .onConflict((conflict) =>
+      conflict.columns(["user_id", "friend_user_id"]).doUpdateSet({
+        accepted_at: now,
+        status: "accepted",
+      })
+    )
+    .execute();
+};
+
+export const runDateLifecycle = async (at?: string) => {
   const now = at ? new Date(at) : new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Lifecycle time is invalid");
   const db = await getDb();
@@ -396,6 +447,21 @@ const runDateLifecycle = async (at?: string) => {
             conflict.columns(["date_request_id", "user_id"]).doNothing()
           )
           .execute();
+      } else if (nextStatus === "completed") {
+        const acceptedMatch = await tx
+          .selectFrom("date_match")
+          .select("user_id")
+          .where("request_id", "=", request.id)
+          .where("status", "=", "accepted")
+          .executeTakeFirst();
+        if (acceptedMatch) {
+          await ensureAcceptedFriendship(
+            tx,
+            request.user_id,
+            acceptedMatch.user_id,
+            now
+          );
+        }
       }
     });
     processed += 1;
@@ -507,7 +573,19 @@ const loadDatingSummary = async (
     db
       .selectFrom("date_request")
       .selectAll()
-      .where("user_id", "=", sessionUser.id)
+      .where((expression) =>
+        expression.or([
+          expression("user_id", "=", sessionUser.id),
+          expression(
+            "id",
+            "in",
+            expression
+              .selectFrom("date_match")
+              .select("request_id")
+              .where("user_id", "=", sessionUser.id)
+          ),
+        ])
+      )
       .orderBy("scheduled_at", "desc")
       .execute(),
   ]);
@@ -636,6 +714,7 @@ const profileDraftInputSchema = profileInputSchema.partial();
 
 const dateRequestInputSchema = z.object({
   filters: z.array(z.string()).default([]),
+  friendUserId: z.string().min(1).optional(),
   partyMembers: z
     .array(
       z.object({
@@ -849,6 +928,7 @@ const createDateRequest = async (
   request: DatingRequestResponse;
 }> => {
   const body = dateRequestInputSchema.parse(input);
+  const { friendUserId } = body;
   const pendingReviews = await loadPendingReviews(sessionUser.id);
   if (pendingReviews.length > 0) {
     throw new Error("Complete pending reviews before booking another date.");
@@ -868,21 +948,59 @@ const createDateRequest = async (
     throw new Error("Upgrade to Sugar to cover the date.");
   }
 
-  const candidates = await db
-    .selectFrom("profile")
-    .innerJoin("user", "user.id", "profile.user_id")
-    .select([
-      "profile.user_id as userId",
-      "user.name as displayName",
-      "profile.intro_video_url as introVideoUrl",
-      "profile.profile_photo_url as profilePhotoUrl",
-      "profile.bio as profileSummary",
-    ])
-    .where("profile.user_id", "!=", sessionUser.id)
-    .where("profile.can_date", "=", true)
-    .where("profile.onboarded", "=", true)
-    .limit(3)
-    .execute();
+  const directTarget = friendUserId
+    ? await db
+        .selectFrom("profile")
+        .innerJoin("user", "user.id", "profile.user_id")
+        .select([
+          "profile.user_id as userId",
+          "user.name as displayName",
+          "profile.intro_video_url as introVideoUrl",
+          "profile.profile_photo_url as profilePhotoUrl",
+          "profile.bio as profileSummary",
+        ])
+        .where("profile.user_id", "=", friendUserId)
+        .executeTakeFirst()
+    : undefined;
+  if (friendUserId) {
+    const friendship = await db
+      .selectFrom("friendship")
+      .select("id")
+      .where("status", "=", "accepted")
+      .where((expression) =>
+        expression.or([
+          expression("user_id", "=", sessionUser.id).and(
+            expression("friend_user_id", "=", friendUserId)
+          ),
+          expression("user_id", "=", friendUserId).and(
+            expression("friend_user_id", "=", sessionUser.id)
+          ),
+        ])
+      )
+      .executeTakeFirst();
+    if (!friendship) throw new Error("Accepted friendship required");
+    if (!directTarget) throw new Error("Friend profile not found");
+  }
+
+  const candidates = friendUserId
+    ? directTarget
+      ? [directTarget]
+      : []
+    : await db
+        .selectFrom("profile")
+        .innerJoin("user", "user.id", "profile.user_id")
+        .select([
+          "profile.user_id as userId",
+          "user.name as displayName",
+          "profile.intro_video_url as introVideoUrl",
+          "profile.profile_photo_url as profilePhotoUrl",
+          "profile.bio as profileSummary",
+        ])
+        .where("profile.user_id", "!=", sessionUser.id)
+        .where("profile.can_date", "=", true)
+        .where("profile.onboarded", "=", true)
+        .limit(3)
+        .execute();
 
   const matches = candidates.map((candidate) => ({
     compatibility: 80,
@@ -891,7 +1009,7 @@ const createDateRequest = async (
     introVideoUrl: candidate.introVideoUrl ?? "",
     profilePhotoUrl: candidate.profilePhotoUrl,
     profileSummary: candidate.profileSummary ?? "Ready for a great date.",
-    status: "suggested",
+    status: friendUserId ? "accepted" : "suggested",
     userId: candidate.userId,
     videoRepliesRequired: 3,
   }));
@@ -909,7 +1027,7 @@ const createDateRequest = async (
         payment_mode: body.paymentMode,
         scheduled_at: new Date(body.scheduledAt),
         search_area: body.searchArea,
-        status: "match_pending",
+        status: friendUserId ? "matched" : "match_pending",
         updated_at: now,
         user_id: sessionUser.id,
         what: body.what,
@@ -971,14 +1089,29 @@ const createDateRequest = async (
 
   if (matches.length) {
     await createNotification({
-      body: `${matches.length} match${matches.length === 1 ? "" : "es"} are ready to review.`,
+      body: friendUserId
+        ? "Your friend date request is ready to review."
+        : `${matches.length} match${matches.length === 1 ? "" : "es"} are ready to review.`,
       dedupeKey: `date-request:${requestId}:matches`,
       entityId: requestId,
       entityType: "date_request",
-      kind: "matches_ready",
-      title: "Your date matches are ready",
+      kind: friendUserId ? "date_request" : "matches_ready",
+      title: friendUserId
+        ? "Friend date request"
+        : "Your date matches are ready",
       userId: sessionUser.id,
     });
+    if (friendUserId) {
+      await createNotification({
+        body: "You have a direct friend date request.",
+        dedupeKey: `date-request:${requestId}:friend`,
+        entityId: requestId,
+        entityType: "date_request",
+        kind: "date_request",
+        title: "Friend date request",
+        userId: friendUserId,
+      });
+    }
   }
 
   return {
@@ -1020,7 +1153,12 @@ const getDateMeeting = async (
         expression("date_match.id", "=", requestOrMatchId),
       ])
     )
-    .where("date_request.user_id", "=", sessionUser.id)
+    .where((expression) =>
+      expression.or([
+        expression("date_request.user_id", "=", sessionUser.id),
+        expression("date_match.user_id", "=", sessionUser.id),
+      ])
+    )
     .executeTakeFirst();
   if (!request) throw new Error("Date request not found");
   if (request.partySize === null || request.partySize < 2)
@@ -1505,6 +1643,24 @@ const getOwnedRequest = async (requestId: string, userId: string) => {
   return request;
 };
 
+const getParticipantRequest = async (requestId: string, userId: string) => {
+  const db = await getDb();
+  const request = await db
+    .selectFrom("date_request")
+    .leftJoin("date_match", "date_match.request_id", "date_request.id")
+    .selectAll("date_request")
+    .where("date_request.id", "=", requestId)
+    .where((expression) =>
+      expression.or([
+        expression("date_request.user_id", "=", userId),
+        expression("date_match.user_id", "=", userId),
+      ])
+    )
+    .executeTakeFirst();
+  if (!request) throw new Error("Date request not found");
+  return request;
+};
+
 const toReview = (review: {
   completed_at: Date | string | null;
   date_request_id: string;
@@ -1648,6 +1804,25 @@ const submitReview = async (
         .set({ status: "completed", updated_at: now })
         .where("id", "=", requestId)
         .execute();
+      const acceptedMatch = await tx
+        .selectFrom("date_match")
+        .select(["user_id"])
+        .where("request_id", "=", requestId)
+        .where("status", "=", "accepted")
+        .executeTakeFirst();
+      if (acceptedMatch) {
+        const request = await tx
+          .selectFrom("date_request")
+          .select("user_id")
+          .where("id", "=", requestId)
+          .executeTakeFirstOrThrow();
+        await ensureAcceptedFriendship(
+          tx,
+          request.user_id,
+          acceptedMatch.user_id,
+          now
+        );
+      }
     }
   });
   const review = await db
@@ -1896,6 +2071,45 @@ const checkIn = async (
   };
 };
 
+const startDate = async (sessionUser: SessionUser, requestId: string) => {
+  const request = await getParticipantRequest(requestId, sessionUser.id);
+  if (request.status === "active") {
+    if (!request.actual_start_at) {
+      throw new Error("Active date has no start time");
+    }
+    return {
+      actualStartAt: new Date(request.actual_start_at).toISOString(),
+      dateRequestId: request.id,
+      status: "active" as const,
+    };
+  }
+  if (
+    ["completed", "review_due", "cancelled", "declined"].includes(
+      request.status
+    )
+  ) {
+    throw new Error("Date request cannot be started");
+  }
+
+  const now = new Date();
+  const db = await getDb();
+  const [updated] = await db
+    .updateTable("date_request")
+    .set({ actual_start_at: now, status: "active", updated_at: now })
+    .where("id", "=", request.id)
+    .where("status", "=", request.status)
+    .returning(["actual_start_at", "status"])
+    .execute();
+  if (!updated?.actual_start_at || updated.status !== "active") {
+    throw new Error("Date request changed before it could start");
+  }
+  return {
+    actualStartAt: new Date(updated.actual_start_at).toISOString(),
+    dateRequestId: request.id,
+    status: "active" as const,
+  };
+};
+
 const completeDate = async (sessionUser: SessionUser, requestId: string) => {
   const db = await getDb();
   const request = await getOwnedRequest(requestId, sessionUser.id);
@@ -1929,6 +2143,20 @@ const completeDate = async (sessionUser: SessionUser, requestId: string) => {
         conflict.columns(["date_request_id", "user_id"]).doNothing()
       )
       .execute();
+    const acceptedMatch = await tx
+      .selectFrom("date_match")
+      .select("user_id")
+      .where("request_id", "=", requestId)
+      .where("status", "=", "accepted")
+      .executeTakeFirst();
+    if (acceptedMatch) {
+      await ensureAcceptedFriendship(
+        tx,
+        request.user_id,
+        acceptedMatch.user_id,
+        now
+      );
+    }
   });
   await createNotification({
     body: "Complete your date review before booking another date.",
@@ -2459,6 +2687,11 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   async checkIn(input: CheckInInput) {
     const sessionUser = await requireSession(context.request.headers);
     return checkIn(sessionUser, input);
+  },
+
+  async startDate(dateRequestId: string) {
+    const sessionUser = await requireSession(context.request.headers);
+    return startDate(sessionUser, z.string().min(1).parse(dateRequestId));
   },
 
   async completeDate(dateRequestId: string) {

@@ -88,6 +88,7 @@ export interface DatePlace {
 
 export interface DateRequestPayload {
   filters: string[];
+  friendUserId?: string;
   partyMembers: {
     displayName?: string;
     email?: string;
@@ -313,6 +314,7 @@ export const datingApi = {
     dateRequestId?: string;
     partnerId?: string;
   }) => blocksApi.checkIn(body as Parameters<typeof blocksApi.checkIn>[0]),
+  startDate: (dateRequestId: string) => blocksApi.startDate(dateRequestId),
 };
 
 export const chimeApi = {

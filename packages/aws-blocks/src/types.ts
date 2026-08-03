@@ -53,6 +53,30 @@ export interface SendChatMessageResponse {
   published: boolean;
 }
 
+export interface DateRequestPlaceInput {
+  address?: string;
+  name: string;
+  placeId: string;
+  rating?: string;
+  types: string[];
+}
+
+export interface DateRequestInput {
+  filters: string[];
+  friendUserId?: string;
+  partyMembers: {
+    displayName?: string;
+    email?: string;
+    name?: string;
+    phone?: string;
+  }[];
+  paymentMode: "dutch" | "requester_covers";
+  places: DateRequestPlaceInput[];
+  scheduledAt: string;
+  searchArea: string;
+  what: string[];
+}
+
 export interface AwsBlocksApi {
   [method: string]: (...args: any[]) => Promise<unknown>;
   bootstrapDemoFriends: () => Promise<ChatRoomsResponse>;
@@ -78,7 +102,7 @@ export interface AwsBlocksApi {
     profile: DatingProfileResponse;
     readiness: DatingReadiness;
   }>;
-  createDateRequest: (input: unknown) => Promise<{
+  createDateRequest: (input: DateRequestInput) => Promise<{
     matches: DatingMatchResponse[];
     request: DatingRequestResponse;
   }>;
@@ -88,6 +112,11 @@ export interface AwsBlocksApi {
   }>;
   getPlacePhoto: (photoName: string) => Promise<PlacePhotoResponse>;
   checkIn: (input: CheckInInput) => Promise<CheckInResponse>;
+  startDate: (dateRequestId: string) => Promise<{
+    actualStartAt: string;
+    dateRequestId: string;
+    status: "active";
+  }>;
   getReviewPrompt: (requestId: string) => Promise<ReviewPromptResponse>;
   submitReview: (
     requestId: string,

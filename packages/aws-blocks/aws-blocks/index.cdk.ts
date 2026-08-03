@@ -7,6 +7,8 @@ import {
 import { getStackName } from "@aws-blocks/blocks/scripts";
 import * as cdk from "aws-cdk-lib";
 import { Mixins, RemovalPolicies } from "aws-cdk-lib";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
 
 const directory = import.meta.dirname;
 const app = new cdk.App();
@@ -45,6 +47,16 @@ blocksStack.handler.addToRolePolicy(
     resources: ["*"],
   })
 );
+
+const dateLifecycleSchedule = new events.Rule(
+  blocksStack,
+  "DateLifecycleSchedule",
+  {
+    schedule: events.Schedule.rate(cdk.Duration.minutes(1)),
+    targets: [new targets.LambdaFunction(blocksStack.handler)],
+  }
+);
+void dateLifecycleSchedule;
 
 const blocksApiOutput = new cdk.CfnOutput(blocksStack, "BlocksApiUrl", {
   value: blocksStack.apiUrl,
