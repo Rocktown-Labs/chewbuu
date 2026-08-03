@@ -34,6 +34,18 @@ blocksStack.handler.addEnvironment(
     "^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$,https://(.*\\.)?chewbuu\\.com,https://.*\\.vercel\\.app"
 );
 
+blocksStack.handler.addToRolePolicy(
+  new cdk.aws_iam.PolicyStatement({
+    actions: [
+      "chime:CreateAttendee",
+      "chime:CreateMeeting",
+      "chime:DeleteMeeting",
+      "chime:GetMeeting",
+    ],
+    resources: ["*"],
+  })
+);
+
 const blocksApiOutput = new cdk.CfnOutput(blocksStack, "BlocksApiUrl", {
   value: blocksStack.apiUrl,
 });

@@ -33,7 +33,6 @@
     "test:e2e": "turbo run test:e2e",
     "dev:native": "turbo run dev -F native",
     "dev:web": "turbo run dev -F web",
-    "dev:server": "turbo run dev -F server",
     "dev:blocks": "tsx packages/aws-blocks/aws-blocks/scripts/server.ts",
     "aws:deploy": "tsx packages/aws-blocks/aws-blocks/scripts/deploy.ts",
     "aws:sandbox": "tsx packages/aws-blocks/aws-blocks/scripts/sandbox.ts",

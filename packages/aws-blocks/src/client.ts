@@ -7,14 +7,39 @@ export type {
   ApiChatMessage,
   ApiChatParticipant,
   ApiChatRoom,
+  ApiNotification,
+  AiMessage,
   AwsBlocksApi,
+  CheckInInput,
+  CheckInResponse,
+  CircleResponse,
   ChatMessageKind,
   ChatRoomsResponse,
+  DateMediaResponse,
+  FriendshipResponse,
+  MembershipPlan,
+  MediaUploadInput,
+  NotificationChannelClient,
+  NotificationsResponse,
+  MediaUploadResponse,
+  PlacePhotoResponse,
+  PlaceSuggestion,
+  PlaceSuggestionInput,
+  PublishRecapInput,
+  RecapResponse,
+  ReviewInput,
+  ReviewPromptResponse,
+  ReviewResponse,
   SendChatMessageInput,
   SendChatMessageResponse,
+  UploadDateMediaInput,
 } from "./types";
 
 export type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middleware";
+export type {
+  DateLifecycleSchedulerBoundary,
+  DateLifecycleStatus,
+} from "./date-lifecycle";
 
 const apiUrl = (
   import.meta as ImportMeta & {

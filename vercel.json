@@ -6,34 +6,9 @@
       "framework": "tanstack-start",
       "installCommand": "cd ../.. && bun install",
       "buildCommand": "VITE_SERVER_URL=/api VITE_BLOCKS_API_URL=$BLOCKS_API_URL bun run build"
-    },
-    "server": {
-      "root": "apps/server",
-      "framework": "hono",
-      "entrypoint": "src/index.ts",
-      "installCommand": "cd ../.. && bun install",
-      "buildCommand": "cd ../../packages/db && bunx drizzle-kit push --force && cd ../../apps/server && bun run build",
-      "routes": [
-        {
-          "src": "/api/((?!auth(?:/|$)).*)",
-          "transforms": [
-            {
-              "type": "request.path",
-              "op": "set",
-              "args": "/$1"
-            }
-          ]
-        }
-      ]
     }
   },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": {
-        "service": "server"
-      }
-    },
     {
       "source": "/(.*)",
       "destination": {

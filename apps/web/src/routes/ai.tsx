@@ -1,5 +1,4 @@
-import { useChat } from "@ai-sdk/react";
-import { env } from "@chewbuu/env/web";
+import { api as blocksApi, type AiMessage } from "@chewbuu/aws-blocks";
 import { Bubble, BubbleContent } from "@chewbuu/ui/components/bubble";
 import { Button } from "@chewbuu/ui/components/button";
 import {
@@ -34,7 +33,6 @@ import {
   TooltipTrigger,
 } from "@chewbuu/ui/components/tooltip";
 import { createFileRoute } from "@tanstack/react-router";
-import { DefaultChatTransport } from "ai";
 import {
   ArrowUpIcon,
   Loader2,
@@ -51,21 +49,42 @@ export const Route = createFileRoute("/ai")({
 
 function RouteComponent() {
   const [input, setInput] = useState("");
-  const { messages, sendMessage, status, setMessages } = useChat({
-    transport: new DefaultChatTransport({
-      api: `${env.VITE_SERVER_URL}/ai`,
-    }),
-  });
-  const isSending = status === "submitted" || status === "streaming";
+  const [messages, setMessages] = useState<AiMessage[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const text = input.trim();
     if (!text || isSending) {
       return;
     }
-    sendMessage({ text });
+    const userMessage: AiMessage = {
+      id: crypto.randomUUID(),
+      parts: [{ text, type: "text" }],
+      role: "user",
+    };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
     setInput("");
+    setError(null);
+    setIsSending(true);
+    try {
+      const { text: responseText } =
+        await blocksApi.generateAiResponse(nextMessages);
+      setMessages([
+        ...nextMessages,
+        {
+          id: crypto.randomUUID(),
+          parts: [{ text: responseText, type: "text" }],
+          role: "assistant",
+        },
+      ]);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "AI request failed.");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handlePromptKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -113,6 +132,11 @@ function RouteComponent() {
           </div>
         </header>
         <main className="min-h-0 flex-1">
+          {error && (
+            <p className="mx-auto w-full max-w-3xl px-4 pt-4 text-sm text-destructive">
+              {error}
+            </p>
+          )}
           {messages.length === 0 && !isSending ? (
             <Empty className="mx-auto h-full max-w-3xl px-4">
               <EmptyHeader>
@@ -155,10 +179,7 @@ function RouteComponent() {
                                     return (
                                       <Streamdown
                                         key={index}
-                                        isAnimating={
-                                          status === "streaming" &&
-                                          message.role === "assistant"
-                                        }
+                                        isAnimating={false}
                                       >
                                         {part.text}
                                       </Streamdown>
@@ -173,7 +194,7 @@ function RouteComponent() {
                       </MessageScrollerItem>
                     );
                   })}
-                  {status === "submitted" && (
+                  {isSending && (
                     <MessageScrollerItem>
                       <Message align="start">
                         <MessageBody>

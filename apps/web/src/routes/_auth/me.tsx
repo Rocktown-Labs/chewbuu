@@ -112,6 +112,7 @@ import {
   type DatePlace,
   type DatingProfilePayload,
   type DatingSummary,
+  type PendingReview,
 } from "@/lib/dating-api";
 import {
   getLocationWeatherFromCityName,
@@ -1070,6 +1071,7 @@ export function MePage({
 
   const [summary, setSummary] = useState<DatingSummary | null>(null);
   const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
+  const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [spots, setSpots] = useState<DatePlace[]>([]);
   const [spotsQuery, setSpotsQuery] = useState("");
   const [isLoadingSpots, setIsLoadingSpots] = useState(false);
@@ -1150,12 +1152,15 @@ export function MePage({
   useEffect(() => {
     const load = async () => {
       try {
-        const [nextSummary, nextProfile] = await Promise.all([
-          datingApi.getSummary(),
-          datingApi.getProfile(),
-        ]);
+        const [nextSummary, nextProfile, nextPendingReviews] =
+          await Promise.all([
+            datingApi.getSummary(),
+            datingApi.getProfile(),
+            datingApi.getPendingReviews(),
+          ]);
         setSummary(nextSummary);
         setProfile(nextProfile.profile);
+        setPendingReviews(nextPendingReviews.reviews);
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Could not load dashboard."
@@ -2808,12 +2813,26 @@ export function MePage({
                   <Card className="rounded-2xl border-primary/30 bg-primary/10">
                     <CardContent className="flex items-start gap-3 p-4">
                       <Star className="mt-0.5 size-4 text-primary" />
-                      <div>
+                      <button
+                        className="text-left"
+                        onClick={() => {
+                          const [review] = pendingReviews;
+                          if (review) {
+                            navigate({
+                              to: "/reviews/$requestid",
+                              params: { requestid: review.dateRequestId },
+                            });
+                          }
+                        }}
+                        type="button"
+                      >
                         <p className="font-bold text-sm">Review due</p>
                         <p className="text-xs text-muted-foreground">
-                          Finish your date review before booking again.
+                          {pendingReviews[0]
+                            ? `Finish your ${pendingReviews[0].searchArea} date review before booking again.`
+                            : "Finish your date review before booking again."}
                         </p>
-                      </div>
+                      </button>
                     </CardContent>
                   </Card>
                 )}

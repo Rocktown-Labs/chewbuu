@@ -1,3 +1,4 @@
+import { api as blocksApi } from "@chewbuu/aws-blocks";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button } from "@chewbuu/ui/components/button";
 import {
@@ -33,7 +34,6 @@ import {
   useForm,
 } from "@tanstack/react-form";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { upload } from "@vercel/blob/client";
 import {
   Camera,
   Check,
@@ -59,7 +59,6 @@ import { NavigationBlocker } from "@/components/navigation-blocker";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
-  getApiUrl,
   pricingApi,
   type DatePlace,
   type DatingMedia,
@@ -449,18 +448,19 @@ const ensureUploadExtension = (fileName: string, contentType: string) => {
 
 const uploadProfileMedia = async (file: File, kind: DatingMedia["kind"]) => {
   const contentType = getUploadType(file, kind);
-  const pathname = `profiles/client/${kind}/${crypto.randomUUID()}-${ensureUploadExtension(file.name, contentType)}`;
-  const blob = await upload(pathname, file, {
-    access: "private",
-    clientPayload: JSON.stringify({ slot: kind }),
+  const upload = await blocksApi.createMediaUpload({
     contentType,
-    handleUploadUrl: getApiUrl("/upload/blob/client"),
-    multipart: kind === "intro_video",
+    fileName: ensureUploadExtension(file.name, contentType),
+    slot: kind,
   });
+  const response = await fetch(upload.uploadUrl, {
+    body: file,
+    headers: { "content-type": contentType },
+    method: "PUT",
+  });
+  if (!response.ok) throw new Error("Media upload failed.");
 
-  return getApiUrl(
-    `/upload/blob?pathname=${encodeURIComponent(blob.pathname)}`
-  );
+  return upload.mediaUrl;
 };
 
 const createEmptyPhoto = (sortOrder: number): DatingMedia => ({

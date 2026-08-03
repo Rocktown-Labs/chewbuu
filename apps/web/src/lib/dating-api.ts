@@ -1,3 +1,4 @@
+import { api as blocksApi } from "@chewbuu/aws-blocks";
 import { env } from "@chewbuu/env/web";
 
 interface ApiOptions {
@@ -163,6 +164,55 @@ export interface ReviewPrompt {
   };
 }
 
+export interface PendingReview {
+  completedAt: string | null;
+  dateRequestId: string;
+  id: string;
+  required: boolean;
+  searchArea: string;
+  scheduledAt: string;
+}
+
+export interface Friendship {
+  acceptedAt: string | null;
+  createdAt: string;
+  friendUserId: string;
+  id: string;
+  status: string;
+  userId: string;
+}
+
+export interface Circle {
+  id: string;
+  members: { id: string; role: string; status: string; userId: string }[];
+  name: string;
+  ownerUserId: string;
+}
+
+export interface DateMedia {
+  createdAt: string;
+  dateRequestId: string;
+  id: string;
+  kind: string;
+  thumbnailUrl: string | null;
+  uploadedByUserId: string;
+  url: string;
+}
+
+export interface DateRecap {
+  authorUserId: string;
+  caption?: string;
+  createdAt: string;
+  dateRequestId: string;
+  id: string;
+  publishedAt: string | null;
+  reviewId?: string;
+  storyExpiresAt: string | null;
+  storyHours?: number;
+  thumbnailUrl?: string;
+  videoUrl: string;
+}
+
 export const getServerUrl = (url: string) => {
   const normalized = url.endsWith("/") ? url.slice(0, -1) : url;
 
@@ -226,23 +276,27 @@ export interface MembershipPlan {
 
 export const datingApi = {
   createRequest: (body: DateRequestPayload) =>
-    apiFetch<{
+    blocksApi.createDateRequest(body) as unknown as Promise<{
       matches: DateMatch[];
       request: DatingSummary["requests"][number];
-    }>("/dating/requests", { body, method: "POST" }),
-  getProfile: () =>
-    apiFetch<{ profile: DatingProfilePayload | null }>("/dating/profile"),
-  getSummary: () => apiFetch<DatingSummary>("/dating/summary"),
+    }>,
+  getPendingReviews: () =>
+    blocksApi.getPendingReviews() as Promise<{ reviews: PendingReview[] }>,
+  getProfile: async () =>
+    (await blocksApi.getProfile()) as {
+      profile: DatingProfilePayload | null;
+    },
+  getSummary: async () => (await blocksApi.getDatingSummary()) as DatingSummary,
   saveProfile: (body: DatingProfilePayload) =>
-    apiFetch<{
+    blocksApi.saveProfile(body) as unknown as Promise<{
       profile: DatingProfilePayload;
       readiness: DatingSummary["readiness"];
-    }>("/dating/profile", { body, method: "PUT" }),
+    }>,
   saveProfileDraft: (body: DatingProfileDraftPayload) =>
-    apiFetch<{
+    blocksApi.saveProfileDraft(body) as unknown as Promise<{
       profile: DatingProfilePayload;
       readiness: DatingSummary["readiness"];
-    }>("/dating/profile/draft", { body, method: "PUT" }),
+    }>,
   suggestPlaces: (body: {
     area: string;
     filters: string[];
@@ -251,46 +305,91 @@ export const datingApi = {
     searchKind?: "place" | "signal";
     what: PlaceSuggestWhat[];
   }) =>
-    apiFetch<{ places: DatePlace[] }>("/dating/places/suggest", {
-      body,
-      method: "POST",
-    }),
+    blocksApi.suggestPlaces(body) as unknown as Promise<{
+      places: DatePlace[];
+    }>,
   checkIn: (body: {
     code?: string;
     dateRequestId?: string;
     partnerId?: string;
-  }) =>
-    apiFetch<{ dateRequestId: string; message: string; success: boolean }>(
-      "/dating/check-in",
-      { body, method: "POST" }
-    ),
+  }) => blocksApi.checkIn(body as Parameters<typeof blocksApi.checkIn>[0]),
+};
+
+export const chimeApi = {
+  getMeeting: (requestId: string) => blocksApi.getDateMeeting(requestId),
 };
 
 export const pricingApi = {
-  getPlans: () => apiFetch<{ plans: MembershipPlan[] }>("/pricing/plans"),
+  getPlans: () =>
+    blocksApi.getPricingPlans() as Promise<{ plans: MembershipPlan[] }>,
   seedPlans: () =>
-    apiFetch<{ plans: MembershipPlan[] }>("/admin/pricing/seed", {
-      method: "POST",
-    }),
-  syncPlans: () =>
-    apiFetch<{
-      message: string;
-      plans: MembershipPlan[];
-      stripeConfigured: boolean;
-    }>("/admin/pricing/sync", { method: "POST" }),
+    blocksApi.seedPricingPlans() as Promise<{ plans: MembershipPlan[] }>,
+  syncPlans: async () => {
+    const result = await blocksApi.getPricingPlans();
+    return {
+      ...result,
+      message: "Pricing plans loaded. Stripe sync is not available in Blocks.",
+      stripeConfigured: false,
+    };
+  },
   updatePlans: (plans: MembershipPlan[]) =>
-    apiFetch<{ plans: MembershipPlan[] }>("/admin/pricing/plans", {
-      body: { plans },
-      method: "PUT",
-    }),
+    blocksApi.updatePricingPlans({ plans } as Parameters<
+      typeof blocksApi.updatePricingPlans
+    >[0]) as unknown as Promise<{
+      plans: MembershipPlan[];
+    }>,
 };
 
 export const reviewsApi = {
   getPrompt: (requestId: string) =>
-    apiFetch<ReviewPrompt>(`/reviews/date-requests/${requestId}`),
+    blocksApi.getReviewPrompt(requestId) as unknown as Promise<ReviewPrompt>,
   submit: (requestId: string, body: DateReviewPayload) =>
-    apiFetch<{ review: DateReview }>(`/reviews/date-requests/${requestId}`, {
-      body,
-      method: "POST",
-    }),
+    blocksApi.submitReview(requestId, body) as unknown as Promise<{
+      review: DateReview;
+    }>,
+};
+
+export const friendshipsApi = {
+  get: () =>
+    blocksApi.getFriendships() as Promise<{ friendships: Friendship[] }>,
+  request: (friendUserId: string) => blocksApi.requestFriendship(friendUserId),
+  respond: (friendshipId: string, status: "accepted" | "declined") =>
+    blocksApi.respondFriendship(friendshipId, status),
+};
+
+export const circlesApi = {
+  get: () => blocksApi.getCircles() as Promise<{ circles: Circle[] }>,
+  create: (name: string) => blocksApi.createCircle(name),
+};
+
+export const notificationsApi = {
+  get: () => blocksApi.getNotifications(),
+  markRead: (notificationIds: string[]) =>
+    blocksApi.markNotificationsRead(notificationIds),
+  subscribe: () => blocksApi.subscribeNotifications(),
+};
+
+export const dateMediaApi = {
+  get: (requestId: string) =>
+    blocksApi.getDateMedia(requestId) as Promise<{
+      media: DateMedia[];
+    }>,
+  upload: (input: {
+    dateRequestId: string;
+    kind: string;
+    thumbnailUrl?: string;
+    url: string;
+  }) => blocksApi.uploadDateMedia(input),
+};
+
+export const recapsApi = {
+  get: () => blocksApi.getRecaps() as Promise<{ recaps: DateRecap[] }>,
+  publish: (input: {
+    caption?: string;
+    dateRequestId: string;
+    reviewId?: string;
+    storyHours?: number;
+    thumbnailUrl?: string;
+    videoUrl: string;
+  }) => blocksApi.publishRecap(input),
 };
