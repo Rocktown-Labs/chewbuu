@@ -24,4 +24,17 @@ describe("AWS Blocks realtime", () => {
     });
     expect(descriptor.token).toEqual(expect.any(String));
   });
+
+  it("validates and publishes a chat payload locally", async () => {
+    const scope = new Scope("test");
+    const realtime = new Realtime(scope, "chat", {
+      namespaces: {
+        messages: Realtime.namespace(z.object({ text: z.string() })),
+      },
+    });
+
+    await expect(
+      realtime.publish("messages", "room-1", { text: "hello" })
+    ).resolves.toBeUndefined();
+  });
 });
