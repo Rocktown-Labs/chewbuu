@@ -76,7 +76,9 @@ const resolveDatabaseUrl = async () =>
 
 const database = new Database(scope, "postgres", {
   connection: fromExisting({
-    connectionString: { get: resolveDatabaseUrl },
+    connectionString: process.env.DATABASE_URL ?? {
+      get: resolveDatabaseUrl,
+    },
     ssl:
       (process.env.DATABASE_CA_CERT ?? DATABASE_CA_CERT)
         ? {
