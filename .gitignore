@@ -44,7 +44,9 @@ lerna-debug.log*
 .alchemy
 .vercel
 .blocks-sandbox
-.blocks
+/.blocks/*
+/packages/aws-blocks/.blocks/*
+!/packages/aws-blocks/.blocks/config.json
 .bb-data
 
 # Testing
