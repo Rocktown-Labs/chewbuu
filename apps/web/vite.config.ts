@@ -41,7 +41,16 @@ export default defineConfig(({ mode }) => {
     ],
     // Bundle all SSR deps: Vercel functions have no node_modules at runtime
     ssr: {
-      noExternal: true,
+      external: [
+        "@opentelemetry/api",
+        "@opentelemetry/core",
+        "@opentelemetry/resources",
+        "@opentelemetry/sdk-trace-base",
+        "@opentelemetry/semantic-conventions",
+        "import-in-the-middle",
+        "require-in-the-middle",
+      ],
+      ...(mode === "production" ? { noExternal: true } : {}),
     },
   };
 });

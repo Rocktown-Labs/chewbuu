@@ -44,6 +44,8 @@ lerna-debug.log*
 .alchemy
 .vercel
 .blocks-sandbox
+.blocks
+.bb-data
 
 # Testing
 coverage

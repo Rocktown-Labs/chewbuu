@@ -29,6 +29,11 @@ if (sandboxMode) {
 }
 
 blocksStack.handler.addEnvironment(
+  "BLOCKS_DB_PARAMETER_NAME",
+  process.env.BLOCKS_DB_PARAMETER_NAME ?? "/chewbuu/production/database-url"
+);
+
+blocksStack.handler.addEnvironment(
   "CORS_ALLOWED_ORIGINS",
   process.env.CORS_ALLOWED_ORIGINS ??
     "^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$,https://(.*\\.)?chewbuu\\.com,https://.*\\.vercel\\.app"

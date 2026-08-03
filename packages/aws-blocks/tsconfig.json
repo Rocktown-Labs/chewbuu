@@ -3,5 +3,5 @@
   "compilerOptions": {
     "strictNullChecks": true
   },
-  "include": ["src/**/*.ts", "aws-blocks/**/*.ts"]
+  "include": ["src/**/*.ts", "generated/**/*.ts", "aws-blocks/**/*.ts"]
 }

@@ -11,7 +11,7 @@ try {
 }
 
 await startDevServer({
-  backendPath: path.join(directory, "..", "..", "src", "index.ts"),
+  backendPath: path.join(directory, "..", "..", "src", "index.blocks.ts"),
   frontendCommand: "bun run --cwd apps/web dev --host 127.0.0.1 --port 3001",
   frontendPort: 3001,
   port: 3000,

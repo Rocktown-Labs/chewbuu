@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - Added an AWS Blocks backend package with CDK/Lambda deployment entrypoints, local development, typed API calls, and production WebSocket realtime support for chat.
+- Introspected the existing Neon PostgreSQL schema with `bb-data`, added Blocks Database/Kysely access, a DynamoDB room projection, a DynamoDB KV room-list cache, and a migration for the legacy chat read-state key.
 
 ### Changed
 
