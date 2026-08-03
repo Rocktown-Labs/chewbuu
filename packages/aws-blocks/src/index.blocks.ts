@@ -2,7 +2,6 @@ import { DistributedTable } from "@aws-blocks/bb-distributed-table";
 import { KVStore } from "@aws-blocks/bb-kv-store";
 import type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middleware";
 import { ApiNamespace, Realtime, Scope } from "@aws-blocks/blocks";
-import { auth } from "@chewbuu/auth";
 import { z } from "zod";
 
 import { db } from "./database";
@@ -80,11 +79,14 @@ const demoFriends = [
   },
 ] as const;
 
-type SessionUser = NonNullable<
-  Awaited<ReturnType<typeof auth.api.getSession>>
->["user"];
+interface SessionUser {
+  email: string;
+  id: string;
+  name: string;
+}
 
 const requireSession = async (headers: Headers): Promise<SessionUser> => {
+  const { auth } = await import("@chewbuu/auth");
   const session = await auth.api.getSession({ headers });
   if (!session?.user) throw new Error("Authentication required");
   return session.user;
