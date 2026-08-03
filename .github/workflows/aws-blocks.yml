@@ -61,6 +61,17 @@ jobs:
             fi
           fi
 
+      - name: Load existing realtime endpoint
+        run: |
+          ws_url=$(aws cloudformation describe-stacks \
+            --stack-name chewbuu-prod \
+            --query "Stacks[0].Outputs[?OutputKey=='RealtimeWsUrl'].OutputValue" \
+            --output text 2>/dev/null || true)
+          if [ -n "$ws_url" ] && [ "$ws_url" != "None" ]; then
+            echo "BLOCKS_RT_WS_URL=$ws_url" >> "$GITHUB_ENV"
+            echo "BLOCKS_RT_CALLBACK_URL=${ws_url/wss:/https:}" >> "$GITHUB_ENV"
+          fi
+
       - name: Deploy Blocks backend
         run: bun run aws:deploy
         env:
