@@ -49,14 +49,12 @@ export default defineConfig(({ mode }) => {
         : []),
     ],
     // Bundle all SSR deps: Vercel functions have no node_modules at runtime
-    ssr: {
-      external: nodeObservabilityDependencies,
-      ...(mode === "production" ? { noExternal: true } : {}),
-    },
-    build: {
-      rolldownOptions: {
-        external: nodeObservabilityDependencies,
-      },
-    },
+    ssr:
+      mode === "production"
+        ? {
+            external: ["@chewbuu/auth"],
+            noExternal: nodeObservabilityDependencies,
+          }
+        : {},
   };
 });
