@@ -9,7 +9,8 @@ import {
 import { createAuthClient } from "better-auth/react";
 
 const getServerUrl = (url: string) => {
-  const normalized = url.endsWith("/") ? url.slice(0, -1) : url;
+  const normalized =
+    url === "/" ? url : url.endsWith("/") ? url.slice(0, -1) : url;
 
   if (!normalized.startsWith("/")) {
     return normalized;

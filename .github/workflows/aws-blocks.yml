@@ -91,5 +91,32 @@ jobs:
           BLOCKS_DB_URL: ${{ secrets.BLOCKS_DB_URL }}
           BLOCKS_SSM_PARAM_DB_URL: /chewbuu-prod-db-url
           DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
+          ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS || 'cg@rocktownlabs.com' }}
+          BETTER_AUTH_ADMIN_EMAILS: ${{ vars.BETTER_AUTH_ADMIN_EMAILS || 'cg@rocktownlabs.com' }}
+          CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          STREAM_API_KEY: ${{ secrets.STREAM_API_KEY }}
+          STREAM_API_SECRET: ${{ secrets.STREAM_API_SECRET }}
+          STRIPE_MINGLE_ANNUAL_PRICE_ID: ${{ secrets.STRIPE_MINGLE_ANNUAL_PRICE_ID }}
+          STRIPE_MINGLE_PRICE_ID: ${{ secrets.STRIPE_MINGLE_PRICE_ID }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_SUGAR_ANNUAL_PRICE_ID: ${{ secrets.STRIPE_SUGAR_ANNUAL_PRICE_ID }}
+          STRIPE_SUGAR_PRICE_ID: ${{ secrets.STRIPE_SUGAR_PRICE_ID }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          VITE_SERVER_URL: "/"
           VITE_NEON_AUTH_URL: ${{ secrets.VITE_NEON_AUTH_URL || vars.VITE_NEON_AUTH_URL }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}

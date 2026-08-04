@@ -18,11 +18,16 @@ const vercelOrigin = getVercelOrigin();
 const runtimeEnv = {
   ...process.env,
   // Public auth base: /api/auth bypasses the rewrite's path strip, so the
-  // same URL works for incoming matching and generated callbacks
+  // same URL works for incoming matching and generated callbacks. Falls back
+  // to the chewbuu.com origin outside Vercel (e.g. AWS Blocks SSR Lambda);
+  // Better Auth derives the actual base from the request host via
+  // baseURL.allowedHosts, so this only needs to be a valid URL.
   BETTER_AUTH_URL:
     process.env.BETTER_AUTH_URL ??
-    (vercelOrigin ? `${vercelOrigin}/api/auth` : undefined),
-  CORS_ORIGIN: process.env.CORS_ORIGIN ?? vercelOrigin,
+    (vercelOrigin
+      ? `${vercelOrigin}/api/auth`
+      : "https://chewbuu.com/api/auth"),
+  CORS_ORIGIN: process.env.CORS_ORIGIN ?? vercelOrigin ?? "https://chewbuu.com",
 };
 
 export const env = createEnv({
