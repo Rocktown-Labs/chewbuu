@@ -32,6 +32,7 @@ if (deployFrontend && !sandboxMode) {
   const webHosting = new Hosting(blocksStack, "WebHosting", {
     root: path.resolve(directory, "../../../apps/web"),
     buildCommand: "bun run build",
+    buildOutputDir: ".output",
     framework: "tanstack-start",
     api: blocksStack,
   });

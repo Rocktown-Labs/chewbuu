@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Fixed React SSR dual-module bundling in `apps/web/vite.config.ts` by removing React from `ssr.noExternal`.
+- Explicitly set `buildOutputDir` to `.output` in AWS Blocks `Hosting` construct for TanStack Start Nitro build output.
 
 ### Changed
 
