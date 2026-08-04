@@ -126,14 +126,13 @@ jobs:
         if: always()
         run: |
           fn=$(aws lambda list-functions \
-            --query "Functions[?starts_with(FunctionName, 'chewbuu-prod-WebHosting')].FunctionName" \
-            --output text | tr '\t' '\n' | head -1)
+            --query "Functions[].FunctionName" --output text | tr '\t' '\n' | grep Computedefault | head -1)
           echo "SSR_LAMBDA=$fn"
           if [ -n "$fn" ]; then
             echo "--- env keys ---"
             aws lambda get-function-configuration --function-name "$fn" \
               --query 'Environment.Variables' --output json | python3 -c \
-              "import json,sys; d=json.load(sys.stdin); [print(k,'=SET len',len(str(v))) for k,v in sorted(d.items()) if v]"
+              "import json,sys; d=json.load(sys.stdin) or {}; [print(k,'=SET len',len(str(v))) for k,v in sorted(d.items()) if v]" || true
             echo "--- invoke root ---"
             echo '{"version":"1.0","resource":"/{proxy+}","path":"/","httpMethod":"GET","headers":{"Host":"d1cfwdtr24bsn.cloudfront.net"},"multiValueHeaders":{},"queryStringParameters":null,"pathParameters":{"proxy":""},"stageVariables":null,"requestContext":{"accountId":"1","resourceId":"a","stage":"prod","requestId":"t","identity":{"sourceIp":"1.2.3.4"},"resourcePath":"/{proxy+}","httpMethod":"GET","apiId":"x"},"body":null,"isBase64Encoded":false}' \
               > /tmp/payload.json
@@ -143,8 +142,8 @@ jobs:
             echo "--- lambda error ---"
             head -c 400 /tmp/out.json 2>/dev/null
             echo
-            echo "--- cloudwatch last 5m ---"
+            echo "--- cloudwatch last 10m ---"
             aws logs filter-log-events --log-group-name "/aws/lambda/$fn" \
-              --start-time "$(( $(date +%s) - 300 ))" \
-              --query 'events[].message' --output text 2>&1 | tail -40
+              --start-time "$(( $(date +%s) - 600 ))" \
+              --query 'events[].message' --output text 2>&1 | tail -50 || true
           fi
