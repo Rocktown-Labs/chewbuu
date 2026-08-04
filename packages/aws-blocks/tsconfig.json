@@ -1,0 +1,7 @@
+{
+  "extends": "@chewbuu/config/tsconfig.base.json",
+  "compilerOptions": {
+    "strictNullChecks": true
+  },
+  "include": ["src/**/*.ts", "generated/**/*.ts", "aws-blocks/**/*.ts"]
+}

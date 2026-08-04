@@ -1,0 +1,45 @@
+{
+  "name": "@chewbuu/aws-blocks",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/client.ts",
+      "browser": "./src/client.ts",
+      "import": "./src/client.ts",
+      "default": "./src/index.blocks.ts"
+    },
+    "./client": "./src/client.ts",
+    "./server": "./src/index.blocks.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^4.0.7",
+    "@aws-blocks/bb-app-setting": "^0.1.3",
+    "@aws-blocks/bb-data": "^0.2.2",
+    "@aws-blocks/bb-distributed-table": "^0.1.3",
+    "@aws-blocks/bb-file-bucket": "^0.1.2",
+    "@aws-blocks/bb-kv-store": "^0.1.4",
+    "@aws-blocks/bb-realtime": "^0.1.3",
+    "@aws-blocks/blocks": "^0.2.3",
+    "@aws-sdk/client-chime-sdk-meetings": "^3.1101.0",
+    "@chewbuu/auth": "workspace:*",
+    "@chewbuu/db": "workspace:*",
+    "ai": "catalog:",
+    "kysely": "^0.28.12",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@chewbuu/config": "workspace:*",
+    "@types/node": "^22.13.14",
+    "aws-cdk-lib": "^2.257.0",
+    "constructs": "^10.6.0",
+    "esbuild": "^0.27.1",
+    "tsx": "catalog:",
+    "typescript": "^6",
+    "vitest": "^4.1.10"
+  }
+}

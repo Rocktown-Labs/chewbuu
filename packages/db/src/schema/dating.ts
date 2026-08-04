@@ -22,6 +22,7 @@ export const profile = pgTable(
     birthday: text("birthday"),
     canDate: boolean("can_date").default(false).notNull(),
     canceledDateCount: integer("canceled_date_count").default(0).notNull(),
+    contributionScore: integer("contribution_score").default(0).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     datingModes: jsonb("dating_modes").$type<string[]>().default([]).notNull(),
     distanceMiles: integer("distance_miles").default(25).notNull(),
@@ -76,6 +77,12 @@ export const profile = pgTable(
   (table) => [
     index("profile_userId_idx").on(table.userId),
     index("profile_canDate_idx").on(table.canDate),
+    index("profile_matching_location_idx").on(
+      table.canDate,
+      table.onboarded,
+      table.latitude,
+      table.longitude
+    ),
   ]
 );
 
@@ -245,6 +252,7 @@ export const dateRequest = pgTable(
   {
     actualEndAt: timestamp("actual_end_at"),
     actualStartAt: timestamp("actual_start_at"),
+    chimeMeetingId: text("chime_meeting_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     filters: jsonb("filters").$type<string[]>().default([]).notNull(),
     id: text("id").primaryKey(),
@@ -274,9 +282,11 @@ export const dateRequestPartyMember = pgTable(
     displayName: text("display_name").notNull(),
     id: text("id").primaryKey(),
     invitedUserId: text("invited_user_id"),
+    source: text("source").default("friend").notNull(),
     requestId: text("request_id")
       .notNull()
       .references(() => dateRequest.id, { onDelete: "cascade" }),
+    status: text("status").default("invited").notNull(),
   },
   (table) => [
     index("date_request_party_member_requestId_idx").on(table.requestId),
@@ -305,6 +315,7 @@ export const dateMatch = pgTable(
   {
     compatibility: integer("compatibility").default(80).notNull(),
     displayName: text("display_name").notNull(),
+    groupId: text("group_id"),
     id: text("id").primaryKey(),
     introVideoUrl: text("intro_video_url").notNull(),
     profilePhotoUrl: text("profile_photo_url"),
@@ -312,6 +323,7 @@ export const dateMatch = pgTable(
     requestId: text("request_id")
       .notNull()
       .references(() => dateRequest.id, { onDelete: "cascade" }),
+    matchKind: text("match_kind").default("individual").notNull(),
     status: text("status").default("suggested").notNull(),
     userId: text("user_id").notNull(),
     videoRepliesRequired: integer("video_replies_required")
@@ -346,7 +358,138 @@ export const dateReview = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
   },
-  (table) => [index("date_review_userId_idx").on(table.userId)]
+  (table) => [
+    index("date_review_userId_idx").on(table.userId),
+    uniqueIndex("date_review_dateRequestId_userId_idx").on(
+      table.dateRequestId,
+      table.userId
+    ),
+  ]
+);
+
+export const dateMedia = pgTable(
+  "date_media",
+  {
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    dateRequestId: text("date_request_id")
+      .notNull()
+      .references(() => dateRequest.id, { onDelete: "cascade" }),
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    thumbnailUrl: text("thumbnail_url"),
+    uploadedByUserId: text("uploaded_by_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+  },
+  (table) => [
+    index("date_media_dateRequestId_idx").on(table.dateRequestId),
+    index("date_media_uploadedByUserId_idx").on(table.uploadedByUserId),
+  ]
+);
+
+export const dateReviewMedia = pgTable(
+  "date_review_media",
+  {
+    dateMediaId: text("date_media_id")
+      .notNull()
+      .references(() => dateMedia.id, { onDelete: "cascade" }),
+    reviewId: text("review_id")
+      .notNull()
+      .references(() => dateReview.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("date_review_media_reviewId_dateMediaId_idx").on(
+      table.reviewId,
+      table.dateMediaId
+    ),
+    index("date_review_media_dateMediaId_idx").on(table.dateMediaId),
+  ]
+);
+
+export const friendship = pgTable(
+  "friendship",
+  {
+    acceptedAt: timestamp("accepted_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    friendUserId: text("friend_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    id: text("id").primaryKey(),
+    status: text("status").default("pending").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("friendship_userId_friendUserId_idx").on(
+      table.userId,
+      table.friendUserId
+    ),
+    index("friendship_friendUserId_idx").on(table.friendUserId),
+  ]
+);
+
+export const recap = pgTable(
+  "recap",
+  {
+    authorUserId: text("author_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    caption: text("caption"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    dateRequestId: text("date_request_id")
+      .notNull()
+      .references(() => dateRequest.id, { onDelete: "cascade" }),
+    id: text("id").primaryKey(),
+    publishedAt: timestamp("published_at"),
+    reviewId: text("review_id").references(() => dateReview.id, {
+      onDelete: "set null",
+    }),
+    storyExpiresAt: timestamp("story_expires_at"),
+    thumbnailUrl: text("thumbnail_url"),
+    videoUrl: text("video_url").notNull(),
+  },
+  (table) => [
+    index("recap_authorUserId_publishedAt_idx").on(
+      table.authorUserId,
+      table.publishedAt
+    ),
+    index("recap_storyExpiresAt_idx").on(table.storyExpiresAt),
+    uniqueIndex("recap_authorUserId_dateRequestId_idx").on(
+      table.authorUserId,
+      table.dateRequestId
+    ),
+  ]
+);
+
+export const notification = pgTable(
+  "notification",
+  {
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    dedupeKey: text("dedupe_key").notNull(),
+    entityId: text("entity_id"),
+    entityType: text("entity_type"),
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    readAt: timestamp("read_at"),
+    title: text("title").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("notification_userId_dedupeKey_idx").on(
+      table.userId,
+      table.dedupeKey
+    ),
+    index("notification_userId_createdAt_idx").on(
+      table.userId,
+      table.createdAt
+    ),
+    index("notification_userId_readAt_idx").on(table.userId, table.readAt),
+  ]
 );
 
 export const conversation = pgTable(

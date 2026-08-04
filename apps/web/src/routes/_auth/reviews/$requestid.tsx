@@ -55,40 +55,6 @@ const defaultPlaceCriteria = [
   { key: "value", label: "Value" },
 ];
 
-const demoReviewPrompt: ReviewPrompt = {
-  criteria: {
-    person: defaultPersonCriteria,
-    place: defaultPlaceCriteria,
-  },
-  existingReview: null,
-  places: [
-    {
-      address: "East Nashville",
-      name: "The Golden Booth",
-      placeId: "demo-place-golden-booth",
-      rating: "4.7",
-      types: ["restaurant", "bar", "date_fit"],
-    },
-    {
-      address: "Main Street",
-      name: "Cue & Co.",
-      placeId: "demo-place-cue",
-      rating: "4.6",
-      types: ["pool", "play", "combo"],
-    },
-  ],
-  request: {
-    id: "demo-date-123456",
-    searchArea: "Nashville, TN",
-    status: "review_due",
-  },
-};
-
-const demoPeople = [
-  { id: "person-1", name: "Maya Ellis", role: "Date Match" },
-  { id: "person-2", name: "Jordan Lee", role: "Date Match" },
-];
-
 type ReviewStep = "people" | "spots";
 
 const criteriaAverage = (criteria: Record<string, number>) => {
@@ -102,7 +68,6 @@ const criteriaAverage = (criteria: Record<string, number>) => {
 export function RouteComponent() {
   const { requestid } = Route.useParams();
   const navigate = useNavigate();
-  const isDemoReview = requestid.startsWith("demo-date-");
   const [prompt, setPrompt] = useState<ReviewPrompt | null>(null);
   const [step, setStep] = useState<ReviewStep>("people");
   const [isLoading, setIsLoading] = useState(true);
@@ -111,44 +76,36 @@ export function RouteComponent() {
   // Multi-person ratings, comments & attachments
   const [personRatings, setPersonRatings] = useState<
     Record<string, Record<string, number>>
-  >({
-    "person-1": {},
-  });
+  >({});
   const [personComments, setPersonComments] = useState<Record<string, string>>(
     {}
   );
   const [personMedia, setPersonMedia] = useState<Record<string, string[]>>({});
-  const [expandedPersonId, setExpandedPersonId] = useState<string>("person-1");
+  const [expandedPersonId, setExpandedPersonId] = useState<string>("");
 
   // Multi-spot ratings, comments & attachments
   const [spotRatings, setSpotRatings] = useState<
     Record<string, Record<string, number>>
-  >({
-    "demo-place-golden-booth": {},
-  });
+  >({});
   const [spotComments, setSpotComments] = useState<Record<string, string>>({});
   const [spotMedia, setSpotMedia] = useState<Record<string, string[]>>({});
-  const [expandedSpotId, setExpandedSpotId] = useState<string>(
-    "demo-place-golden-booth"
-  );
+  const [expandedSpotId, setExpandedSpotId] = useState<string>("");
 
   useEffect(() => {
     const load = async () => {
       try {
-        const nextPrompt = isDemoReview
-          ? demoReviewPrompt
-          : await reviewsApi.getPrompt(requestid);
+        const nextPrompt = await reviewsApi.getPrompt(requestid);
         setPrompt(nextPrompt);
         if (nextPrompt.existingReview) {
-          const personId = demoPeople[0]?.id ?? "person-1";
+          const personId = nextPrompt.existingReview.userId;
           setPersonRatings({
             [personId]: nextPrompt.existingReview.personCriteria,
           });
           setPersonComments({
             [personId]: nextPrompt.existingReview.personComment ?? "",
           });
-          const spotId =
-            nextPrompt.places[0]?.placeId ?? "demo-place-golden-booth";
+          const spotId = nextPrompt.places[0]?.placeId;
+          if (!spotId) return;
           setSpotRatings({ [spotId]: nextPrompt.existingReview.placeCriteria });
           setSpotComments({
             [spotId]: nextPrompt.existingReview.placeComment ?? "",
@@ -166,7 +123,7 @@ export function RouteComponent() {
     };
 
     void load();
-  }, [isDemoReview, requestid]);
+  }, [requestid]);
 
   const criteria = useMemo(
     () => ({
@@ -176,11 +133,15 @@ export function RouteComponent() {
     [prompt]
   );
 
-  const peopleList = useMemo(() => demoPeople, []);
-  const spotsList = useMemo(
-    () => (prompt?.places.length ? prompt.places : demoReviewPrompt.places),
+  const peopleList = useMemo(
+    () =>
+      prompt?.people.map((person) => ({
+        ...person,
+        role: "Date match",
+      })) ?? [],
     [prompt]
   );
+  const spotsList = useMemo(() => prompt?.places ?? [], [prompt]);
 
   // Validation checks for required reviews
   const isPersonComplete = (personId: string) => {
@@ -245,8 +206,7 @@ export function RouteComponent() {
 
     const firstPersonRatings =
       personRatings[peopleList[0]?.id ?? "person-1"] ?? {};
-    const firstSpotRatings =
-      spotRatings[spotsList[0]?.placeId ?? "demo-place-golden-booth"] ?? {};
+    const firstSpotRatings = spotRatings[spotsList[0]?.placeId ?? ""] ?? {};
 
     const body: DateReviewPayload = {
       personComment:
@@ -254,18 +214,14 @@ export function RouteComponent() {
       personCriteria: firstPersonRatings,
       personRating: criteriaAverage(firstPersonRatings),
       placeComment:
-        spotComments[
-          spotsList[0]?.placeId ?? "demo-place-golden-booth"
-        ]?.trim() || undefined,
+        spotComments[spotsList[0]?.placeId ?? ""]?.trim() || undefined,
       placeCriteria: firstSpotRatings,
       placeRating: criteriaAverage(firstSpotRatings),
     };
 
     setIsSubmitting(true);
     try {
-      if (!isDemoReview) {
-        await reviewsApi.submit(requestid, body);
-      }
+      await reviewsApi.submit(requestid, body);
       toast.success(
         "All date reviews submitted! Thanks for keeping Chewbuu honest."
       );

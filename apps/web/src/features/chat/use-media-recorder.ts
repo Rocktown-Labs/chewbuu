@@ -88,7 +88,7 @@ export function useMediaRecorder({
     } catch {
       setError(
         mode === "video"
-          ? "Camera/mic permission denied. You can still skip demo replies."
+          ? "Camera/mic permission denied. Allow access and try again."
           : "Microphone permission denied. You can still send text."
       );
       setStatus("error");

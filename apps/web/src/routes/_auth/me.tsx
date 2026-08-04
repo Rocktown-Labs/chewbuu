@@ -1,3 +1,4 @@
+import { api as blocksApi } from "@chewbuu/aws-blocks";
 import {
   Avatar,
   AvatarFallback,
@@ -63,7 +64,6 @@ import {
   Eye,
   Compass,
   ExternalLink,
-  Flame,
   Heart,
   Home,
   LogOut,
@@ -99,20 +99,18 @@ import {
   type StepItem,
   type StepKey,
 } from "@/components/ui/horizontal-stepper";
-import { ReelPlayer, type ReelData } from "@/components/ui/reel";
-import { StoriesBar, type StoryItem } from "@/components/ui/stories";
-import type { ChatPerson, DateScenario } from "@/features/chat/chat-types";
-import { DateChat } from "@/features/chat/date-chat";
+import type { ChatPerson } from "@/features/chat/chat-types";
 import { DateConfirmScreen } from "@/features/chat/date-confirm";
-import { demoDateScenarios } from "@/features/chat/demo-data";
 import { DateWizard } from "@/features/date-wizard/date-wizard";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
+  dateMediaApi,
   getApiUrl,
   type DatePlace,
   type DatingProfilePayload,
   type DatingSummary,
+  type PendingReview,
 } from "@/lib/dating-api";
 import {
   getLocationWeatherFromCityName,
@@ -409,84 +407,6 @@ const getCalendarDateTitle = (request: {
   return request.theirName ? `${activity} with ${request.theirName}` : activity;
 };
 
-const scenarioToHistory = (scenario: DateScenario): DateHistoryItem => ({
-  acceptedMatchId: scenario.acceptedMatchId ?? "",
-  chatSummary: [
-    scenario.role === "receiver"
-      ? `${scenario.theirName} requested this date with you.`
-      : "You started this request and are reviewing match rooms.",
-    "Intro videos exchange first, then three video replies unlock decisions.",
-    "Pick for the date, add as a friend, keep chatting, or block.",
-  ],
-  content: [
-    { label: "Intro videos", status: "Ready" },
-    { label: "Video exchange", status: "In progress" },
-    { label: "Confirm plan", status: "After pick" },
-  ],
-  id: scenario.id,
-  matches: scenario.matches.map((match) => ({
-    compatibility: match.compatibility ?? 0,
-    displayName: match.name,
-    id: match.id,
-    note: match.note ?? "",
-    photoUrl: match.avatar,
-    status: "suggested" as DateHistoryMatchStatus,
-    tags: match.tags ?? [],
-  })),
-  places: scenario.places.map((place) => ({
-    ...place,
-    types: [] as string[],
-  })),
-  requesterView: scenario.role === "sender",
-  requester:
-    scenario.role === "receiver"
-      ? {
-          avatar: scenario.matches[0]?.avatar,
-          bio:
-            scenario.matches[0]?.note ??
-            "Wants to meet after a quick intro exchange.",
-          compatibility: scenario.matches[0]?.compatibility,
-          name: scenario.theirName,
-          tags: scenario.matches[0]?.tags ?? [],
-        }
-      : {
-          avatar: undefined,
-          bio: "You sent this request. Matches can open candidate rooms before a choice is made.",
-          compatibility: undefined,
-          name: "You",
-          tags: ["Requester"],
-        },
-  scheduledAt: scenario.scheduledAt,
-  searchArea: scenario.searchArea,
-  status: scenario.status,
-  timeline: [
-    {
-      label: "Request",
-      tone: "done",
-      value: `${scenario.places.length} spots selected`,
-    },
-    {
-      label: "Matcher",
-      tone: "live",
-      value: `${scenario.matches.length} candidate rooms`,
-    },
-    { label: "Choice", tone: "muted", value: "Pending partner" },
-    { label: "Date", tone: "muted", value: "After confirm + check-in" },
-  ],
-  title:
-    scenario.role === "sender"
-      ? getDateIntentTitle(scenario.what)
-      : scenario.title,
-  what: scenario.what,
-});
-
-const demoDateHistories: DateHistoryItem[] =
-  demoDateScenarios.map(scenarioToHistory);
-
-const demoDateHistoryById = Object.fromEntries(
-  demoDateHistories.map((item) => [item.id, item])
-) as Record<string, DateHistoryItem>;
-
 const getAge = (birthdayString: string) => {
   const birthday = new Date(birthdayString);
   if (Number.isNaN(birthday.getTime())) return null;
@@ -504,29 +424,60 @@ const getAge = (birthdayString: string) => {
   return age;
 };
 
-const getAcceptedMatchForRequest = (request: any) => {
-  const demo = demoDateHistoryById[request.id as string];
-  if (demo) {
-    return demo.matches.find((match) => match.id === demo.acceptedMatchId);
-  }
-  if (request.matches && Array.isArray(request.matches)) {
-    const accepted = request.matches.find(
-      (m: any) => m.status === "accepted" || m.status === "friended"
-    );
-    if (accepted) return accepted;
-  }
-  if (
-    request.acceptedMatchId &&
-    request.matches &&
-    Array.isArray(request.matches)
-  ) {
-    const accepted = request.matches.find(
-      (m: any) => m.id === request.acceptedMatchId
-    );
-    if (accepted) return accepted;
-  }
-  return null;
-};
+const getAcceptedMatchForRequest = (
+  request: DatingSummary["requests"][number]
+) =>
+  request.matches?.find(
+    (match) => match.status === "accepted" || match.status === "friended"
+  ) ?? null;
+
+const requestToHistory = (
+  request: DatingSummary["requests"][number]
+): DateHistoryItem => ({
+  acceptedMatchId: getAcceptedMatchForRequest(request)?.id ?? "",
+  chatSummary: [
+    "Open the date room to exchange verified video replies.",
+    "Choose a match or continue the conversation from the live request.",
+  ],
+  content: [
+    { label: "Date request", status: formatStatus(request.status) },
+    { label: "Places", status: `${request.places.length} selected` },
+  ],
+  id: request.id,
+  matches: (request.matches ?? []).map((match) => ({
+    compatibility: match.compatibility,
+    displayName: match.displayName,
+    id: match.id,
+    note: match.profileSummary,
+    photoUrl: match.profilePhotoUrl ?? undefined,
+    status: match.status as DateHistoryMatchStatus,
+    tags: [],
+  })),
+  places: request.places,
+  requesterView: true,
+  requester: {
+    bio: "Your date request",
+    name: "You",
+    tags: [],
+  },
+  scheduledAt: request.scheduledAt,
+  searchArea: request.searchArea,
+  status: request.status,
+  timeline: [
+    {
+      label: "Request",
+      tone: "done",
+      value: `${request.places.length} spots selected`,
+    },
+    {
+      label: "Matches",
+      tone: "live",
+      value: `${request.matches?.length ?? 0} found`,
+    },
+  ],
+  title: getDateIntentTitle(request.what),
+  what: request.what,
+});
 
 const isSameDay = (date1: Date, date2: Date) => {
   return (
@@ -603,53 +554,6 @@ const getDaysInMonth = (date: Date) => {
   return days;
 };
 
-const sampleRecapStories: StoryItem[] = [
-  {
-    id: "story-1",
-    creatorName: "Maya Lin",
-    creatorAvatar:
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
-    spotName: "Barista Parlor",
-    hasUnread: true,
-    caption: "Insane pour-over espresso & croissant date in 12 South! ☕✨",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-  },
-  {
-    id: "story-2",
-    creatorName: "Alex Rivera",
-    creatorAvatar:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
-    spotName: "Basement East",
-    hasUnread: true,
-    caption: "Live indie night! Highly recommend for a 2nd date spot 🎸🔥",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-  },
-  {
-    id: "story-3",
-    creatorName: "Sarah Chen",
-    creatorAvatar:
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
-    spotName: "Pins Mechanical",
-    hasUnread: false,
-    caption: "Duckpin bowling champion right here 🎳🏆",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-  },
-  {
-    id: "story-4",
-    creatorName: "Jordan Vance",
-    creatorAvatar:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
-    spotName: "Attaboy",
-    hasUnread: true,
-    caption: "Speakeasy vibes & custom craft cocktails 🍸",
-    videoUrl:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
-  },
-];
-
 function RouteComponent() {
   const search = Route.useSearch();
   return (
@@ -665,7 +569,6 @@ function RouteComponent() {
 function HomeDashboardView({
   canDate,
   onOpenPlanDateDrawer,
-  onOpenDateHistory,
   onOpenAnalytics,
   onNavigateTab,
   profileArea,
@@ -673,7 +576,6 @@ function HomeDashboardView({
 }: {
   canDate: boolean;
   onOpenPlanDateDrawer: () => void;
-  onOpenDateHistory: (id: string) => void;
   onOpenAnalytics: () => void;
   onNavigateTab: (tab: DashboardTab) => void;
   profileArea?: string;
@@ -693,10 +595,7 @@ function HomeDashboardView({
     });
   }, [selectedCalendarDate]);
 
-  const hasEventOnSelectedDate = useMemo(() => {
-    if (!selectedCalendarDate) return true;
-    return selectedCalendarDate.getDate() % 2 === 0;
-  }, [selectedCalendarDate]);
+  const hasEventOnSelectedDate = false;
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6">
@@ -716,8 +615,7 @@ function HomeDashboardView({
         <div className="flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-amber-600 shadow-2xs w-fit">
           <Sun className="size-4 animate-spin-slow text-amber-500" />
           <span className="font-extrabold text-xs">
-            {weatherText ||
-              `76°F · Clear & Sunny in ${profileArea || "Searcy, AR"}`}
+            {weatherText || "Weather unavailable until a location is set."}
           </span>
         </div>
       </div>
@@ -782,7 +680,6 @@ function HomeDashboardView({
 
                 <Button
                   className="rounded-full font-bold text-xs shrink-0"
-                  onClick={() => onOpenDateHistory("demo-date-1")}
                   size="sm"
                   type="button"
                 >
@@ -846,31 +743,26 @@ function HomeDashboardView({
       </div>
 
       {/* Dynamic Interactive Hero Stat Cards */}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Date Streak -> Analytics Drawer */}
         <button
           aria-label="View date streak analytics and badges"
-          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-amber-500/60 hover:shadow-md cursor-pointer text-left"
+          className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-amber-500/30 bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-amber-500/60 hover:shadow-md"
           onClick={onOpenAnalytics}
           type="button"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-amber-500 text-white font-extrabold shadow-md group-hover:scale-110 transition">
-              <Flame className="size-5 animate-pulse" />
-            </div>
-            <Badge className="rounded-full bg-amber-500/20 text-amber-600 font-extrabold text-[10px] border-0">
-              🔥 3 In a Row
-            </Badge>
-          </div>
+          <Badge className="w-fit rounded-full border-0 bg-amber-500/20 font-extrabold text-[10px] text-amber-600">
+            🔥 3 In a Row
+          </Badge>
 
-          <div className="mt-4">
-            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mt-5">
+            <span className="font-extrabold text-[10px] uppercase text-muted-foreground">
               Streak Analytics
             </span>
-            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+            <h4 className="font-extrabold text-lg leading-snug text-foreground">
               3 Date Streak
             </h4>
-            <p className="mt-1.5 flex items-center text-xs font-bold text-amber-600 group-hover:underline">
+            <p className="mt-1 flex items-center text-[11px] font-bold text-amber-600 group-hover:underline">
               View Badges & Stats <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
@@ -879,27 +771,22 @@ function HomeDashboardView({
         {/* Card 2: This Month Bookings -> Calendar Tab */}
         <button
           aria-label="Open monthly calendar schedule"
-          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/15 via-sky-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-primary/60 hover:shadow-md cursor-pointer text-left"
+          className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-primary/30 bg-gradient-to-br from-primary/15 via-sky-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-primary/60 hover:shadow-md"
           onClick={() => onNavigateTab("calendar")}
           type="button"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground font-extrabold shadow-md group-hover:scale-110 transition">
-              <CalendarHeart className="size-5" />
-            </div>
-            <Badge className="rounded-full bg-primary/20 text-primary font-extrabold text-[10px] border-0">
-              📅 4 Booked
-            </Badge>
-          </div>
+          <Badge className="w-fit rounded-full border-0 bg-primary/20 font-extrabold text-[10px] text-primary">
+            📅 4 Booked
+          </Badge>
 
-          <div className="mt-4">
-            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mt-5">
+            <span className="font-extrabold text-[10px] uppercase text-muted-foreground">
               Monthly Schedule
             </span>
-            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+            <h4 className="font-extrabold text-lg leading-snug text-foreground">
               4 Confirmed
             </h4>
-            <p className="mt-1.5 flex items-center text-xs font-bold text-primary group-hover:underline">
+            <p className="mt-1 flex items-center text-[11px] font-bold text-primary group-hover:underline">
               Open Calendar <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
@@ -908,27 +795,22 @@ function HomeDashboardView({
         {/* Card 3: Favorite Spots -> Spots Tab */}
         <button
           aria-label="Explore local favorite spots"
-          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-emerald-500/60 hover:shadow-md cursor-pointer text-left"
+          className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-emerald-500/60 hover:shadow-md"
           onClick={() => onNavigateTab("spots")}
           type="button"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-emerald-500 text-white font-extrabold shadow-md group-hover:scale-110 transition">
-              <Star className="size-5" />
-            </div>
-            <Badge className="rounded-full bg-emerald-500/20 text-emerald-600 font-extrabold text-[10px] border-0">
-              ⭐ 12 Saved
-            </Badge>
-          </div>
+          <Badge className="w-fit rounded-full border-0 bg-emerald-500/20 font-extrabold text-[10px] text-emerald-600">
+            ⭐ 12 Saved
+          </Badge>
 
-          <div className="mt-4">
-            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mt-5">
+            <span className="font-extrabold text-[10px] uppercase text-muted-foreground">
               Local Venues
             </span>
-            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+            <h4 className="font-extrabold text-lg leading-snug text-foreground">
               12 Fav Spots
             </h4>
-            <p className="mt-1.5 flex items-center text-xs font-bold text-emerald-600 group-hover:underline">
+            <p className="mt-1 flex items-center text-[11px] font-bold text-emerald-600 group-hover:underline">
               Explore Local Spots <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
@@ -937,27 +819,22 @@ function HomeDashboardView({
         {/* Card 4: Recaps Posted -> Profile Tab */}
         <button
           aria-label="View published recaps on profile"
-          className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/15 via-pink-500/10 to-transparent p-4 sm:p-5 shadow-sm transition hover:border-purple-500/60 hover:shadow-md cursor-pointer text-left"
+          className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-purple-500/30 bg-gradient-to-br from-purple-500/15 via-pink-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-purple-500/60 hover:shadow-md"
           onClick={() => onNavigateTab("profile")}
           type="button"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-purple-500 text-white font-extrabold shadow-md group-hover:scale-110 transition">
-              <Sparkles className="size-5" />
-            </div>
-            <Badge className="rounded-full bg-purple-500/20 text-purple-600 font-extrabold text-[10px] border-0">
-              📸 5 Recaps
-            </Badge>
-          </div>
+          <Badge className="w-fit rounded-full border-0 bg-purple-500/20 font-extrabold text-[10px] text-purple-600">
+            📸 5 Recaps
+          </Badge>
 
-          <div className="mt-4">
-            <span className="font-extrabold text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mt-5">
+            <span className="font-extrabold text-[10px] uppercase text-muted-foreground">
               Food Recaps
             </span>
-            <h4 className="font-extrabold text-xl leading-tight text-foreground">
+            <h4 className="font-extrabold text-lg leading-snug text-foreground">
               5 Published
             </h4>
-            <p className="mt-1.5 flex items-center text-xs font-bold text-purple-600 group-hover:underline">
+            <p className="mt-1 flex items-center text-[11px] font-bold text-purple-600 group-hover:underline">
               My Profile Recaps <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
@@ -1029,7 +906,6 @@ export function MePage({
   const [presetPlaceForWizard, setPresetPlaceForWizard] = useState<
     DatePlace | undefined
   >();
-  const [activeReel, setActiveReel] = useState<ReelData | null>(null);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [customLocationInput, setCustomLocationInput] = useState("");
@@ -1038,11 +914,9 @@ export function MePage({
       const saved = localStorage.getItem("chewbuu_user_city");
       if (saved) return saved;
     }
-    return "Searcy, AR";
+    return "";
   });
-  const [weatherText, setWeatherText] = useState(
-    "☀️ 76°F · Clear & Sunny in Searcy, AR"
-  );
+  const [weatherText, setWeatherText] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -1071,11 +945,9 @@ export function MePage({
               localStorage.setItem("chewbuu_user_city", result.city);
             }
           },
-          async () => {
-            const fallback = await getLocationWeatherFromCityName("Searcy, AR");
+          () => {
             if (isMounted) {
-              setUserCity(fallback.city);
-              setWeatherText(fallback.weatherText);
+              toast.error("Could not determine your location.");
             }
           },
           { timeout: 5000 }
@@ -1091,6 +963,7 @@ export function MePage({
 
   const [summary, setSummary] = useState<DatingSummary | null>(null);
   const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
+  const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [spots, setSpots] = useState<DatePlace[]>([]);
   const [spotsQuery, setSpotsQuery] = useState("");
   const [isLoadingSpots, setIsLoadingSpots] = useState(false);
@@ -1171,12 +1044,15 @@ export function MePage({
   useEffect(() => {
     const load = async () => {
       try {
-        const [nextSummary, nextProfile] = await Promise.all([
-          datingApi.getSummary(),
-          datingApi.getProfile(),
-        ]);
+        const [nextSummary, nextProfile, nextPendingReviews] =
+          await Promise.all([
+            datingApi.getSummary(),
+            datingApi.getProfile(),
+            datingApi.getPendingReviews(),
+          ]);
         setSummary(nextSummary);
         setProfile(nextProfile.profile);
+        setPendingReviews(nextPendingReviews.reviews);
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Could not load dashboard."
@@ -1185,16 +1061,6 @@ export function MePage({
     };
 
     void load();
-
-    // Load user recaps from localStorage
-    const saved = localStorage.getItem("chewbuu_user_recaps");
-    if (saved) {
-      try {
-        setUserRecaps(JSON.parse(saved) as DateRecap[]);
-      } catch (error) {
-        console.error("Failed to parse local recaps:", error);
-      }
-    }
 
     const savedReadRequests = localStorage.getItem(
       "chewbuu_read_date_requests"
@@ -1333,17 +1199,15 @@ export function MePage({
   const readinessReady =
     canDate && readinessItems.every((item) => item.checked);
   const pendingRequests = useMemo(() => summary?.requests ?? [], [summary]);
+  const dateHistories = useMemo(
+    () => pendingRequests.map(requestToHistory),
+    [pendingRequests]
+  );
   const selectedDateHistory = selectedDateHistoryId
-    ? (demoDateHistoryById[selectedDateHistoryId] ?? null)
+    ? (dateHistories.find((date) => date.id === selectedDateHistoryId) ?? null)
     : null;
-  const receivedDateHistories = useMemo(
-    () => demoDateHistories.filter((date) => !date.requesterView),
-    []
-  );
-  const sentDateHistories = useMemo(
-    () => demoDateHistories.filter((date) => date.requesterView),
-    []
-  );
+  const receivedDateHistories: DateHistoryItem[] = [];
+  const sentDateHistories = dateHistories;
   const unreadRequestCount = pendingRequests.filter(
     (request) => !readRequestIds.includes(request.id)
   ).length;
@@ -1388,16 +1252,19 @@ export function MePage({
       : profileChipOptions;
 
   const confirmedDates = useMemo(() => {
-    return [...demoDateHistories, ...pendingRequests].filter((req) => {
+    return pendingRequests.filter((req) => {
       const status = (req.status ?? "").toLowerCase();
       return (
         status === "accepted" ||
         status === "completed" ||
         status === "review_due" ||
         status === "review due" ||
+        status === "active" ||
+        status === "checked_in" ||
+        status === "match_pending" ||
+        status === "matched" ||
         status === "matching" ||
-        status === "action needed" ||
-        Boolean(demoDateHistoryById[req.id])
+        status === "action needed"
       );
     });
   }, [pendingRequests]);
@@ -1434,31 +1301,6 @@ export function MePage({
           new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
       );
   }, [confirmedDates, selectedCalendarDate]);
-  const upcomingDates = [
-    ...pendingRequests.map((request) => ({
-      area: request.searchArea,
-      id: request.id,
-      places: request.places,
-      scheduledAt: request.scheduledAt,
-      status: request.status,
-      title: getDateIntentTitle(request.what),
-    })),
-    ...demoDateHistories.map((date) => ({
-      area: date.searchArea,
-      id: date.id,
-      places: date.places,
-      scheduledAt: date.scheduledAt,
-      status: date.status,
-      title: date.title,
-    })),
-  ]
-    .toSorted(
-      (dateA, dateB) =>
-        new Date(dateA.scheduledAt).getTime() -
-        new Date(dateB.scheduledAt).getTime()
-    )
-    .slice(0, 3);
-  void upcomingDates;
   const featuredSpot = spots.find((spot) => spot.photoUrl) ?? spots[0];
   const spotsByCategory = useMemo(() => {
     const grouped: Record<Exclude<SpotCategory, "all">, DatePlace[]> = {
@@ -1593,8 +1435,8 @@ export function MePage({
 
   const handleCreateRecap = (e: FormEvent) => {
     e.preventDefault();
-    if (!recapForm.placeName || !recapForm.caption) {
-      toast.error("Please fill in the place name and caption.");
+    if (!recapForm.placeName || !recapForm.placeAddress || !recapForm.caption) {
+      toast.error("Select a real date place and add a caption.");
       return;
     }
 
@@ -1603,16 +1445,15 @@ export function MePage({
       userName: displayName,
       userAvatar: profilePhoto ?? "",
       placeName: recapForm.placeName,
-      placeAddress: recapForm.placeAddress || "Nashville, TN",
+      placeAddress: recapForm.placeAddress,
       photos: recapForm.photoUrl ? [recapForm.photoUrl] : [],
       caption: recapForm.caption,
-      personName: recapForm.personName || "Date Partner",
+      personName: recapForm.personName,
       createdAt: new Date().toISOString(),
     };
 
     const nextRecaps = [newRecap, ...userRecaps];
     setUserRecaps(nextRecaps);
-    localStorage.setItem("chewbuu_user_recaps", JSON.stringify(nextRecaps));
 
     setShowAddRecap(false);
     setRecapForm({
@@ -1944,7 +1785,6 @@ export function MePage({
               canDate={canDate}
               onNavigateTab={(tab) => setDashboardTab(tab)}
               onOpenAnalytics={() => setIsAnalyticsOpen(true)}
-              onOpenDateHistory={(id) => openDateHistory(id)}
               onOpenPlanDateDrawer={() => {
                 setPresetPlaceForWizard(undefined);
                 setIsPlanDateDrawerOpen(true);
@@ -1974,8 +1814,7 @@ export function MePage({
                         {selectedDateHistory.title}
                       </h2>
                       <p className="mt-1 text-muted-foreground text-xs">
-                        Date request #
-                        {selectedDateHistory.id.replace("demo-date-", "")}
+                        Date request #{selectedDateHistory.id}
                       </p>
                     </div>
                   </div>
@@ -2147,8 +1986,7 @@ export function MePage({
                       </DateRequestSection>
                     ) : null}
 
-                    {pendingRequests.length === 0 &&
-                    demoDateHistories.length === 0 ? (
+                    {pendingRequests.length === 0 ? (
                       <Card className="rounded-2xl border-border bg-card/45">
                         <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
                           <Heart className="size-8 text-primary" />
@@ -2292,27 +2130,6 @@ export function MePage({
                 </div>
 
                 {/* Kibo UI Stories Bar */}
-                <StoriesBar
-                  stories={sampleRecapStories}
-                  onSelectStory={(story) => {
-                    setActiveReel({
-                      id: story.id,
-                      creatorName: story.creatorName,
-                      creatorAvatar: story.creatorAvatar,
-                      spotName: story.spotName,
-                      spotAddress: profile?.area || "Nashville, TN",
-                      category: "eat",
-                      videoUrl:
-                        story.videoUrl ||
-                        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-                      caption: story.caption,
-                      likesCount: 38,
-                    });
-                  }}
-                  onAddStory={() => {
-                    toast.info("Record & upload your spot recap!");
-                  }}
-                />
 
                 {/* Search Bar */}
                 <div className="relative w-full">
@@ -2590,10 +2407,7 @@ export function MePage({
                                   {match ? (
                                     <Avatar className="size-4 shrink-0 rounded-full border border-background">
                                       <AvatarImage
-                                        src={
-                                          match.photoUrl ||
-                                          match.profilePhotoUrl
-                                        }
+                                        src={match.profilePhotoUrl}
                                       />
                                       <AvatarFallback className="text-[5px]">
                                         {match.displayName?.[0]}
@@ -2668,10 +2482,7 @@ export function MePage({
                       </div>
                     ) : (
                       filteredDates.map((request) => {
-                        const requestId =
-                          "id" in request
-                            ? request.id
-                            : demoDateHistories[0]?.id;
+                        const requestId = request.id;
                         const requestDate = new Date(request.scheduledAt);
                         const places = request.places ?? [];
                         const acceptedMatch =
@@ -2702,10 +2513,7 @@ export function MePage({
                             <div className="flex items-center gap-4 min-w-0">
                               <Avatar className="size-12 rounded-full border border-border/80 shadow-sm shrink-0">
                                 <AvatarImage
-                                  src={
-                                    acceptedMatch?.photoUrl ||
-                                    acceptedMatch?.profilePhotoUrl
-                                  }
+                                  src={acceptedMatch?.profilePhotoUrl}
                                 />
                                 <AvatarFallback className="text-base font-semibold bg-primary/10 text-primary">
                                   {acceptedMatch?.displayName?.[0] || "?"}
@@ -2829,12 +2637,26 @@ export function MePage({
                   <Card className="rounded-2xl border-primary/30 bg-primary/10">
                     <CardContent className="flex items-start gap-3 p-4">
                       <Star className="mt-0.5 size-4 text-primary" />
-                      <div>
+                      <button
+                        className="text-left"
+                        onClick={() => {
+                          const [review] = pendingReviews;
+                          if (review) {
+                            navigate({
+                              to: "/reviews/$requestid",
+                              params: { requestid: review.dateRequestId },
+                            });
+                          }
+                        }}
+                        type="button"
+                      >
                         <p className="font-bold text-sm">Review due</p>
                         <p className="text-xs text-muted-foreground">
-                          Finish your date review before booking again.
+                          {pendingReviews[0]
+                            ? `Finish your ${pendingReviews[0].searchArea} date review before booking again.`
+                            : "Finish your date review before booking again."}
                         </p>
-                      </div>
+                      </button>
                     </CardContent>
                   </Card>
                 )}
@@ -3657,17 +3479,20 @@ export function MePage({
                 </DialogTitle>
               </DialogHeader>
               <div className="relative aspect-9/16 flex w-full items-center justify-center overflow-hidden rounded-xl border border-border bg-black">
-                <video
-                  autoPlay
-                  controls
-                  className="size-full object-cover"
-                  src={
-                    activeVideoModal.url ??
-                    "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-                  }
-                >
-                  <track kind="captions" srcLang="en" label="English" />
-                </video>
+                {activeVideoModal.url ? (
+                  <video
+                    autoPlay
+                    controls
+                    className="size-full object-cover"
+                    src={activeVideoModal.url}
+                  >
+                    <track kind="captions" srcLang="en" label="English" />
+                  </video>
+                ) : (
+                  <p className="p-6 text-sm text-muted-foreground">
+                    No intro video is available for this profile.
+                  </p>
+                )}
               </div>
               <Button
                 className="w-full rounded-full text-xs"
@@ -3679,26 +3504,6 @@ export function MePage({
             </DialogContent>
           </Dialog>
         ) : null}
-
-        {/* Full-Screen Vertical Reel Player Modal */}
-        <ReelPlayer
-          isOpen={Boolean(activeReel)}
-          onClose={() => setActiveReel(null)}
-          onPlanDateAtSpot={(spotName, spotAddress) => {
-            if (!canDate) {
-              navigate({ to: "/onboarding" });
-              return;
-            }
-            setPresetPlaceForWizard({
-              address: spotAddress || "Nashville, TN",
-              name: spotName,
-              placeId: `spot-${Date.now()}`,
-              types: ["restaurant"],
-            });
-            setIsPlanDateDrawerOpen(true);
-          }}
-          reel={activeReel}
-        />
 
         {/* Analytics & Streaks Detail Drawer */}
         <AnalyticsDrawer
@@ -3768,13 +3573,10 @@ export function MePage({
                           toast.success(`Location set to GPS: ${result.city}`);
                           setIsLocationModalOpen(false);
                         },
-                        async () => {
-                          const fallback =
-                            await getLocationWeatherFromCityName("Searcy, AR");
-                          setUserCity(fallback.city);
-                          setWeatherText(fallback.weatherText);
-                          toast.info(`Defaulted location to ${fallback.city}`);
-                          setIsLocationModalOpen(false);
+                        () => {
+                          toast.error(
+                            "Could not determine your location. Enter an area manually."
+                          );
                         }
                       );
                     }
@@ -4017,43 +3819,37 @@ function ProfileEditPanel({
     username: profile?.username ?? "",
     name: profile?.name ?? "",
     bio: profile?.bio ?? "",
-    birthday: profile?.birthday ?? "1998-05-15",
-    area: profile?.area ?? "Nashville, TN",
-    sex: profile?.sex ?? "Female",
-    sexuality: profile?.sexuality ?? "Straight",
-    height: profile?.height ?? "5'7\"",
-    weight: profile?.weight ?? "135 lbs",
-    maritalStatus: profile?.maritalStatus ?? "Single",
-    kids: profile?.kids ?? "No kids",
-    wantsKids: profile?.wantsKids ?? "Open to kids",
-    occupation: profile?.occupation ?? "Designer",
-    religion: profile?.religion ?? "Spiritual",
-    politics: profile?.politics ?? "Moderate",
-    interestedIn: profile?.interestedIn ?? ["Male"],
+    birthday: profile?.birthday ?? "",
+    area: profile?.area ?? "",
+    sex: profile?.sex ?? "",
+    sexuality: profile?.sexuality ?? "",
+    height: profile?.height ?? "",
+    weight: profile?.weight ?? "",
+    maritalStatus: profile?.maritalStatus ?? "",
+    kids: profile?.kids ?? "",
+    wantsKids: profile?.wantsKids ?? "",
+    occupation: profile?.occupation ?? "",
+    religion: profile?.religion ?? "",
+    politics: profile?.politics ?? "",
+    interestedIn: profile?.interestedIn ?? [],
     ageRangeMin: profile?.ageRangeMin ?? 21,
     ageRangeMax: profile?.ageRangeMax ?? 38,
     distanceMiles: profile?.distanceMiles ?? 25,
-    lookingFor: profile?.lookingFor ?? ["Relationship", "Dating"],
+    lookingFor: profile?.lookingFor ?? [],
     datingModes:
       sanitizeDateRequestCategories(profile?.datingModes).length > 0
         ? sanitizeDateRequestCategories(profile?.datingModes)
-        : ["eat", "drink", "play"],
-    favoriteThings: profile?.favoriteThings ?? [
-      "Live Music",
-      "Matcha",
-      "Coffee",
-      "Hiking",
-    ],
+        : [],
+    favoriteThings: profile?.favoriteThings ?? [],
     visibleProfileChips:
       savedVisibleProfileChips.length > 0
         ? savedVisibleProfileChips
         : initialProfileChipOptions,
     interestDetails: profile?.interestDetails ?? {},
-    safetyOptIn: profile?.safetyOptIn ?? true,
-    trustedContactName: profile?.trustedContacts?.[0]?.name ?? "Sarah Jenkins",
-    trustedContactPhone: profile?.trustedContacts?.[0]?.phone ?? "615-555-0199",
-    trustedContactEmail:
-      profile?.trustedContacts?.[0]?.email ?? "sarah@example.com",
+    safetyOptIn: profile?.safetyOptIn ?? false,
+    trustedContactName: profile?.trustedContacts?.[0]?.name ?? "",
+    trustedContactPhone: profile?.trustedContacts?.[0]?.phone ?? "",
+    trustedContactEmail: profile?.trustedContacts?.[0]?.email ?? "",
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -5473,50 +5269,34 @@ function DateHistoryDetail({
     (match) => match.id === activeChatMatchId
   );
 
-  const handleChoosePartner = (matchId: string) => {
-    setCurrentDate((prev) => {
-      const updatedMatches = prev.matches.map((m) => {
-        if (m.id === matchId) {
-          return { ...m, status: "accepted" as const };
-        }
-        return { ...m, status: "archived" as const };
+  const handleDateMediaUpload = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const kind = file.type.startsWith("video/") ? "video" : "photo";
+      const upload = await blocksApi.createMediaUpload({
+        contentType: file.type || "application/octet-stream",
+        fileName: file.name,
+        slot: kind === "video" ? "intro_video" : "photo",
       });
-      return {
-        ...prev,
-        acceptedMatchId: matchId,
-        status: "accepted" as const,
-        matches: updatedMatches,
-      };
-    });
-    setActiveCardStep("choice");
-    toast.success("Date partner chosen! Location details revealed.");
-  };
-
-  const handleDeclinePartner = (matchId: string) => {
-    setCurrentDate((prev) => {
-      const updatedMatches = prev.matches.map((m) => {
-        if (m.id === matchId) {
-          return { ...m, status: "declined" as const };
-        }
-        return m;
+      const response = await fetch(upload.uploadUrl, {
+        body: file,
+        headers: { "content-type": file.type },
+        method: "PUT",
       });
-      return {
-        ...prev,
-        matches: updatedMatches,
-      };
-    });
-    setActiveCardStep("matcher");
-    toast.success("Match candidate declined.");
-  };
-
-  const handleAddDemoMedia = () => {
-    const newMedia = {
-      id: Date.now().toString(),
-      name: `date_photo_${mediaList.length + 1}.jpg`,
-      url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80",
-    };
-    setMediaList((prev) => [...prev, newMedia]);
-    toast.success("Photo attached to date memories!");
+      if (!response.ok) throw new Error("Media upload failed.");
+      const media = await dateMediaApi.upload({
+        dateRequestId: currentDate.id,
+        kind,
+        url: upload.mediaUrl,
+      });
+      setMediaList((previous) => [
+        ...previous,
+        { id: media.media.id, name: file.name, url: media.media.url },
+      ]);
+      toast.success("Date media uploaded.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Upload failed.");
+    }
   };
 
   const handleStepChange = (nextStep: StepKey) => {
@@ -5797,87 +5577,28 @@ function DateHistoryDetail({
       )}
 
       {/* CANDIDATE CHAT / DATE ROOM VIEW */}
-      {activeCardStep === "matcher" && activeChatCandidate && (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center">
+      {activeCardStep === "matcher" && activeChatCandidate ? (
+        <Card className="rounded-xl border-border bg-card/45">
+          <CardHeader>
+            <CardTitle className="text-base">
+              Open this date room in Chats
+            </CardTitle>
+            <CardDescription>
+              Conversation history and media are available only from the live
+              chat room.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setActiveCardStep("matcher");
-                setActiveChatMatchId(null);
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground h-8 rounded-full px-3 flex items-center gap-1 hover:bg-muted"
+              className="rounded-full"
+              onClick={onShowChats}
+              type="button"
             >
-              <ArrowLeft className="size-3.5" />
-              Back to rooms
+              Open Chats
             </Button>
-          </div>
-          <DateChat
-            allCandidates={currentDate.matches
-              .filter((m) => m.status !== "declined" && m.status !== "archived")
-              .map(
-                (match): ChatPerson => ({
-                  avatar: match.photoUrl ?? "",
-                  compatibility: match.compatibility,
-                  id: match.id,
-                  introVideoThumb: match.photoUrl,
-                  name: match.displayName,
-                  note: match.note,
-                  tags: match.tags,
-                  verified: true,
-                })
-              )}
-            initialMessages={
-              demoDateScenarios.find((s) => s.id === currentDate.id)
-                ?.roomMessages ?? []
-            }
-            onBack={() => {
-              setActiveCardStep("matcher");
-              setActiveChatMatchId(null);
-            }}
-            onBlock={handleDeclinePartner}
-            onContinue={(matchId) => {
-              setCurrentDate((prev) => ({
-                ...prev,
-                matches: prev.matches.map((match) =>
-                  match.id === matchId
-                    ? { ...match, status: "saved" as const }
-                    : match
-                ),
-              }));
-              toast.success(
-                "Keep chatting unlocked. This room can move to Chats."
-              );
-            }}
-            onFriend={(matchId) => {
-              setCurrentDate((prev) => ({
-                ...prev,
-                matches: prev.matches.map((match) =>
-                  match.id === matchId
-                    ? { ...match, status: "friended" as const }
-                    : match
-                ),
-              }));
-              toast.success("Added as a friend. This room can move to Chats.");
-            }}
-            onPick={handleChoosePartner}
-            onSwitchCandidate={(id) => setActiveChatMatchId(id)}
-            person={{
-              avatar: activeChatCandidate.photoUrl ?? "",
-              compatibility: activeChatCandidate.compatibility,
-              id: activeChatCandidate.id,
-              introVideoThumb: activeChatCandidate.photoUrl,
-              name: activeChatCandidate.displayName,
-              note: activeChatCandidate.note,
-              tags: activeChatCandidate.tags,
-              verified: true,
-            }}
-            role={currentDate.requesterView ? "sender" : "receiver"}
-            subtitle={`${currentDate.title} · ${currentDate.requesterView ? "Your request" : "Incoming request"}`}
-          />
-        </div>
-      )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* CARD 3: PRE-DATE CONFIRM + QR */}
       {activeCardStep === "choice" && acceptedMatch ? (
@@ -5972,15 +5693,19 @@ function DateHistoryDetail({
                 <span className="text-xs font-bold text-foreground">
                   Attach Date Memories (Photos & Videos)
                 </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAddDemoMedia}
-                  className="rounded-full text-[10px] h-7 px-3 flex items-center gap-1"
-                >
+                <label className="rounded-full text-[10px] h-7 px-3 flex items-center gap-1">
                   <Plus className="size-3" />
                   Add Photo / Video
-                </Button>
+                  <input
+                    className="sr-only"
+                    type="file"
+                    accept="image/*,video/*"
+                    onChange={(event) => {
+                      void handleDateMediaUpload(event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
               </div>
 
               {mediaList.length > 0 ? (

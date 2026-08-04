@@ -1,4 +1,3 @@
-import { env } from "@chewbuu/env/server";
 import { Ratelimit } from "@upstash/ratelimit";
 
 import { getRedisClient } from "./index";

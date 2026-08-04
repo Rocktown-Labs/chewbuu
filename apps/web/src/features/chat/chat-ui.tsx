@@ -40,7 +40,6 @@ import {
 import { cn } from "@chewbuu/ui/lib/utils";
 import {
   ArrowLeft,
-  Ban,
   CalendarHeart,
   Camera,
   CheckCircle2,
@@ -49,8 +48,8 @@ import {
   ImagePlus,
   Mic,
   MoreHorizontal,
+  Ban,
   Send,
-  SkipForward,
   Square,
   UserPlus,
   Video,
@@ -666,80 +665,10 @@ export function ActiveDateBanner({
   );
 }
 
-export function DecisionCtaPanel({
-  disabled,
-  onBlock,
-  onContinue,
-  onFriend,
-  onPick,
-}: {
-  disabled?: boolean;
-  onBlock: () => void;
-  onContinue: () => void;
-  onFriend: () => void;
-  onPick: () => void;
-}) {
-  return (
-    <div className="mx-3 mb-2 rounded-2xl border border-primary/25 bg-primary/8 p-3 sm:mx-4">
-      <p className="font-bold text-xs">Your move</p>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">
-        3 video replies exchanged. Pick them for the date, add as a friend, keep
-        chatting, or block.
-      </p>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <Button
-          className="rounded-full text-xs"
-          disabled={disabled}
-          onClick={onPick}
-          size="sm"
-          type="button"
-        >
-          <CalendarHeart data-icon="inline-start" />
-          Pick for date
-        </Button>
-        <Button
-          className="rounded-full text-xs"
-          disabled={disabled}
-          onClick={onFriend}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          <UserPlus data-icon="inline-start" />
-          Add friend
-        </Button>
-        <Button
-          className="rounded-full text-xs"
-          disabled={disabled}
-          onClick={onContinue}
-          size="sm"
-          type="button"
-          variant="secondary"
-        >
-          <Video data-icon="inline-start" />
-          Keep chatting
-        </Button>
-        <Button
-          className="rounded-full text-xs"
-          disabled={disabled}
-          onClick={onBlock}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          <Ban data-icon="inline-start" />
-          Block
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 export function ChatComposer({
   dateMode = false,
   onSendMedia,
   onSendText,
-  onSkipTheirReply,
   phase = "continued",
   threadId,
   videoProgress,
@@ -753,7 +682,6 @@ export function ChatComposer({
     text?: string;
   }) => void;
   onSendText: (text: string) => void;
-  onSkipTheirReply?: () => void;
   phase?: DateRoomPhase;
   threadId?: string;
   videoProgress?: { mine: number; theirs: number; limit: number };
@@ -906,18 +834,6 @@ export function ChatComposer({
             {Math.min(videoProgress.theirs, videoProgress.limit)}/
             {videoProgress.limit} them
           </p>
-          {onSkipTheirReply && lockedToVideo ? (
-            <Button
-              className="h-7 rounded-full px-2 text-[10px]"
-              onClick={onSkipTheirReply}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              <SkipForward data-icon="inline-start" />
-              Skip their reply
-            </Button>
-          ) : null}
         </div>
       ) : null}
 

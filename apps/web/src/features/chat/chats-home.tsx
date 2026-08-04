@@ -18,9 +18,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { chatApi, toChatMessage, toChatThread } from "@/lib/chat-api";
-import type { ApiChatMessage } from "@/lib/chat-api";
+import type { ApiChatMessage, ApiChatRoom } from "@/lib/chat-api";
 import { useChatRealtime } from "@/lib/realtime-client";
 
+import {
+  createMediaMessage,
+  createTextMessage,
+} from "./chat-message-factories";
 import type {
   ChatMessage,
   ChatPerson,
@@ -37,15 +41,8 @@ import {
   ChatComposer,
   ChatHeader,
   ChatThreadBody,
-  DecisionCtaPanel,
   personInitials,
 } from "./chat-ui";
-import { applyDateDecision } from "./date-chat";
-import {
-  buildInitialThreads,
-  createMediaMessage,
-  createTextMessage,
-} from "./demo-data";
 
 export function DashboardChats({
   activeChannelId,
@@ -54,9 +51,7 @@ export function DashboardChats({
   activeChannelId?: string;
   onOpenDate?: (dateId: string) => void;
 }) {
-  const [threads, setThreads] = useState<ChatThread[]>(() =>
-    buildInitialThreads()
-  );
+  const [threads, setThreads] = useState<ChatThread[]>([]);
   const [tab, setTab] = useState<"friends" | "date_rooms">("friends");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -65,6 +60,9 @@ export function DashboardChats({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [realtimeConfigured, setRealtimeConfigured] = useState(false);
   const [realtimeRoomIds, setRealtimeRoomIds] = useState<string[]>([]);
+  const [realtimeChannels, setRealtimeChannels] = useState<
+    ApiChatRoom["realtimeChannel"][]
+  >([]);
   const [mobileShowThread, setMobileShowThread] = useState(
     Boolean(activeChannelId)
   );
@@ -79,11 +77,6 @@ export function DashboardChats({
     (thread) => thread.kind === "date_room"
   );
   const activeList = tab === "friends" ? friendThreads : dateThreads;
-  const realtimeChannels = useMemo(
-    () => realtimeRoomIds.map((roomId) => `chat:${roomId}`),
-    [realtimeRoomIds]
-  );
-
   const selected =
     threads.find((thread) => thread.id === selectedId) ??
     activeList[0] ??
@@ -104,15 +97,6 @@ export function DashboardChats({
     }
     return map;
   }, [threads]);
-
-  const updateThread = (
-    threadId: string,
-    updater: (thread: ChatThread) => ChatThread
-  ) => {
-    setThreads((prev) =>
-      prev.map((thread) => (thread.id === threadId ? updater(thread) : thread))
-    );
-  };
 
   const appendMessage = useCallback(
     (threadId: string, message: ChatMessage) => {
@@ -161,24 +145,18 @@ export function DashboardChats({
     const loadRooms = async () => {
       try {
         const initial = await chatApi.getRooms();
-        const response =
-          initial.rooms.length > 0
-            ? initial
-            : await chatApi.bootstrapDemoFriends();
-
-        if (!active || response.rooms.length === 0) {
+        if (!active) {
           return;
         }
 
-        setCurrentUserId(response.currentUserId);
-        setRealtimeConfigured(response.realtimeConfigured);
-        setRealtimeRoomIds(response.rooms.map((room) => room.id));
+        setCurrentUserId(initial.currentUserId);
+        setRealtimeConfigured(true);
+        setRealtimeRoomIds(initial.rooms.map((room) => room.id));
+        setRealtimeChannels(initial.rooms.map((room) => room.realtimeChannel));
         setThreads(
-          response.rooms.map((room) =>
-            toChatThread(room, response.currentUserId)
-          )
+          initial.rooms.map((room) => toChatThread(room, initial.currentUserId))
         );
-        setSelectedId((current) => current ?? response.rooms[0]?.id ?? null);
+        setSelectedId((current) => current ?? initial.rooms[0]?.id ?? null);
       } catch {
         if (active) {
           setRealtimeRoomIds([]);
@@ -206,88 +184,8 @@ export function DashboardChats({
     enabled: Boolean(
       realtimeConfigured && currentUserId && realtimeRoomIds.length > 0
     ),
-    event: "chat.message",
     onData: handleRealtimeMessage,
   });
-
-  const handleDecision = (
-    thread: ChatThread,
-    decision: "pick" | "friend" | "continue" | "block"
-  ) => {
-    const [person] = thread.participants;
-    if (!person) return;
-    const result = applyDateDecision(thread.messages, decision, person.name);
-
-    if (decision === "friend") {
-      setThreads((prev) =>
-        prev.map((item) => {
-          if (item.id !== thread.id) return item;
-          return {
-            ...item,
-            kind: "friend" as const,
-            lastMessage: result.messages.at(-1)?.text ?? item.lastMessage,
-            messages: result.messages,
-            phase: "friended" as DateRoomPhase,
-            time: "Now",
-          };
-        })
-      );
-      setTab("friends");
-      toast.success(`${person.name} moved to Friends`);
-      return;
-    }
-
-    if (decision === "pick") {
-      const activeDateId = thread.activeDate?.dateId;
-      setThreads((prev) =>
-        prev.map((item) => {
-          if (item.id === thread.id) {
-            return {
-              ...item,
-              activeDate: item.activeDate
-                ? { ...item.activeDate, status: "pending_confirm" }
-                : item.activeDate,
-              lastMessage: result.messages.at(-1)?.text ?? item.lastMessage,
-              messages: result.messages,
-              phase: result.phase,
-              time: "Now",
-            };
-          }
-          if (
-            activeDateId &&
-            item.kind === "date_room" &&
-            item.activeDate?.dateId === activeDateId
-          ) {
-            return {
-              ...item,
-              archived: true,
-              lastMessage: "Archived after another choice was confirmed.",
-              phase: "blocked" as DateRoomPhase,
-              unreadCount: 0,
-            };
-          }
-          return item;
-        })
-      );
-      toast.success(`Picked ${person.name} — open the date page to confirm`);
-      if (thread.activeDate && onOpenDate) onOpenDate(thread.activeDate.dateId);
-      return;
-    }
-
-    updateThread(thread.id, (item) => ({
-      ...item,
-      lastMessage: result.messages.at(-1)?.text ?? item.lastMessage,
-      messages: result.messages,
-      phase: result.phase,
-      time: "Now",
-    }));
-
-    if (decision === "continue") {
-      toast.success("Text and voice unlocked");
-    } else {
-      toast.message(`${person.name} blocked`);
-    }
-  };
 
   const selectThread = (threadId: string) => {
     setSelectedId(threadId);
@@ -474,118 +372,84 @@ export function DashboardChats({
       >
         <ChatThreadBody
           footer={
-            <>
-              {selected.kind === "date_room" && phase === "decision" ? (
-                <DecisionCtaPanel
-                  onBlock={() => handleDecision(selected, "block")}
-                  onContinue={() => handleDecision(selected, "continue")}
-                  onFriend={() => handleDecision(selected, "friend")}
-                  onPick={() => handleDecision(selected, "pick")}
-                />
-              ) : null}
-              <ChatComposer
-                dateMode={selected.kind === "date_room"}
-                onSendMedia={async ({
-                  durationSec,
-                  kind,
-                  mediaUrl,
-                  text,
-                  thumbUrl,
-                }) => {
-                  if (currentUserId && realtimeRoomIds.includes(selected.id)) {
-                    try {
-                      const response = await chatApi.sendMessage(selected.id, {
-                        durationSec,
-                        kind,
-                        mediaThumbUrl: thumbUrl,
-                        mediaUrl,
-                        text,
-                      });
-                      appendMessage(
-                        selected.id,
-                        toChatMessage(response.message, currentUserId)
-                      );
-                      return;
-                    } catch (error) {
-                      toast.error(
-                        error instanceof Error
-                          ? error.message
-                          : "Could not send media."
-                      );
-                    }
-                  }
-
-                  appendMessage(
-                    selected.id,
-                    createMediaMessage({
+            <ChatComposer
+              dateMode={selected.kind === "date_room"}
+              onSendMedia={async ({
+                durationSec,
+                kind,
+                mediaUrl,
+                text,
+                thumbUrl,
+              }) => {
+                if (currentUserId && realtimeRoomIds.includes(selected.id)) {
+                  try {
+                    const response = await chatApi.sendMessage(selected.id, {
                       durationSec,
                       kind,
-                      mediaThumb: thumbUrl,
+                      mediaThumbUrl: thumbUrl,
                       mediaUrl,
                       text,
-                    })
-                  );
-                }}
-                onSendText={async (text) => {
-                  if (currentUserId && realtimeRoomIds.includes(selected.id)) {
-                    try {
-                      const response = await chatApi.sendMessage(selected.id, {
-                        kind: "text",
-                        text,
-                      });
-                      appendMessage(
-                        selected.id,
-                        toChatMessage(response.message, currentUserId)
-                      );
-                      return;
-                    } catch (error) {
-                      toast.error(
-                        error instanceof Error
-                          ? error.message
-                          : "Could not send message."
-                      );
-                    }
+                    });
+                    appendMessage(
+                      selected.id,
+                      toChatMessage(response.message, currentUserId)
+                    );
+                    return;
+                  } catch (error) {
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : "Could not send media."
+                    );
                   }
+                }
 
-                  appendMessage(selected.id, createTextMessage(text));
-                }}
-                onSkipTheirReply={
-                  selected.kind === "date_room"
-                    ? () => {
-                        const [person] = selected.participants;
-                        if (!person) return;
-                        if (theirVideos >= VIDEO_EXCHANGE_LIMIT) {
-                          toast.message("They already sent 3 replies.");
-                          return;
-                        }
-                        appendMessage(
-                          selected.id,
-                          createMediaMessage({
-                            durationSec: 10,
-                            kind: "video",
-                            mediaUrl: person.introVideoThumb ?? person.avatar,
-                            senderId: person.id,
-                          })
-                        );
-                        toast.success(
-                          `${person.name.split(" ")[0]} sent a video reply`
-                        );
-                      }
-                    : undefined
+                appendMessage(
+                  selected.id,
+                  createMediaMessage({
+                    durationSec,
+                    kind,
+                    mediaThumb: thumbUrl,
+                    mediaUrl,
+                    text,
+                  })
+                );
+              }}
+              onSendText={async (text) => {
+                if (currentUserId && realtimeRoomIds.includes(selected.id)) {
+                  try {
+                    const response = await chatApi.sendMessage(selected.id, {
+                      kind: "text",
+                      text,
+                    });
+                    appendMessage(
+                      selected.id,
+                      toChatMessage(response.message, currentUserId)
+                    );
+                    return;
+                  } catch (error) {
+                    toast.error(
+                      error instanceof Error
+                        ? error.message
+                        : "Could not send message."
+                    );
+                  }
                 }
-                phase={selected.kind === "date_room" ? phase : "continued"}
-                threadId={selected.id}
-                videoProgress={
-                  selected.kind === "date_room"
-                    ? {
-                        limit: VIDEO_EXCHANGE_LIMIT,
-                        mine: myVideos,
-                        theirs: theirVideos,
-                      }
-                    : undefined
-                }
-              />
-            </>
+
+                appendMessage(selected.id, createTextMessage(text));
+              }}
+              phase={selected.kind === "date_room" ? phase : "continued"}
+              threadId={selected.id}
+              videoProgress={
+                selected.kind === "date_room"
+                  ? {
+                      limit: VIDEO_EXCHANGE_LIMIT,
+                      mine: myVideos,
+                      theirs: theirVideos,
+                    }
+                  : undefined
+              }
+            />
           }
           header={
             <>

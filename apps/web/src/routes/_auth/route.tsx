@@ -1,3 +1,4 @@
+import { api as blocksApi } from "@chewbuu/aws-blocks";
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 
 import { authClient } from "@/lib/auth-client";
@@ -23,6 +24,20 @@ export const Route = createFileRoute("/_auth")({
       throw redirect({
         to: "/onboarding",
       });
+    }
+
+    if (!needsOnboarding && !canViewIncompleteProfile) {
+      const profileResult = await blocksApi.getProfile();
+      const { profile } = profileResult;
+      const hasLocation = Boolean(
+        profile?.area && profile.latitude && profile.longitude
+      );
+      if (!hasLocation) {
+        throw redirect({
+          to: "/me/profile",
+          search: { tab: "profile" },
+        });
+      }
     }
 
     return { session };

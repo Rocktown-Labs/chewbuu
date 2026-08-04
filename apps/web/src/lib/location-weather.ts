@@ -20,7 +20,7 @@ export async function getLocationWeatherFromCoords(
       }
     );
 
-    let city = "Searcy, AR";
+    let city = "";
     if (geoRes.ok) {
       const geoData = (await geoRes.json()) as {
         address?: {
@@ -36,9 +36,9 @@ export async function getLocationWeatherFromCoords(
         geoData.address?.town ||
         geoData.address?.village ||
         geoData.address?.county ||
-        "Searcy";
-      const state = geoData.address?.state || "AR";
-      city = `${name}, ${state}`;
+        "";
+      const state = geoData.address?.state || "";
+      city = name && state ? `${name}, ${state}` : name;
     }
 
     // Fetch live weather from Open-Meteo
@@ -46,14 +46,22 @@ export async function getLocationWeatherFromCoords(
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`
     );
 
-    let weatherText = `☀️ 76°F · Clear & Sunny in ${city}`;
+    let weatherText = city
+      ? `Weather unavailable in ${city}`
+      : "Weather unavailable";
     if (weatherRes.ok) {
       const weatherData = (await weatherRes.json()) as {
         current?: { temperature_2m?: number; weather_code?: number };
       };
-      const tempC = weatherData.current?.temperature_2m ?? 24;
+      const tempC = weatherData.current?.temperature_2m;
+      if (tempC === undefined) {
+        return { city, lat, lon, weatherText };
+      }
       const tempF = Math.round((tempC * 9) / 5 + 32);
-      const code = weatherData.current?.weather_code ?? 0;
+      const code = weatherData.current?.weather_code;
+      if (code === undefined) {
+        return { city, lat, lon, weatherText };
+      }
 
       let condition = "Clear & Sunny";
       let icon = "☀️";
@@ -75,13 +83,10 @@ export async function getLocationWeatherFromCoords(
     }
 
     return { city, lat, lon, weatherText };
-  } catch {
-    return {
-      city: "Searcy, AR",
-      lat: 35.2506,
-      lon: -91.7362,
-      weatherText: "☀️ 76°F · Clear & Sunny in Searcy, AR",
-    };
+  } catch (error) {
+    throw error instanceof Error
+      ? error
+      : new Error("Could not load location weather.");
   }
 }
 
@@ -121,14 +126,11 @@ export async function getLocationWeatherFromCityName(
         };
       }
     }
-  } catch {
-    // Fallback
+  } catch (error) {
+    throw error instanceof Error
+      ? error
+      : new Error("Could not find that location.");
   }
 
-  return {
-    city: query,
-    lat: 35.2506,
-    lon: -91.7362,
-    weatherText: `☀️ 76°F · Clear & Sunny in ${query}`,
-  };
+  throw new Error("Could not find that location.");
 }

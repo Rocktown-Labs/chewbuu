@@ -2,7 +2,6 @@ import { Avatar, AvatarFallback } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button } from "@chewbuu/ui/components/button";
 import { Card, CardContent, CardHeader } from "@chewbuu/ui/components/card";
-import { useInfiniteQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Image } from "@unpic/react";
 import { Heart, MapPin, MessageSquare, Share2, Sparkles } from "lucide-react";
@@ -27,11 +26,6 @@ interface DateRecapFeedProps {
   initialItems?: FeedRecapItem[];
 }
 
-interface RecapFeedPage {
-  items: FeedRecapItem[];
-  nextCursor: number | null;
-}
-
 const defaultInitialItems: FeedRecapItem[] = [];
 
 export function DateRecapFeed({
@@ -41,29 +35,7 @@ export function DateRecapFeed({
   const parentRef = useRef<HTMLDivElement>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
 
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } =
-    useInfiniteQuery<RecapFeedPage>({
-      getNextPageParam: (lastPage) => lastPage.nextCursor,
-      initialPageParam: 0,
-      queryFn: async ({ pageParam }): Promise<RecapFeedPage> => {
-        try {
-          const res = await fetch(`/api/feed/recaps?cursor=${pageParam}`);
-          if (!res.ok) throw new Error("Feed fetch failed");
-          return (await res.json()) as RecapFeedPage;
-        } catch {
-          // Fallback to local initialItems for offline/mock support
-          return {
-            items: initialItems,
-            nextCursor: null,
-          };
-        }
-      },
-      queryKey: ["dateRecapsFeed"],
-    });
-
-  const allItems: FeedRecapItem[] = data
-    ? data.pages.flatMap((page) => page.items ?? [])
-    : initialItems;
+  const allItems = initialItems;
 
   const rowVirtualizer = useVirtualizer({
     count: allItems.length,
@@ -80,19 +52,6 @@ export function DateRecapFeed({
       return next;
     });
   };
-
-  if (isLoading && allItems.length === 0) {
-    return (
-      <div className="flex flex-col gap-4 py-8">
-        {[1, 2].map((i) => (
-          <div
-            className="h-96 w-full animate-pulse rounded-3xl bg-muted"
-            key={i}
-          />
-        ))}
-      </div>
-    );
-  }
 
   if (allItems.length === 0) {
     return (
@@ -221,17 +180,6 @@ export function DateRecapFeed({
           })}
         </div>
       </div>
-
-      {hasNextPage && (
-        <Button
-          className="mx-auto rounded-full px-6 font-semibold"
-          disabled={isFetchingNextPage}
-          onClick={() => fetchNextPage()}
-          variant="outline"
-        >
-          {isFetchingNextPage ? "Loading more..." : "Load older recaps"}
-        </Button>
-      )}
     </div>
   );
 }

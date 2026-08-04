@@ -4,11 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added an AWS Blocks backend package with CDK/Lambda deployment entrypoints, local development, typed API calls, and production WebSocket realtime support for chat.
+- Introspected the existing Neon PostgreSQL schema with `bb-data`, added Blocks Database/Kysely access, a DynamoDB room projection, a DynamoDB KV room-list cache, and a migration for the legacy chat read-state key.
+- Added AWS Blocks `Hosting` construct in `packages/aws-blocks/aws-blocks/index.cdk.ts` and enabled `DEPLOY_FRONTEND_TO_AWS` in GitHub Actions for full AWS frontend + backend deployments.
+
+### Fixed
+
+- Fixed React SSR dual-module bundling in `apps/web/vite.config.ts` by removing React from `ssr.noExternal`.
+
+### Changed
+
+- Migrated chat room reads and message writes from Hono/Upstash realtime to AWS Blocks while retaining the existing Neon/Drizzle history schema.
+- Kept Vercel for TanStack Start builds and previews, with `VITE_BLOCKS_API_URL` connecting the frontend to the AWS Blocks API.
+
 ## [0.7.0] - 2026-07-20
 
 ### Added
 
 - Added a Postgres-backed chat persistence foundation with Upstash Redis Streams/SSE realtime delivery for friend DMs and date rooms.
+
+### Fixed
+
+- Added an idempotent production hotfix migration for private profile fields and tightened date dashboard/chat decision UI spacing.
 - Added Kibo UI-inspired `StoriesBar` component (`apps/web/src/components/ui/stories.tsx`) featuring unread gradient rings for creator food recaps.
 - Added Kibo UI-inspired `ReelPlayer` full-screen vertical video modal (`apps/web/src/components/ui/reel.tsx`) for watching recaps and video replies, complete with venue badge, creator avatar, and instant "Plan Date at Spot" CTA.
 - Re-architected Home Dashboard (`/me`) featuring a horizontal schedule ribbon, live location weather forecast badge (`☀️ 76°F · Clear & Sunny`), upcoming date itinerary card, date stats metrics (streak, monthly bookings, fav spots, recaps), and AI recommendation queue prompt.

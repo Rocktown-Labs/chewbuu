@@ -354,7 +354,8 @@ export function DateWizard({
     }
 
     if (!values.searchArea?.trim()) {
-      form.setFieldValue("searchArea", "Nashville, TN");
+      toast.error("Enter the area where you want to date.");
+      return;
     }
 
     for (const member of values.partyMembers) {

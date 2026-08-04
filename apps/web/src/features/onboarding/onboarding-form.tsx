@@ -1,3 +1,4 @@
+import { api as blocksApi } from "@chewbuu/aws-blocks";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button } from "@chewbuu/ui/components/button";
 import {
@@ -33,7 +34,6 @@ import {
   useForm,
 } from "@tanstack/react-form";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { upload } from "@vercel/blob/client";
 import {
   Camera,
   Check,
@@ -59,7 +59,6 @@ import { NavigationBlocker } from "@/components/navigation-blocker";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
-  getApiUrl,
   pricingApi,
   type DatePlace,
   type DatingMedia,
@@ -251,53 +250,6 @@ const interestCategories = [
   },
 ] as const;
 
-const defaultPlans: MembershipPlan[] = [
-  {
-    active: true,
-    annualPriceCents: 0,
-    annualStripePriceId: "",
-    cta: "Keep Social",
-    description: "Solo dates, Dutch by default, and two booked dates per day.",
-    features: ["Solo dating", "2 booked dates daily", "Video-first matches"],
-    monthlyPriceCents: 0,
-    name: "Social",
-    sortOrder: 0,
-    stats: ["Free", "Solo only", "2/day"],
-    tier: "social",
-  },
-  {
-    active: true,
-    annualPriceCents: 19_000,
-    annualStripePriceId: "",
-    cta: "Unlock Mingle",
-    description: "Bring friends, build circles, and match with other parties.",
-    features: ["Group dates up to 4", "Friend invites", "Circle matching"],
-    monthlyPriceCents: 1900,
-    name: "Mingle",
-    sortOrder: 1,
-    stats: ["Groups", "Circles", "Priority"],
-    tier: "mingle",
-  },
-  {
-    active: true,
-    annualPriceCents: 39_000,
-    annualStripePriceId: "",
-    cta: "Go Sugar",
-    description:
-      "Cover dates, request premium matches, and unlock every social mode.",
-    features: [
-      "Requester-covers dates",
-      "Premium match pool",
-      "All Mingle features",
-    ],
-    monthlyPriceCents: 3900,
-    name: "Sugar",
-    sortOrder: 2,
-    stats: ["Highest", "Cover dates", "All modes"],
-    tier: "sugar",
-  },
-];
-
 const defaultValues = {
   name: "",
   username: "",
@@ -449,18 +401,19 @@ const ensureUploadExtension = (fileName: string, contentType: string) => {
 
 const uploadProfileMedia = async (file: File, kind: DatingMedia["kind"]) => {
   const contentType = getUploadType(file, kind);
-  const pathname = `profiles/client/${kind}/${crypto.randomUUID()}-${ensureUploadExtension(file.name, contentType)}`;
-  const blob = await upload(pathname, file, {
-    access: "private",
-    clientPayload: JSON.stringify({ slot: kind }),
+  const upload = await blocksApi.createMediaUpload({
     contentType,
-    handleUploadUrl: getApiUrl("/upload/blob/client"),
-    multipart: kind === "intro_video",
+    fileName: ensureUploadExtension(file.name, contentType),
+    slot: kind,
   });
+  const response = await fetch(upload.uploadUrl, {
+    body: file,
+    headers: { "content-type": contentType },
+    method: "PUT",
+  });
+  if (!response.ok) throw new Error("Media upload failed.");
 
-  return getApiUrl(
-    `/upload/blob?pathname=${encodeURIComponent(blob.pathname)}`
-  );
+  return upload.mediaUrl;
 };
 
 const createEmptyPhoto = (sortOrder: number): DatingMedia => ({
@@ -508,7 +461,7 @@ export function OnboardingForm() {
   } = useOnboardingStore();
 
   const [step, setStep] = useState(persistedStep);
-  const [plans, setPlans] = useState<MembershipPlan[]>(defaultPlans);
+  const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [underageBirthday, setUnderageBirthday] = useState("");
   const [isLeavingOnboarding, setIsLeavingOnboarding] = useState(false);
   const { data: session } = authClient.useSession();
@@ -667,7 +620,7 @@ export function OnboardingForm() {
         const { plans: nextPlans } = await pricingApi.getPlans();
         setPlans(nextPlans);
       } catch {
-        setPlans(defaultPlans);
+        setPlans([]);
       }
     };
 
@@ -1107,46 +1060,30 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
       form.setFieldValue("latitude", String(latitude));
       form.setFieldValue("longitude", String(longitude));
 
-      let resolvedArea = "Searcy, AR";
-      if (Math.abs(latitude - 36.16) < 1 && Math.abs(longitude + 86.78) < 1) {
-        resolvedArea = "Nashville, TN";
-      } else if (
-        Math.abs(latitude - 34.74) < 1 &&
-        Math.abs(longitude + 92.28) < 1
-      ) {
-        resolvedArea = "Little Rock, AR";
-      } else if (
-        Math.abs(latitude - 35.24) < 1 &&
-        Math.abs(longitude + 91.73) < 1
-      ) {
-        resolvedArea = "Searcy, AR";
-      } else {
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
-          );
-          const data = await res.json();
-          if (data?.address) {
-            const city =
-              data.address.city ||
-              data.address.town ||
-              data.address.village ||
-              data.address.suburb ||
-              "";
-            const state = data.address.state
-              ? data.address.state_code || data.address.state
-              : "";
-            let stateCode = String(state).trim();
-            if (stateCode.length > 2) {
-              stateCode = stateCode.slice(0, 2).toUpperCase();
-            }
-            if (city && stateCode) {
-              resolvedArea = `${city}, ${stateCode}`;
-            }
-          }
-        } catch (error) {
-          console.error("OSM geocode error:", error);
-        }
+      let resolvedArea = "";
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+        );
+        const data = await res.json();
+        const city =
+          data?.address?.city ||
+          data?.address?.town ||
+          data?.address?.village ||
+          data?.address?.suburb ||
+          "";
+        const state = data?.address?.state_code || data?.address?.state || "";
+        const stateCode = String(state).trim().slice(0, 2).toUpperCase();
+        if (city && stateCode) resolvedArea = `${city}, ${stateCode}`;
+      } catch (error) {
+        console.error("OSM geocode error:", error);
+      }
+
+      if (!resolvedArea) {
+        toast.error("Could not determine your area. Enter it manually.", {
+          id: "geo",
+        });
+        return;
       }
 
       form.setFieldValue("area", resolvedArea);
@@ -1727,7 +1664,7 @@ function InterestsStep({ form }: { form: OnboardingFormApi }) {
         <InterestsStepContent
           form={form}
           interestDetails={interestDetails || {}}
-          area={areaValue || "Nashville, TN"}
+          area={areaValue}
           birthday={(birthdayValue as string) || ""}
         />
       )}

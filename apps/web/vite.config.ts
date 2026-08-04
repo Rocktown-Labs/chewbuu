@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -7,12 +9,28 @@ import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const nodeObservabilityDependencies = [
+    "@opentelemetry/api",
+    "@opentelemetry/core",
+    "@opentelemetry/resources",
+    "@opentelemetry/sdk-trace-base",
+    "@opentelemetry/semantic-conventions",
+    "import-in-the-middle",
+    "require-in-the-middle",
+  ];
 
   return {
     server: {
       port: 3001,
     },
     resolve: {
+      alias: {
+        "@chewbuu/aws-blocks": path.resolve(
+          import.meta.dirname,
+          "../../packages/aws-blocks/src",
+          mode === "production" ? "client.aws.ts" : "client.ts"
+        ),
+      },
       tsconfigPaths: true,
     },
     plugins: [
@@ -31,8 +49,12 @@ export default defineConfig(({ mode }) => {
         : []),
     ],
     // Bundle all SSR deps: Vercel functions have no node_modules at runtime
-    ssr: {
-      noExternal: true,
-    },
+    ssr:
+      mode === "production"
+        ? {
+            external: ["@chewbuu/auth"],
+            noExternal: nodeObservabilityDependencies,
+          }
+        : {},
   };
 });

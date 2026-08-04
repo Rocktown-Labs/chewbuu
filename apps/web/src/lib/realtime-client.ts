@@ -1,43 +1,34 @@
-import { createRealtime } from "@upstash/realtime/client";
-import type { ZodType } from "zod";
-
-import type { ApiChatMessage } from "@/lib/chat-api";
-
-type ChatTypingEvent = {
-  isTyping: boolean;
-  roomId: string;
-  userId: string;
-};
-
-type ChatRealtimeEvents = {
-  chat: {
-    message: ZodType<ApiChatMessage>;
-    typing: ZodType<ChatTypingEvent>;
-  };
-};
-
-const realtime = createRealtime<ChatRealtimeEvents>();
+import type { RealtimeChannelClient } from "@chewbuu/aws-blocks";
+import { useEffect } from "react";
 
 export const useChatRealtime = <T>({
   channels,
   enabled = true,
-  event,
   onData,
 }: {
-  channels: string[];
+  channels: RealtimeChannelClient<T>[];
   enabled?: boolean;
-  event: string;
   onData: (payload: { channel: string; data: T }) => void;
 }) => {
-  return realtime.useRealtime({
-    channels,
-    enabled,
-    events: [event as "chat.message" | "chat.typing"],
-    onData: (payload) => {
-      onData({
-        channel: payload.channel,
-        data: payload.data as T,
-      });
-    },
-  });
+  useEffect(() => {
+    if (!enabled) return;
+    const subscriptions = channels.map((channel) =>
+      channel.subscribe({
+        onDisconnect: () => {},
+        onMessage: (data) => onData({ channel: "", data }),
+      })
+    );
+    for (const subscription of subscriptions) {
+      void (async () => {
+        try {
+          await subscription.established;
+        } catch {
+          // The middleware reports channel authorization failures here.
+        }
+      })();
+    }
+    return () => {
+      for (const subscription of subscriptions) subscription.unsubscribe();
+    };
+  }, [channels, enabled, onData]);
 };

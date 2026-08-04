@@ -5,9 +5,15 @@ dotenv.config({
   path: "../../apps/server/.env",
 });
 
+const dbUrl =
+  process.env.DATABASE_URL ||
+  process.env.BLOCKS_DB_URL ||
+  process.env.DATABASE_URL_UNPOOLED ||
+  "";
+
 export default defineConfig({
   dbCredentials: {
-    url: process.env.DATABASE_URL || "",
+    url: dbUrl,
   },
   dialect: "postgresql",
   out: "./src/migrations",

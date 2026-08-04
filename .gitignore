@@ -43,6 +43,12 @@ lerna-debug.log*
 # Better-T-Stack
 .alchemy
 .vercel
+.blocks-sandbox
+/.blocks/*
+!/.blocks/config.json
+/packages/aws-blocks/.blocks/*
+!/packages/aws-blocks/.blocks/config.json
+.bb-data
 
 # Testing
 coverage
