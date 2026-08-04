@@ -121,3 +121,30 @@ jobs:
           VITE_SERVER_URL: "/"
           VITE_NEON_AUTH_URL: ${{ secrets.VITE_NEON_AUTH_URL || vars.VITE_NEON_AUTH_URL }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+
+      - name: Diagnostic - SSR Lambda env & logs
+        if: always()
+        run: |
+          fn=$(aws lambda list-functions \
+            --query "Functions[?starts_with(FunctionName, 'chewbuu-prod-WebHosting')].FunctionName" \
+            --output text | tr '\t' '\n' | head -1)
+          echo "SSR_LAMBDA=$fn"
+          if [ -n "$fn" ]; then
+            echo "--- env keys ---"
+            aws lambda get-function-configuration --function-name "$fn" \
+              --query 'Environment.Variables' --output json | python3 -c \
+              "import json,sys; d=json.load(sys.stdin); [print(k,'=SET len',len(str(v))) for k,v in sorted(d.items()) if v]"
+            echo "--- invoke root ---"
+            echo '{"version":"1.0","resource":"/{proxy+}","path":"/","httpMethod":"GET","headers":{"Host":"d1cfwdtr24bsn.cloudfront.net"},"multiValueHeaders":{},"queryStringParameters":null,"pathParameters":{"proxy":""},"stageVariables":null,"requestContext":{"accountId":"1","resourceId":"a","stage":"prod","requestId":"t","identity":{"sourceIp":"1.2.3.4"},"resourcePath":"/{proxy+}","httpMethod":"GET","apiId":"x"},"body":null,"isBase64Encoded":false}' \
+              > /tmp/payload.json
+            aws lambda invoke --function-name "$fn" --payload file:///tmp/payload.json \
+              --cli-binary-format raw-in-base64-out /tmp/out.json >/tmp/invoke-meta.txt 2>&1 || true
+            cat /tmp/invoke-meta.txt
+            echo "--- lambda error ---"
+            head -c 400 /tmp/out.json 2>/dev/null
+            echo
+            echo "--- cloudwatch last 5m ---"
+            aws logs filter-log-events --log-group-name "/aws/lambda/$fn" \
+              --start-time "$(( $(date +%s) - 300 ))" \
+              --query 'events[].message' --output text 2>&1 | tail -40
+          fi
