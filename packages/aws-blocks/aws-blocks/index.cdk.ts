@@ -31,6 +31,7 @@ export const blocksStack = await BlocksStack.create(
 if (deployFrontend && !sandboxMode) {
   const webHosting = new Hosting(blocksStack, "WebHosting", {
     root: path.resolve(directory, "../../../apps/web"),
+    buildCommand: "bun run build",
     framework: "tanstack-start",
     api: blocksStack,
   });
