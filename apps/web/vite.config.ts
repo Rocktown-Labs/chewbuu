@@ -53,12 +53,7 @@ export default defineConfig(({ mode }) => {
       mode === "production"
         ? {
             external: ["@chewbuu/auth"],
-            noExternal: [
-              ...nodeObservabilityDependencies,
-              "react",
-              "react-dom",
-              "react/jsx-runtime",
-            ],
+            noExternal: nodeObservabilityDependencies,
           }
         : {},
   };

@@ -44,11 +44,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Apply PostgreSQL schema
-        run: bun run db:push
-        env:
-          DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}
-
       - name: Bootstrap CDK environment
         run: |
           account_id=$(aws sts get-caller-identity --query Account --output text)
@@ -89,10 +84,12 @@ jobs:
             --value "$BETTER_AUTH_SECRET" \
             >/dev/null
 
-      - name: Deploy Blocks backend
+      - name: Deploy Blocks backend & frontend
         run: bun run aws:deploy
         env:
+          DEPLOY_FRONTEND_TO_AWS: "true"
           BLOCKS_DB_URL: ${{ secrets.BLOCKS_DB_URL }}
           BLOCKS_SSM_PARAM_DB_URL: /chewbuu-prod-db-url
           DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}
+          VITE_NEON_AUTH_URL: ${{ secrets.VITE_NEON_AUTH_URL || vars.VITE_NEON_AUTH_URL }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
