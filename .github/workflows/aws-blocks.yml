@@ -142,8 +142,19 @@ jobs:
             echo "--- lambda error ---"
             head -c 400 /tmp/out.json 2>/dev/null
             echo
-            echo "--- cloudwatch last 10m ---"
-            aws logs filter-log-events --log-group-name "/aws/lambda/$fn" \
-              --start-time "$(( $(date +%s) - 600 ))" \
-              --query 'events[].message' --output text 2>&1 | tail -50 || true
+            echo "--- log groups ---"
+            aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/$fn" \
+              --query 'logGroups[].logGroupName' --output text || true
+            echo "--- cloudwatch retry (3x) ---"
+            for i in 1 2 3; do
+              echo "-- attempt $i --"
+              out=$(aws logs filter-log-events --log-group-name "/aws/lambda/$fn" \
+                --start-time "$(( $(date +%s) - 900 ))" \
+                --query 'events[].message' --output text 2>&1) || true
+              if [ -n "$out" ] && [ "$out" != "None" ]; then
+                echo "$out" | tail -60
+                break
+              fi
+              sleep 10
+            done
           fi
