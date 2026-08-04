@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Fixed React SSR dual-module bundling in `apps/web/vite.config.ts` by removing React from `ssr.noExternal`.
-- Explicitly set `framework: "spa"` and `buildOutputDir: ".output/public"` in AWS Blocks `Hosting` construct for TanStack Start client bundle deployment.
+- Switched the AWS Blocks `Hosting` construct to `framework: "nitro"` with `buildOutputDir: ".output"` so the TanStack Start SSR bundle (`.output/server` + `.output/public`) deploys as a Lambda instead of being treated as a static SPA.
 
 ### Changed
 
