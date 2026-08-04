@@ -5,6 +5,7 @@ export default defineConfig({
   experimental: {
     asyncContext: true,
   },
+  errorHandler: "./server/error-handler",
   modules: [
     evlog({
       env: { service: "chewbuu-web" },
