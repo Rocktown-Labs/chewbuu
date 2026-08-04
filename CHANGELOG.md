@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed the `getServerUrl` path collapse in `apps/web/src/lib/auth-client.ts` so a same-origin `VITE_SERVER_URL` (e.g. `/`) resolves against the request origin instead of throwing `Invalid URL`.
 - Set `VITE_SERVER_URL: "/"` and `BETTER_AUTH_SECRET` in the AWS Blocks deploy workflow so the production browser bundle targets the deployed origin and the SSR Lambda receives the auth secret.
 - Wired the full runtime env set (Stripe, Google Places/Gemini/Client, R2, Upstash Redis, Stream, Resend, Neon Auth URL, CHIME, and more) into both the Blocks API Lambda and the SSR Lambda via `Hosting.ssrFunction.addEnvironment` in `packages/aws-blocks/aws-blocks/index.cdk.ts`, skipping empty values, and pass each through the deploy workflow so functionality works once keys are set in GitHub.
+- Set `NITRO_PRESET: "aws-lambda"` in the AWS Blocks deploy workflow so the SSR Lambda bundle exports a real AWS Lambda `handler` (the default `node-server` preset exported none, causing every origin invocation to 502).
 
 ### Changed
 
