@@ -6,4 +6,7 @@ export default defineConfig({
   },
   errorHandler: "./server/error-handler",
   modules: [],
+  awsLambda: {
+    streaming: true,
+  },
 });
