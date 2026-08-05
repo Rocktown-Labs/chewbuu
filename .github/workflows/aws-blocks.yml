@@ -146,12 +146,14 @@ jobs:
             code_url=$(aws lambda get-function --function-name "$fn" --query 'Code.Location' --output text)
             curl -s "$code_url" -o /tmp/fn.zip && mkdir -p /tmp/fn && cd /tmp/fn && unzip -o -q /tmp/fn.zip && echo "UNZIP_OK"
             echo "bundle top-level:"; ls /tmp/fn | head
-            echo "server dir:"; ls /tmp/fn/server 2>/dev/null | head
-            if grep -q "ssr-error" /tmp/fn/server/index.mjs 2>/dev/null; then echo "HAS_SSR_ERROR_HANDLER=yes"; else echo "HAS_SSR_ERROR_HANDLER=no"; fi
-            if grep -q "request context is not available" /tmp/fn/server/index.mjs 2>/dev/null; then echo "HAS_ASYNC_CONTEXT_THROW=yes"; else echo "HAS_ASYNC_CONTEXT_THROW=no"; fi
-            if grep -q "evlog" /tmp/fn/server/index.mjs 2>/dev/null; then echo "HAS_EVLOG=yes"; else echo "HAS_EVLOG=no"; fi
-            grep -o "errorHandlers = \[[^]]*\]" /tmp/fn/server/index.mjs 2>/dev/null || true
-            head -c 300 /tmp/fn/server/index.mjs 2>/dev/null; echo
+            echo "index.mjs size:"; wc -c /tmp/fn/index.mjs 2>/dev/null || true
+            if grep -q "ssr-error" /tmp/fn/index.mjs 2>/dev/null; then echo "HAS_SSR_ERROR_HANDLER=yes"; else echo "HAS_SSR_ERROR_HANDLER=no"; fi
+            if grep -q "request context is not available" /tmp/fn/index.mjs 2>/dev/null; then echo "HAS_ASYNC_CONTEXT_THROW=yes"; else echo "HAS_ASYNC_CONTEXT_THROW=no"; fi
+            if grep -q "evlog" /tmp/fn/index.mjs 2>/dev/null; then echo "HAS_EVLOG=yes"; else echo "HAS_EVLOG=no"; fi
+            grep -o "errorHandlers = \[[^]]*\]" /tmp/fn/index.mjs 2>/dev/null || true
+            grep -o "rawPath || event.path" /tmp/fn/index.mjs 2>/dev/null | head -1 || true
+            grep -o "asyncContext: true" /tmp/fn/index.mjs 2>/dev/null | head -1 || true
+            echo "handler export region:"; grep -n "function handler\|handler = \|export {" /tmp/fn/index.mjs 2>/dev/null | tail -10 || true
             echo "--- log groups ---"
             aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/$fn" \
               --query 'logGroups[].logGroupName' --output text || true
@@ -168,3 +170,11 @@ jobs:
               sleep 10
             done
           fi
+
+      - name: Upload SSR Lambda bundle artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssr-lambda-bundle
+          path: /tmp/fn
+          if-no-files-found: ignore
