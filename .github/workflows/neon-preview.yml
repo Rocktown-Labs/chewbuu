@@ -61,7 +61,9 @@ jobs:
 
       - name: Run Database Migrations
         if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
-        run: bun --cwd packages/db db:migrate
+        run: |
+          bun --cwd packages/db db:migrate
+          bun --cwd packages/db db:migrate:raw
         env:
           DATABASE_URL: "${{ steps.create_neon_branch.outputs.db_url_with_pooler }}"
 

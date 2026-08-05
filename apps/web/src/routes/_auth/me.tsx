@@ -40,6 +40,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@chewbuu/ui/components/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@chewbuu/ui/components/sheet";
 import { Switch } from "@chewbuu/ui/components/switch";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { cn } from "@chewbuu/ui/lib/utils";
@@ -3427,25 +3434,25 @@ export function MePage({
           </Dialog>
         ) : null}
 
-        {/* Plan a Date Drawer Modal */}
+        {/* Plan a Date Bottom Sheet */}
         {isPlanDateDrawerOpen ? (
-          <Dialog
+          <Sheet
             open={isPlanDateDrawerOpen}
             onOpenChange={(open) => {
               if (!open) setIsPlanDateDrawerOpen(false);
             }}
           >
-            <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto rounded-3xl p-6 sm:p-8">
-              <DialogHeader>
-                <DialogTitle className="font-bold text-xl">
+            <SheetContent>
+              <SheetHeader>
+                <SheetTitle className="font-bold text-xl">
                   Plan a New Date
-                </DialogTitle>
-                <DialogDescription className="text-muted-foreground text-xs">
+                </SheetTitle>
+                <SheetDescription className="text-muted-foreground text-xs">
                   Select date activities, scheduled time, and candidate spots.
-                </DialogDescription>
-              </DialogHeader>
+                </SheetDescription>
+              </SheetHeader>
 
-              <div className="mt-4">
+              <div className="mt-1">
                 <DateWizard
                   membershipTier={tier}
                   onCancel={() => setIsPlanDateDrawerOpen(false)}
@@ -3456,8 +3463,8 @@ export function MePage({
                   presetPlace={presetPlaceForWizard}
                 />
               </div>
-            </DialogContent>
-          </Dialog>
+            </SheetContent>
+          </Sheet>
         ) : null}
 
         <NavigationBlocker
