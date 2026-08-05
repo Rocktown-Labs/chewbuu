@@ -96,6 +96,7 @@ export const createAuth = () => {
         "chewbuu.com",
         "*.chewbuu.com",
         "*.vercel.app",
+        "*.cloudfront.net",
       ],
       fallback: env.BETTER_AUTH_URL,
       protocol: process.env.NODE_ENV === "development" ? "http" : "https",
@@ -191,6 +192,7 @@ export const createAuth = () => {
       "exp://",
       "http://localhost:8081",
       "https://*.vercel.app",
+      "https://*.cloudfront.net",
     ],
     user: {
       additionalFields: {

@@ -10,4 +10,7 @@ export default defineConfig({
       env: { service: "chewbuu-web" },
     }),
   ],
+  awsLambda: {
+    streaming: true,
+  },
 });

@@ -15,6 +15,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Fixed React SSR dual-module bundling in `apps/web/vite.config.ts` by removing React from `ssr.noExternal`.
+- Switched the AWS Blocks `Hosting` construct to `framework: "nitro"` with `buildOutputDir: ".output"` so the TanStack Start SSR bundle (`.output/server` + `.output/public`) deploys as a Lambda instead of being treated as a static SPA.
+- Wired `DATABASE_URL` and `BETTER_AUTH_SECRET` (plus `BETTER_AUTH_URL`/`CORS_ORIGIN`/`VITE_BLOCKS_API_URL` pass-through) into the SSR Lambda via `Hosting.ssrFunction.addEnvironment`, fixing the Lambda 502 caused by `@t3-oss/env-core` rejecting missing env vars at module load.
+- Defaulted `BETTER_AUTH_URL` and `CORS_ORIGIN` in `packages/env/src/server.ts` to the `chewbuu.com` origin when running outside Vercel, so the SSR Lambda no longer crashes without them.
+- Added `*.cloudfront.net` to Better Auth `allowedHosts` and `trustedOrigins` so sessions work on the deployed CloudFront distribution pending a custom domain.
+- Fixed the `getServerUrl` path collapse in `apps/web/src/lib/auth-client.ts` so a same-origin `VITE_SERVER_URL` (e.g. `/`) resolves against the request origin instead of throwing `Invalid URL`.
+- Set `VITE_SERVER_URL: "/"` and `BETTER_AUTH_SECRET` in the AWS Blocks deploy workflow so the production browser bundle targets the deployed origin and the SSR Lambda receives the auth secret.
+- Wired the full runtime env set (Stripe, Google Places/Gemini/Client, R2, Upstash Redis, Stream, Resend, Neon Auth URL, CHIME, and more) into both the Blocks API Lambda and the SSR Lambda via `Hosting.ssrFunction.addEnvironment` in `packages/aws-blocks/aws-blocks/index.cdk.ts`, skipping empty values, and pass each through the deploy workflow so functionality works once keys are set in GitHub.
+- Set `NITRO_PRESET: "aws-lambda"` in the AWS Blocks deploy workflow so the SSR Lambda bundle exports a real AWS Lambda `handler` (the default `node-server` preset exported none, causing every origin invocation to 502).
+- Fixed `react`/`react-dom`/`scheduler` being missing from the SSR Lambda bundle (resolved `__require("react")` crash) by copying them into `.output/server/node_modules` after the build via `apps/web/scripts/copy-ssr-deps.ts`.
+- Enabled Lambda response streaming (`awsLambda.streaming: true`) in `apps/web/nitro.config.ts` so the SSR handler emits the `streamifyResponse` shape the API Gateway `ResponseTransferMode.STREAM` integration expects, fixing the remaining CloudFront 502 after direct-invoke returned 200.
 
 ### Changed
 
