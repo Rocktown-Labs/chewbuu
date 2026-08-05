@@ -133,15 +133,19 @@ jobs:
             aws lambda get-function-configuration --function-name "$fn" \
               --query 'Environment.Variables' --output json | python3 -c \
               "import json,sys; d=json.load(sys.stdin) or {}; [print(k,'=SET len',len(str(v))) for k,v in sorted(d.items()) if v]" || true
-            echo "--- invoke root ---"
+            aws lambda get-function-configuration --function-name "$fn" \
+              --query 'Environment.Variables' --output json > /tmp/fn-env.json || true
+            echo "--- invoke root (log-type tail) ---"
             echo '{"version":"1.0","resource":"/{proxy+}","path":"/","httpMethod":"GET","headers":{"Host":"d1cfwdtr24bsn.cloudfront.net"},"multiValueHeaders":{},"queryStringParameters":null,"pathParameters":{"proxy":""},"stageVariables":null,"requestContext":{"accountId":"1","resourceId":"a","stage":"prod","requestId":"t","identity":{"sourceIp":"1.2.3.4"},"resourcePath":"/{proxy+}","httpMethod":"GET","apiId":"x"},"body":null,"isBase64Encoded":false}' \
               > /tmp/payload.json
             aws lambda invoke --function-name "$fn" --payload file:///tmp/payload.json \
-              --cli-binary-format raw-in-base64-out /tmp/out.json >/tmp/invoke-meta.txt 2>&1 || true
+              --cli-binary-format raw-in-base64-out --log-type Tail /tmp/out.json >/tmp/invoke-meta.txt 2>&1 || true
             cat /tmp/invoke-meta.txt
             echo "--- lambda error ---"
             head -c 400 /tmp/out.json 2>/dev/null
             echo
+            echo "--- log result (decoded) ---"
+            python3 -c "import json,base64; d=json.load(open('/tmp/invoke-meta.txt')); lr=d.get('LogResult'); print(base64.b64decode(lr).decode('utf-8','replace') if lr else 'NO_LOGRESULT')" 2>/dev/null || true
             echo "--- lambda code markers ---"
             code_url=$(aws lambda get-function --function-name "$fn" --query 'Code.Location' --output text)
             curl -s "$code_url" -o /tmp/fn.zip && mkdir -p /tmp/fn && cd /tmp/fn && unzip -o -q /tmp/fn.zip && echo "UNZIP_OK"
@@ -176,5 +180,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ssr-lambda-bundle
-          path: /tmp/fn
+          path: |
+            /tmp/fn
+            /tmp/fn-env.json
           if-no-files-found: ignore
