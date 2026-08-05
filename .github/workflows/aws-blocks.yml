@@ -84,6 +84,12 @@ jobs:
             --value "$BETTER_AUTH_SECRET" \
             >/dev/null
 
+      - name: Apply database migrations
+        if: github.ref == 'refs/heads/main'
+        run: bun --cwd packages/db db:migrate:raw
+        env:
+          DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}
+
       - name: Deploy Blocks backend & frontend
         run: bun run aws:deploy
         env:

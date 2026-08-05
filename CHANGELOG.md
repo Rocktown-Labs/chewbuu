@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added an AWS Blocks backend package with CDK/Lambda deployment entrypoints, local development, typed API calls, and production WebSocket realtime support for chat.
 - Introspected the existing Neon PostgreSQL schema with `bb-data`, added Blocks Database/Kysely access, a DynamoDB room projection, a DynamoDB KV room-list cache, and a migration for the legacy chat read-state key.
 - Added AWS Blocks `Hosting` construct in `packages/aws-blocks/aws-blocks/index.cdk.ts` and enabled `DEPLOY_FRONTEND_TO_AWS` in GitHub Actions for full AWS frontend + backend deployments.
+- Added a bottom-anchored `Sheet` drawer component (`packages/ui/src/components/sheet.tsx`) built on the Base UI dialog primitive with slide-up/down animation, a drag handle, and a scrollable body.
+- Added a raw migration runner (`packages/db/src/migrate-raw.ts`) that applies the timestamped handwritten `.sql` migrations (tracked in a `schema_migrations` table) alongside `drizzle-kit`'s journal-based `db:migrate`.
 
 ### Fixed
 
@@ -25,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Set `NITRO_PRESET: "aws-lambda"` in the AWS Blocks deploy workflow so the SSR Lambda bundle exports a real AWS Lambda `handler` (the default `node-server` preset exported none, causing every origin invocation to 502).
 - Fixed `react`/`react-dom`/`scheduler` being missing from the SSR Lambda bundle (resolved `__require("react")` crash) by copying them into `.output/server/node_modules` after the build via `apps/web/scripts/copy-ssr-deps.ts`.
 - Enabled Lambda response streaming (`awsLambda.streaming: true`) in `apps/web/nitro.config.ts` so the SSR handler emits the `streamifyResponse` shape the API Gateway `ResponseTransferMode.STREAM` integration expects, fixing the remaining CloudFront 502 after direct-invoke returned 200.
+- Fixed profile saves failing with `column "contribution_score" of relation "profile" does not exist` by applying the pending raw migrations to the production Neon database and wiring `db:migrate:raw` into the AWS Blocks deploy workflow (main only) and the Neon preview workflow so migrations run automatically.
+- Replaced the centered "Plan a Date" dialog on `/me` with the bottom `Sheet` drawer so the date wizard slides up full-width instead of rendering as a squashed modal.
 
 ### Changed
 
