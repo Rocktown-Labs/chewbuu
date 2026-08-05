@@ -142,6 +142,16 @@ jobs:
             echo "--- lambda error ---"
             head -c 400 /tmp/out.json 2>/dev/null
             echo
+            echo "--- lambda code markers ---"
+            code_url=$(aws lambda get-function --function-name "$fn" --query 'Code.Location' --output text)
+            curl -s "$code_url" -o /tmp/fn.zip && mkdir -p /tmp/fn && cd /tmp/fn && unzip -o -q /tmp/fn.zip && echo "UNZIP_OK"
+            echo "bundle top-level:"; ls /tmp/fn | head
+            echo "server dir:"; ls /tmp/fn/server 2>/dev/null | head
+            if grep -q "ssr-error" /tmp/fn/server/index.mjs 2>/dev/null; then echo "HAS_SSR_ERROR_HANDLER=yes"; else echo "HAS_SSR_ERROR_HANDLER=no"; fi
+            if grep -q "request context is not available" /tmp/fn/server/index.mjs 2>/dev/null; then echo "HAS_ASYNC_CONTEXT_THROW=yes"; else echo "HAS_ASYNC_CONTEXT_THROW=no"; fi
+            if grep -q "evlog" /tmp/fn/server/index.mjs 2>/dev/null; then echo "HAS_EVLOG=yes"; else echo "HAS_EVLOG=no"; fi
+            grep -o "errorHandlers = \[[^]]*\]" /tmp/fn/server/index.mjs 2>/dev/null || true
+            head -c 300 /tmp/fn/server/index.mjs 2>/dev/null; echo
             echo "--- log groups ---"
             aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/$fn" \
               --query 'logGroups[].logGroupName' --output text || true
