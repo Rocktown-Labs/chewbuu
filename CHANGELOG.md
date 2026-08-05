@@ -23,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Set `VITE_SERVER_URL: "/"` and `BETTER_AUTH_SECRET` in the AWS Blocks deploy workflow so the production browser bundle targets the deployed origin and the SSR Lambda receives the auth secret.
 - Wired the full runtime env set (Stripe, Google Places/Gemini/Client, R2, Upstash Redis, Stream, Resend, Neon Auth URL, CHIME, and more) into both the Blocks API Lambda and the SSR Lambda via `Hosting.ssrFunction.addEnvironment` in `packages/aws-blocks/aws-blocks/index.cdk.ts`, skipping empty values, and pass each through the deploy workflow so functionality works once keys are set in GitHub.
 - Set `NITRO_PRESET: "aws-lambda"` in the AWS Blocks deploy workflow so the SSR Lambda bundle exports a real AWS Lambda `handler` (the default `node-server` preset exported none, causing every origin invocation to 502).
+- Fixed `react`/`react-dom`/`scheduler` being missing from the SSR Lambda bundle (resolved `__require("react")` crash) by copying them into `.output/server/node_modules` after the build via `apps/web/scripts/copy-ssr-deps.ts`.
+- Enabled Lambda response streaming (`awsLambda.streaming: true`) in `apps/web/nitro.config.ts` so the SSR handler emits the `streamifyResponse` shape the API Gateway `ResponseTransferMode.STREAM` integration expects, fixing the remaining CloudFront 502 after direct-invoke returned 200.
 
 ### Changed
 

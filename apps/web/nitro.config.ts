@@ -1,11 +1,15 @@
+import evlog from "evlog/nitro/v3";
 import { defineConfig } from "nitro";
 
 export default defineConfig({
   experimental: {
     asyncContext: true,
   },
-  errorHandler: "./server/error-handler",
-  modules: [],
+  modules: [
+    evlog({
+      env: { service: "chewbuu-web" },
+    }),
+  ],
   awsLambda: {
     streaming: true,
   },
