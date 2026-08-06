@@ -72,6 +72,15 @@ export function SignIn({
     (plugin) => plugin.id === "username"
   );
 
+  const navigateAfterSignIn = async () => {
+    const session = await authClient.getSession();
+    navigate({
+      to: session.data?.user.hasCompletedOnboarding
+        ? redirectTo
+        : "/onboarding",
+    });
+  };
+
   const { mutate: signInEmail, isPending: signInEmailPending } = useSignInEmail(
     authClient,
     {
@@ -87,7 +96,9 @@ export function SignIn({
 
         resetFetchOptions();
       },
-      onSuccess: () => navigate({ to: redirectTo }),
+      onSuccess: () => {
+        void navigateAfterSignIn();
+      },
     }
   );
 
@@ -97,7 +108,9 @@ export function SignIn({
         setPassword("");
         resetFetchOptions();
       },
-      onSuccess: () => navigate({ to: redirectTo }),
+      onSuccess: () => {
+        void navigateAfterSignIn();
+      },
     });
 
   const signInMutating = useIsMutating({
