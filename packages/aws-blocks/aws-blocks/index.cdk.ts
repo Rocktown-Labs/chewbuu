@@ -18,15 +18,15 @@ const projectRoot = app.node.tryGetContext("projectRoot") || process.cwd();
 const deployFrontend =
   process.env.DEPLOY_FRONTEND_TO_AWS === "true" ||
   process.env.AWS_HOSTING === "true";
+const prNumber = process.env.PR_NUMBER;
+const stackName = prNumber
+  ? `chewbuu-preview-pr-${prNumber}`
+  : getStackName({ projectRoot, sandbox: sandboxMode });
 
-export const blocksStack = await BlocksStack.create(
-  app,
-  getStackName({ projectRoot, sandbox: sandboxMode }),
-  {
-    backendCDKPath: path.join(directory, "index.ts"),
-    backendHandlerPath: path.join(directory, "index.handler.ts"),
-  }
-);
+export const blocksStack = await BlocksStack.create(app, stackName, {
+  backendCDKPath: path.join(directory, "index.ts"),
+  backendHandlerPath: path.join(directory, "index.handler.ts"),
+});
 
 // Env vars consumed by the Blocks API handler (packages/aws-blocks/src/
 // index.blocks.ts), the Better Auth runtime bundled into the SSR Lambda
@@ -72,8 +72,6 @@ const runtimeEnvironment: Record<string, string | undefined> = {
   STRIPE_SUGAR_ANNUAL_PRICE_ID: process.env.STRIPE_SUGAR_ANNUAL_PRICE_ID,
   STRIPE_SUGAR_PRICE_ID: process.env.STRIPE_SUGAR_PRICE_ID,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
-  UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
-  UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
   VITE_NEON_AUTH_URL: process.env.VITE_NEON_AUTH_URL,
 };
 
@@ -81,6 +79,15 @@ let webHosting: Hosting | undefined;
 
 if (deployFrontend && !sandboxMode) {
   webHosting = new Hosting(blocksStack, "WebHosting", {
+    ...(prNumber
+      ? {}
+      : {
+          domain: {
+            domainName: ["chewbuu.com", "www.chewbuu.com"],
+            hostedZone: "chewbuu.com",
+            wwwRedirect: "toApex",
+          },
+        }),
     root: path.resolve(directory, "../../../apps/web"),
     buildCommand: "bun run build",
     buildOutputDir: ".output",
@@ -135,3 +142,10 @@ const blocksApiOutput = new cdk.CfnOutput(blocksStack, "BlocksApiUrl", {
 });
 
 void blocksApiOutput;
+
+if (webHosting) {
+  const hostingUrlOutput = new cdk.CfnOutput(blocksStack, "HostingUrl", {
+    value: webHosting.url,
+  });
+  void hostingUrlOutput;
+}

@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  bigint,
   index,
   integer,
   pgTable,
@@ -74,6 +75,13 @@ export const session = pgTable(
   },
   (table) => [index("session_userId_idx").on(table.userId)]
 );
+
+export const rateLimit = pgTable("rate_limit", {
+  count: integer("count").notNull(),
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});
 
 export const account = pgTable(
   "account",

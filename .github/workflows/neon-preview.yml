@@ -8,6 +8,10 @@ on:
       - synchronize
       - closed
 
+permissions:
+  contents: read
+  id-token: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -33,6 +37,7 @@ jobs:
         github.event.action == 'synchronize'
       )
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -67,11 +72,61 @@ jobs:
         env:
           DATABASE_URL: "${{ steps.create_neon_branch.outputs.db_url_with_pooler }}"
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      - name: Deploy AWS Blocks preview
+        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+        run: bun run aws:deploy
+        env:
+          DEPLOY_FRONTEND_TO_AWS: "true"
+          NITRO_PRESET: "aws-lambda"
+          PR_NUMBER: ${{ github.event.number }}
+          BLOCKS_DB_URL: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+          DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+          BLOCKS_SSM_PARAM_DB_URL: /chewbuu-prod-db-url
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
+          ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS || 'cg@rocktownlabs.com' }}
+          BETTER_AUTH_ADMIN_EMAILS: ${{ vars.BETTER_AUTH_ADMIN_EMAILS || 'cg@rocktownlabs.com' }}
+          CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
+          CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+          VITE_SERVER_URL: "/"
+          VITE_NEON_AUTH_URL: ${{ vars.VITE_NEON_AUTH_URL }}
+
+      - name: Load preview URL
+        id: preview_url
+        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+        run: |
+          url=$(aws cloudformation describe-stacks \
+            --stack-name "chewbuu-preview-pr-${{ github.event.number }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='HostingUrl'].OutputValue" \
+            --output text)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview URL
+        if: steps.preview_url.outputs.url != '' && steps.preview_url.outputs.url != 'None'
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.preview_url.outputs.url }}
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `AWS preview deployed: ${process.env.PREVIEW_URL}`,
+            });
+
   delete_neon_branch:
     name: Delete Neon Preview Branch on PR Close or Merge
     needs: setup
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Delete Vercel-managed branch (preview/<head_ref>)
         uses: neondatabase/delete-branch-action@v3
@@ -96,3 +151,13 @@ jobs:
           api_key: ${{ secrets.NEON_API_KEY }}
           branch: preview-pr-${{ github.event.number }}
           project_id: ${{ vars.NEON_PROJECT_ID }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      - name: Delete AWS Blocks preview stack
+        continue-on-error: true
+        run: aws cloudformation delete-stack --stack-name "chewbuu-preview-pr-${{ github.event.number }}"
