@@ -99,6 +99,22 @@ const mediaPath = (userId: string, input: MediaUploadInput) =>
 const mediaPathIsValid = (path: string) =>
   path.startsWith("profiles/") && !path.includes("..") && !path.includes("\\");
 
+const mediaPathFromStoredValue = (stored: string | null) => {
+  if (!stored) return null;
+  if (!stored.startsWith("http")) return stored;
+  try {
+    return decodeURIComponent(new URL(stored).pathname.replace(/^\/+/, ""));
+  } catch {
+    return null;
+  }
+};
+
+const mintStoredMediaUrl = async (stored: string | null) => {
+  const pathname = mediaPathFromStoredValue(stored);
+  if (!pathname || !mediaPathIsValid(pathname)) return;
+  return mediaBucket.getUrl(pathname, { expiresIn: 3600 });
+};
+
 const chatMessageSchema = z.object({
   createdAt: z.string(),
   durationSec: z.number().optional(),
@@ -531,17 +547,27 @@ const loadProfile = async (userId: string, sessionUser: SessionUser) => {
       .execute(),
   ]);
 
+  const [profilePhotoUrl, introVideoUrl, resolvedMedia] = await Promise.all([
+    mintStoredMediaUrl(storedProfile.profile_photo_url),
+    mintStoredMediaUrl(storedProfile.intro_video_url),
+    Promise.all(
+      media.map(async (item) => ({
+        id: item.id,
+        isPrimary: item.is_primary,
+        kind: item.kind,
+        sortOrder: item.sort_order,
+        url: (await mintStoredMediaUrl(item.url)) ?? item.url,
+      }))
+    ),
+  ]);
+
   return {
     ...storedProfile,
+    intro_video_url: introVideoUrl,
+    profile_photo_url: profilePhotoUrl,
     email: sessionUser.email,
     friendInvites: invites,
-    media: media.map((item) => ({
-      id: item.id,
-      isPrimary: item.is_primary,
-      kind: item.kind,
-      sortOrder: item.sort_order,
-      url: item.url,
-    })),
+    media: resolvedMedia,
     name: sessionUser.name,
     trustedContacts: contacts,
     userId,
@@ -663,6 +689,16 @@ const loadDatingSummary = async (
           .execute(),
       ])
     : [[], [], []];
+  const resolvedMatches = await Promise.all(
+    matches.map(async (match) => ({
+      ...match,
+      introVideoUrl:
+        (await mintStoredMediaUrl(match.introVideoUrl)) ?? match.introVideoUrl,
+      profilePhotoUrl:
+        (await mintStoredMediaUrl(match.profilePhotoUrl)) ??
+        match.profilePhotoUrl,
+    }))
+  );
 
   return {
     membershipTier: sessionUser.membershipTier ?? "social",
@@ -675,7 +711,7 @@ const loadDatingSummary = async (
     requests: requests.map((request) => ({
       filters: request.filters,
       id: request.id,
-      matches: matches
+      matches: resolvedMatches
         .filter((match) => match.requestId === request.id)
         .map(({ requestId: _requestId, ...match }) => match),
       partyMembers: partyMembers
@@ -807,6 +843,8 @@ const saveProfile = async (
   const locationReady = hasLocation(body);
   const canDate = hasProfilePhoto && hasIntroVideo && locationReady;
   const onboarded = Boolean(
+    hasProfilePhoto &&
+    hasIntroVideo &&
     body.username &&
     body.area &&
     locationReady &&
@@ -1404,7 +1442,7 @@ const getDateMeeting = async (
   };
 };
 
-const toMessage = (message: {
+const toMessage = async (message: {
   created_at: Date;
   duration_sec: number | null;
   id: string;
@@ -1415,13 +1453,13 @@ const toMessage = (message: {
   sender_id: string;
   system_icon: string | null;
   text: string | null;
-}): ApiChatMessage => ({
+}): Promise<ApiChatMessage> => ({
   createdAt: message.created_at.toISOString(),
   durationSec: message.duration_sec ?? undefined,
   id: message.id,
   kind: chatMessageSchema.shape.kind.parse(message.kind),
-  mediaThumbUrl: message.media_thumb_url ?? undefined,
-  mediaUrl: message.media_url ?? undefined,
+  mediaThumbUrl: await mintStoredMediaUrl(message.media_thumb_url),
+  mediaUrl: await mintStoredMediaUrl(message.media_url),
   roomId: message.room_id,
   senderId: message.sender_id,
   systemIcon: message.system_icon
@@ -1494,7 +1532,7 @@ const loadRoomsFromDatabase = async (userId: string, roomIds?: string[]) => {
   ]);
 
   const result = await Promise.all(
-    rooms.map((room) =>
+    rooms.map(async (room) =>
       toRoom(
         room,
         participants
@@ -1505,10 +1543,12 @@ const loadRoomsFromDatabase = async (userId: string, roomIds?: string[]) => {
             id: participant.id,
             userId: participant.user_id ?? undefined,
           })),
-        messages
-          .filter((message) => message.room_id === room.id)
-          .slice(-50)
-          .map(toMessage)
+        await Promise.all(
+          messages
+            .filter((message) => message.room_id === room.id)
+            .slice(-50)
+            .map(toMessage)
+        )
       )
     )
   );
@@ -2480,6 +2520,47 @@ const requestFriendship = async (userId: string, friendUserId: string) => {
   };
 };
 
+const createFriendInvite = async (userId: string, input: unknown) => {
+  const body = z
+    .object({
+      email: z.string().trim().email().optional(),
+      name: z.string().trim().max(120).optional(),
+      phone: z.string().trim().max(40).optional(),
+    })
+    .refine((value) => Boolean(value.email || value.phone), {
+      message: "Enter an email address or phone number.",
+    })
+    .parse(input);
+  const db = await getDb();
+  const [row] = await db
+    .insertInto("friend_invite")
+    .values({
+      circle_id: null,
+      created_at: new Date(),
+      email: body.email ?? null,
+      id: crypto.randomUUID(),
+      invite_purpose: "friend_referral",
+      invite_token: crypto.randomUUID(),
+      name: body.name ?? null,
+      phone: body.phone ?? null,
+      relationship: "friend",
+      status: "sent",
+      user_id: userId,
+    })
+    .returningAll()
+    .execute();
+  if (!row) throw new Error("Could not create friend invite");
+  return {
+    invite: {
+      email: row.email,
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      status: row.status,
+    },
+  };
+};
+
 const respondFriendship = async (
   userId: string,
   friendshipId: string,
@@ -2636,15 +2717,17 @@ const getDateMedia = async (sessionUser: SessionUser, requestId: string) => {
     .orderBy("created_at", "asc")
     .execute();
   return {
-    media: media.map((item) => ({
-      createdAt: new Date(item.created_at).toISOString(),
-      dateRequestId: item.date_request_id,
-      id: item.id,
-      kind: item.kind,
-      thumbnailUrl: item.thumbnail_url,
-      uploadedByUserId: item.uploaded_by_user_id,
-      url: item.url,
-    })),
+    media: await Promise.all(
+      media.map(async (item) => ({
+        createdAt: new Date(item.created_at).toISOString(),
+        dateRequestId: item.date_request_id,
+        id: item.id,
+        kind: item.kind,
+        thumbnailUrl: await mintStoredMediaUrl(item.thumbnail_url),
+        uploadedByUserId: item.uploaded_by_user_id,
+        url: (await mintStoredMediaUrl(item.url)) ?? item.url,
+      }))
+    ),
   };
 };
 
@@ -2849,7 +2932,7 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
       .where("room_id", "=", room.id)
       .orderBy("created_at", "asc")
       .execute();
-    return { messages: messages.map(toMessage) };
+    return { messages: await Promise.all(messages.map(toMessage)) };
   },
 
   async sendMessage(roomId: string, input: SendChatMessageInput) {
@@ -2898,7 +2981,7 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
       roomListCache.delete(sessionUser.id),
     ]);
 
-    const message = toMessage(created);
+    const message = await toMessage(created);
     try {
       await realtime.publish("messages", room.id, message);
       return { message, published: true };
@@ -2978,6 +3061,11 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   async requestFriendship(friendUserId: string) {
     const sessionUser = await requireSession(context.request.headers);
     return requestFriendship(sessionUser.id, friendUserId);
+  },
+
+  async createFriendInvite(input: unknown) {
+    const sessionUser = await requireSession(context.request.headers);
+    return createFriendInvite(sessionUser.id, input);
   },
 
   async respondFriendship(
