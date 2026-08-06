@@ -14,7 +14,7 @@ import {
 } from "@chewbuu/ui/components/tabs";
 import { cn } from "@chewbuu/ui/lib/utils";
 import { Heart, MessageCircle, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { chatApi, toChatMessage, toChatThread } from "@/lib/chat-api";
@@ -46,9 +46,11 @@ import {
 
 export function DashboardChats({
   activeChannelId,
+  onGoToMatches,
   onOpenDate,
 }: {
   activeChannelId?: string;
+  onGoToMatches?: () => void;
   onOpenDate?: (dateId: string) => void;
 }) {
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -66,6 +68,8 @@ export function DashboardChats({
   const [mobileShowThread, setMobileShowThread] = useState(
     Boolean(activeChannelId)
   );
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   const visibleThreads = threads.filter(
     (thread) => !thread.archived || thread.id === selectedId
@@ -139,37 +143,42 @@ export function DashboardChats({
     []
   );
 
-  useEffect(() => {
-    let active = true;
-
-    const loadRooms = async () => {
-      try {
-        const initial = await chatApi.getRooms();
-        if (!active) {
-          return;
-        }
-
-        setCurrentUserId(initial.currentUserId);
-        setRealtimeConfigured(true);
-        setRealtimeRoomIds(initial.rooms.map((room) => room.id));
-        setRealtimeChannels(initial.rooms.map((room) => room.realtimeChannel));
-        setThreads(
-          initial.rooms.map((room) => toChatThread(room, initial.currentUserId))
-        );
-        setSelectedId((current) => current ?? initial.rooms[0]?.id ?? null);
-      } catch {
-        if (active) {
-          setRealtimeRoomIds([]);
-        }
+  const loadRooms = useCallback(async () => {
+    try {
+      const initial = await chatApi.getRooms();
+      if (!mountedRef.current) {
+        return;
       }
-    };
 
-    void loadRooms();
-
-    return () => {
-      active = false;
-    };
+      setLoadError(null);
+      setCurrentUserId(initial.currentUserId);
+      setRealtimeConfigured(true);
+      setRealtimeRoomIds(initial.rooms.map((room) => room.id));
+      setRealtimeChannels(initial.rooms.map((room) => room.realtimeChannel));
+      setThreads(
+        initial.rooms.map((room) => toChatThread(room, initial.currentUserId))
+      );
+      setSelectedId((current) => current ?? initial.rooms[0]?.id ?? null);
+    } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Could not load your chats. Please try again."
+      );
+      setRealtimeRoomIds([]);
+    }
   }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    void loadRooms();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [loadRooms]);
 
   const handleRealtimeMessage = useCallback(
     ({ data }: { channel: string; data: ApiChatMessage }) => {
@@ -192,25 +201,22 @@ export function DashboardChats({
     setMobileShowThread(true);
   };
 
-  if (!selected) {
-    return (
-      <div className="flex h-[calc(100dvh-8rem)] items-center justify-center p-8 text-sm text-muted-foreground">
-        No chats yet.
-      </div>
-    );
-  }
-
-  const phase: DateRoomPhase =
-    selected.phase ??
-    (selected.kind === "date_room"
-      ? derivePhaseFromMessages(selected.messages)
-      : "continued");
-  const myVideos = countVideosBySender(selected.messages, "me");
-  const theirVideos = selected.messages.filter(
-    (message) =>
-      message.senderId !== "me" &&
-      (message.kind === "video" || message.kind === "intro_video")
-  ).length;
+  const selectedPhase: DateRoomPhase = selected
+    ? (selected.phase ??
+      (selected.kind === "date_room"
+        ? derivePhaseFromMessages(selected.messages)
+        : "continued"))
+    : "continued";
+  const selectedMyVideos = selected
+    ? countVideosBySender(selected.messages, "me")
+    : 0;
+  const selectedTheirVideos = selected
+    ? selected.messages.filter(
+        (message) =>
+          message.senderId !== "me" &&
+          (message.kind === "video" || message.kind === "intro_video")
+      ).length
+    : 0;
 
   return (
     <div className="flex h-[calc(100dvh-4rem)] min-h-[520px] w-full overflow-hidden bg-background">
@@ -263,104 +269,120 @@ export function DashboardChats({
             </TabsTrigger>
           </TabsList>
 
-          {(["friends", "date_rooms"] as const).map((tabValue) => (
-            <TabsContent
-              className="mt-0 min-h-0 flex-1 overflow-y-auto p-2"
-              key={tabValue}
-              value={tabValue}
-            >
-              <div className="flex flex-col gap-0.5">
-                {(tabValue === "friends" ? friendThreads : dateThreads)
-                  .filter(
-                    (thread) =>
-                      thread.title
-                        .toLowerCase()
-                        .includes(query.toLowerCase()) ||
-                      thread.lastMessage
-                        .toLowerCase()
-                        .includes(query.toLowerCase())
-                  )
-                  .map((thread) => {
-                    const active = thread.id === selected.id;
-                    const [person] = thread.participants;
-                    return (
-                      <button
-                        className={cn(
-                          "flex w-full items-center gap-3 rounded-xl p-3 text-left transition",
-                          active
-                            ? "bg-muted/50"
-                            : "hover:bg-muted/25 text-muted-foreground"
-                        )}
-                        key={thread.id}
-                        onClick={() => selectThread(thread.id)}
-                        type="button"
-                      >
-                        {thread.participants.length > 1 ? (
-                          <div className="flex -space-x-2">
-                            {thread.participants.slice(0, 2).map((p) => (
-                              <Avatar
-                                className="size-10 border-2 border-background"
-                                key={p.id}
-                              >
-                                <AvatarImage src={p.avatar} />
-                                <AvatarFallback>
-                                  {personInitials(p.name)}
-                                </AvatarFallback>
-                              </Avatar>
-                            ))}
-                          </div>
-                        ) : (
-                          <Avatar className="size-11 border border-border/60">
-                            {person?.avatar ? (
-                              <AvatarImage src={person.avatar} />
-                            ) : null}
-                            <AvatarFallback>
-                              {personInitials(thread.title)}
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center justify-between gap-2">
-                            <span className="truncate font-bold text-xs text-foreground">
-                              {thread.title}
+          {(["friends", "date_rooms"] as const).map((tabValue) => {
+            const tabThreads =
+              tabValue === "friends" ? friendThreads : dateThreads;
+            const filteredThreads = tabThreads.filter(
+              (thread) =>
+                thread.title.toLowerCase().includes(query.toLowerCase()) ||
+                thread.lastMessage.toLowerCase().includes(query.toLowerCase())
+            );
+            return (
+              <TabsContent
+                className="mt-0 min-h-0 flex-1 overflow-y-auto p-2"
+                key={tabValue}
+                value={tabValue}
+              >
+                {filteredThreads.length > 0 ? (
+                  <div className="flex flex-col gap-0.5">
+                    {filteredThreads.map((thread) => {
+                      const active = thread.id === selected?.id;
+                      const [person] = thread.participants;
+                      return (
+                        <button
+                          className={cn(
+                            "flex w-full items-center gap-3 rounded-xl p-3 text-left transition",
+                            active
+                              ? "bg-muted/50"
+                              : "hover:bg-muted/25 text-muted-foreground"
+                          )}
+                          key={thread.id}
+                          onClick={() => selectThread(thread.id)}
+                          type="button"
+                        >
+                          {thread.participants.length > 1 ? (
+                            <div className="flex -space-x-2">
+                              {thread.participants.slice(0, 2).map((p) => (
+                                <Avatar
+                                  className="size-10 border-2 border-background"
+                                  key={p.id}
+                                >
+                                  <AvatarImage src={p.avatar} />
+                                  <AvatarFallback>
+                                    {personInitials(p.name)}
+                                  </AvatarFallback>
+                                </Avatar>
+                              ))}
+                            </div>
+                          ) : (
+                            <Avatar className="size-11 border border-border/60">
+                              {person?.avatar ? (
+                                <AvatarImage src={person.avatar} />
+                              ) : null}
+                              <AvatarFallback>
+                                {personInitials(thread.title)}
+                              </AvatarFallback>
+                            </Avatar>
+                          )}
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center justify-between gap-2">
+                              <span className="truncate font-bold text-xs text-foreground">
+                                {thread.title}
+                              </span>
+                              <span className="shrink-0 text-[10px] text-muted-foreground">
+                                {thread.time}
+                              </span>
                             </span>
-                            <span className="shrink-0 text-[10px] text-muted-foreground">
-                              {thread.time}
+                            <span className="mt-0.5 flex items-center gap-1.5">
+                              {thread.kind === "date_room" ? (
+                                <Badge
+                                  className={cn(
+                                    "rounded-full px-1.5 py-0 text-[9px]",
+                                    thread.phase === "picked" &&
+                                      "border-primary/40 bg-primary/10 text-primary"
+                                  )}
+                                  variant={
+                                    thread.phase === "picked"
+                                      ? "secondary"
+                                      : "outline"
+                                  }
+                                >
+                                  {thread.phase === "picked"
+                                    ? "Chosen"
+                                    : "Date"}
+                                </Badge>
+                              ) : null}
+                              <span className="truncate text-[11px] text-muted-foreground">
+                                {thread.lastMessage}
+                              </span>
                             </span>
                           </span>
-                          <span className="mt-0.5 flex items-center gap-1.5">
-                            {thread.kind === "date_room" ? (
-                              <Badge
-                                className={cn(
-                                  "rounded-full px-1.5 py-0 text-[9px]",
-                                  thread.phase === "picked" &&
-                                    "border-primary/40 bg-primary/10 text-primary"
-                                )}
-                                variant={
-                                  thread.phase === "picked"
-                                    ? "secondary"
-                                    : "outline"
-                                }
-                              >
-                                {thread.phase === "picked" ? "Chosen" : "Date"}
-                              </Badge>
-                            ) : null}
-                            <span className="truncate text-[11px] text-muted-foreground">
-                              {thread.lastMessage}
+                          {thread.unreadCount ? (
+                            <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                              {thread.unreadCount}
                             </span>
-                          </span>
-                        </span>
-                        {thread.unreadCount ? (
-                          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                            {thread.unreadCount}
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-              </div>
-            </TabsContent>
-          ))}
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : tabThreads.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+                    <MessageCircle className="size-5 text-muted-foreground/50" />
+                    <p className="text-xs text-muted-foreground">
+                      {tabValue === "friends"
+                        ? "No friend chats yet. Match with someone to start a conversation."
+                        : "No date rooms yet. Send a date request to open a room."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="px-4 py-10 text-center text-xs text-muted-foreground">
+                    No chats match “{query}”.
+                  </div>
+                )}
+              </TabsContent>
+            );
+          })}
         </Tabs>
       </aside>
 
@@ -370,145 +392,196 @@ export function DashboardChats({
           mobileShowThread ? "flex" : "hidden md:flex"
         )}
       >
-        <ChatThreadBody
-          footer={
-            <ChatComposer
-              dateMode={selected.kind === "date_room"}
-              onSendMedia={async ({
-                durationSec,
-                kind,
-                mediaUrl,
-                text,
-                thumbUrl,
-              }) => {
-                if (currentUserId && realtimeRoomIds.includes(selected.id)) {
-                  try {
-                    const response = await chatApi.sendMessage(selected.id, {
+        {loadError ? (
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+            <div className="flex size-14 items-center justify-center rounded-full bg-destructive/10">
+              <MessageCircle className="size-7 text-destructive" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold">Couldn't load your chats</h3>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                {loadError}
+              </p>
+            </div>
+            <Button
+              className="mt-1 rounded-full"
+              onClick={() => void loadRooms()}
+              type="button"
+              variant="outline"
+            >
+              Try again
+            </Button>
+          </div>
+        ) : selected ? (
+          <ChatThreadBody
+            footer={
+              <ChatComposer
+                dateMode={selected.kind === "date_room"}
+                onSendMedia={async ({
+                  durationSec,
+                  kind,
+                  mediaUrl,
+                  text,
+                  thumbUrl,
+                }) => {
+                  if (currentUserId && realtimeRoomIds.includes(selected.id)) {
+                    try {
+                      const response = await chatApi.sendMessage(selected.id, {
+                        durationSec,
+                        kind,
+                        mediaThumbUrl: thumbUrl,
+                        mediaUrl,
+                        text,
+                      });
+                      appendMessage(
+                        selected.id,
+                        toChatMessage(response.message, currentUserId)
+                      );
+                      return;
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Could not send media."
+                      );
+                    }
+                  }
+
+                  appendMessage(
+                    selected.id,
+                    createMediaMessage({
                       durationSec,
                       kind,
-                      mediaThumbUrl: thumbUrl,
+                      mediaThumb: thumbUrl,
                       mediaUrl,
                       text,
-                    });
-                    appendMessage(
-                      selected.id,
-                      toChatMessage(response.message, currentUserId)
-                    );
-                    return;
-                  } catch (error) {
-                    toast.error(
-                      error instanceof Error
-                        ? error.message
-                        : "Could not send media."
-                    );
-                  }
-                }
-
-                appendMessage(
-                  selected.id,
-                  createMediaMessage({
-                    durationSec,
-                    kind,
-                    mediaThumb: thumbUrl,
-                    mediaUrl,
-                    text,
-                  })
-                );
-              }}
-              onSendText={async (text) => {
-                if (currentUserId && realtimeRoomIds.includes(selected.id)) {
-                  try {
-                    const response = await chatApi.sendMessage(selected.id, {
-                      kind: "text",
-                      text,
-                    });
-                    appendMessage(
-                      selected.id,
-                      toChatMessage(response.message, currentUserId)
-                    );
-                    return;
-                  } catch (error) {
-                    toast.error(
-                      error instanceof Error
-                        ? error.message
-                        : "Could not send message."
-                    );
-                  }
-                }
-
-                appendMessage(selected.id, createTextMessage(text));
-              }}
-              phase={selected.kind === "date_room" ? phase : "continued"}
-              threadId={selected.id}
-              videoProgress={
-                selected.kind === "date_room"
-                  ? {
-                      limit: VIDEO_EXCHANGE_LIMIT,
-                      mine: myVideos,
-                      theirs: theirVideos,
+                    })
+                  );
+                }}
+                onSendText={async (text) => {
+                  if (currentUserId && realtimeRoomIds.includes(selected.id)) {
+                    try {
+                      const response = await chatApi.sendMessage(selected.id, {
+                        kind: "text",
+                        text,
+                      });
+                      appendMessage(
+                        selected.id,
+                        toChatMessage(response.message, currentUserId)
+                      );
+                      return;
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Could not send message."
+                      );
                     }
-                  : undefined
-              }
-            />
-          }
-          header={
-            <>
-              <ChatHeader
-                onBack={() => setMobileShowThread(false)}
-                people={selected.participants}
-                subtitle={
-                  selected.kind === "date_room"
-                    ? selected.activeDate
-                      ? `${selected.activeDate.title} · ${selected.activeDate.status}`
-                      : "Date room"
-                    : "Friend"
+                  }
+
+                  appendMessage(selected.id, createTextMessage(text));
+                }}
+                phase={
+                  selected.kind === "date_room" ? selectedPhase : "continued"
                 }
-                title={selected.title}
-                trailing={
-                  selected.activeDate && onOpenDate ? (
-                    <Button
-                      className="hidden rounded-full text-[11px] sm:inline-flex"
-                      onClick={() => {
-                        const dateId = selected.activeDate?.dateId;
-                        if (dateId) onOpenDate(dateId);
-                      }}
-                      size="sm"
-                      type="button"
-                      variant="outline"
-                    >
-                      Date page
-                    </Button>
-                  ) : null
+                threadId={selected.id}
+                videoProgress={
+                  selected.kind === "date_room"
+                    ? {
+                        limit: VIDEO_EXCHANGE_LIMIT,
+                        mine: selectedMyVideos,
+                        theirs: selectedTheirVideos,
+                      }
+                    : undefined
                 }
               />
-              {selected.activeDate ? (
-                <ActiveDateBanner
-                  activeDate={selected.activeDate}
-                  onCancel={() =>
-                    toast.message("Open the date page to cancel with penalty.")
+            }
+            header={
+              <>
+                <ChatHeader
+                  onBack={() => setMobileShowThread(false)}
+                  people={selected.participants}
+                  subtitle={
+                    selected.kind === "date_room"
+                      ? selected.activeDate
+                        ? `${selected.activeDate.title} · ${selected.activeDate.status}`
+                        : "Date room"
+                      : "Friend"
                   }
-                  onOpenDate={() => {
-                    if (selected.activeDate && onOpenDate) {
-                      onOpenDate(selected.activeDate.dateId);
-                    }
-                  }}
-                  onReschedule={() =>
-                    toast.message(
-                      "Open the date page to reschedule with a token."
-                    )
+                  title={selected.title}
+                  trailing={
+                    selected.activeDate && onOpenDate ? (
+                      <Button
+                        className="hidden rounded-full text-[11px] sm:inline-flex"
+                        onClick={() => {
+                          const dateId = selected.activeDate?.dateId;
+                          if (dateId) onOpenDate(dateId);
+                        }}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        Date page
+                      </Button>
+                    ) : null
                   }
-                  onShowQr={() => {
-                    if (selected.activeDate && onOpenDate) {
-                      onOpenDate(selected.activeDate.dateId);
-                    }
-                  }}
                 />
-              ) : null}
-            </>
-          }
-          messages={selected.messages}
-          peopleById={peopleById}
-        />
+                {selected.activeDate ? (
+                  <ActiveDateBanner
+                    activeDate={selected.activeDate}
+                    onCancel={() =>
+                      toast.message(
+                        "Open the date page to cancel with penalty."
+                      )
+                    }
+                    onOpenDate={() => {
+                      if (selected.activeDate && onOpenDate) {
+                        onOpenDate(selected.activeDate.dateId);
+                      }
+                    }}
+                    onReschedule={() =>
+                      toast.message(
+                        "Open the date page to reschedule with a token."
+                      )
+                    }
+                    onShowQr={() => {
+                      if (selected.activeDate && onOpenDate) {
+                        onOpenDate(selected.activeDate.dateId);
+                      }
+                    }}
+                  />
+                ) : null}
+              </>
+            }
+            messages={selected.messages}
+            peopleById={peopleById}
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+            <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
+              <MessageCircle className="size-8 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold">
+                Your conversations start here
+              </h3>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                Match with someone, exchange intro videos, and get a private
+                room to make real plans.
+              </p>
+            </div>
+            {onGoToMatches ? (
+              <Button
+                className="mt-1 rounded-full"
+                onClick={onGoToMatches}
+                type="button"
+              >
+                <Heart data-icon="inline-start" />
+                Browse matches
+              </Button>
+            ) : null}
+          </div>
+        )}
       </section>
     </div>
   );
