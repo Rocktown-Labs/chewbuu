@@ -227,6 +227,7 @@ interface MePageProps {
 
 type DashboardChatsComponent = ComponentType<{
   activeChannelId?: string;
+  onGoToMatches?: () => void;
   onOpenDate?: (dateId: string) => void;
 }>;
 type ProfileMode = "edit" | "menu" | "profile" | "settings";
@@ -2100,6 +2101,7 @@ export function MePage({
               {ChatView ? (
                 <ChatView
                   activeChannelId={initialChatId}
+                  onGoToMatches={() => setDashboardTab("matches")}
                   onOpenDate={(dateId: string) => openDateHistory(dateId)}
                 />
               ) : (

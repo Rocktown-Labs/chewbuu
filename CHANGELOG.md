@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Enabled Lambda response streaming (`awsLambda.streaming: true`) in `apps/web/nitro.config.ts` so the SSR handler emits the `streamifyResponse` shape the API Gateway `ResponseTransferMode.STREAM` integration expects, fixing the remaining CloudFront 502 after direct-invoke returned 200.
 - Fixed profile saves failing with `column "contribution_score" of relation "profile" does not exist` by applying the pending raw migrations to the production Neon database and wiring `db:migrate:raw` into the AWS Blocks deploy workflow (main only) and the Neon preview workflow so migrations run automatically.
 - Replaced the centered "Plan a Date" dialog on `/me` with the bottom `Sheet` drawer so the date wizard slides up full-width instead of rendering as a squashed modal.
+- Rendered a full chat layout (room list + message pane) with per-tab empty-state guidance and a "Browse matches" CTA when a user has no conversations, instead of a bare "No chats yet." text, and surfaced `getRooms()` failures with an inline error and "Try again" instead of silently showing an empty state.
 
 ### Changed
 
