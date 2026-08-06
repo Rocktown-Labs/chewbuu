@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Replaced the centered "Plan a Date" dialog on `/me` with the bottom `Sheet` drawer so the date wizard slides up full-width instead of rendering as a squashed modal.
 - Rendered a full chat layout (room list + message pane) with per-tab empty-state guidance and a "Browse matches" CTA when a user has no conversations, instead of a bare "No chats yet." text, and surfaced `getRooms()` failures with an inline error and "Try again" instead of silently showing an empty state.
 - Required profile photos and intro videos before marking onboarding complete, added profile media uploads to settings, refreshed expiring media URLs when records are read, narrowed full-view navigation to chats and matches, and added persisted friend invites to the empty chat state.
+- Redirected signed-in incomplete users to `/onboarding` from auth entry routes and restored a local branded hero visual for the landing page.
 
 ### Changed
 
