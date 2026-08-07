@@ -78,6 +78,31 @@ jobs:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
 
+      - name: Wait for preview CloudFormation stack
+        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+        run: |
+          stack_name="chewbuu-preview-pr-${{ github.event.number }}"
+          if aws cloudformation describe-stacks --stack-name "$stack_name" >/dev/null 2>&1; then
+            for attempt in $(seq 1 60); do
+              status=$(aws cloudformation describe-stacks \
+                --stack-name "$stack_name" \
+                --query 'Stacks[0].StackStatus' \
+                --output text)
+              case "$status" in
+                *_IN_PROGRESS|*_CLEANUP_IN_PROGRESS) sleep 10 ;;
+                UPDATE_ROLLBACK_FAILED|ROLLBACK_FAILED|DELETE_FAILED)
+                  echo "Preview stack cannot be deployed from state: $status"
+                  exit 1
+                  ;;
+                *) echo "Preview stack is ready: $status"; break ;;
+              esac
+              if [ "$attempt" = "60" ]; then
+                echo "Timed out waiting for preview stack: $status"
+                exit 1
+              fi
+            done
+          fi
+
       - name: Remove stale preview CloudFormation change set
         if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
         continue-on-error: true
