@@ -102,6 +102,50 @@ jobs:
             --value "$BETTER_AUTH_SECRET" \
             >/dev/null
 
+      - name: Ensure CloudFront ACM certificate
+        run: |
+          set -euo pipefail
+          certificate_arn=$(aws acm list-certificates \
+            --certificate-statuses ISSUED \
+            --query "CertificateSummaryList[?DomainName=='chewbuu.com'].CertificateArn | [0]" \
+            --output text)
+          if [ -z "$certificate_arn" ] || [ "$certificate_arn" = "None" ]; then
+            certificate_arn=$(aws acm request-certificate \
+              --domain-name chewbuu.com \
+              --subject-alternative-names www.chewbuu.com \
+              --validation-method DNS \
+              --query CertificateArn \
+              --output text)
+            zone_id=$(aws route53 list-hosted-zones-by-name \
+              --dns-name chewbuu.com. \
+              --query "HostedZones[?Name=='chewbuu.com.'].Id | [0]" \
+              --output text | sed 's#^/hostedzone/##')
+            test -n "$zone_id" && test "$zone_id" != "None"
+            for attempt in $(seq 1 30); do
+              validation=$(aws acm describe-certificate \
+                --certificate-arn "$certificate_arn" --output json)
+              ready=true
+              for domain in chewbuu.com www.chewbuu.com; do
+                record_name=$(echo "$validation" | jq -r --arg domain "$domain" \
+                  '.Certificate.DomainValidationOptions[] | select(.DomainName == $domain) | .ResourceRecord.Name // empty')
+                record_value=$(echo "$validation" | jq -r --arg domain "$domain" \
+                  '.Certificate.DomainValidationOptions[] | select(.DomainName == $domain) | .ResourceRecord.Value // empty')
+                if [ -z "$record_name" ] || [ -z "$record_value" ]; then
+                  ready=false
+                  continue
+                fi
+                cat > /tmp/acm-change.json <<EOF
+          {"Changes":[{"Action":"UPSERT","ResourceRecordSet":{"Name":"$record_name","Type":"CNAME","TTL":300,"ResourceRecords":[{"Value":"$record_value"}]}}]}
+          EOF
+                aws route53 change-resource-record-sets --hosted-zone-id "$zone_id" --change-batch file:///tmp/acm-change.json >/dev/null
+              done
+              if [ "$ready" = true ]; then break; fi
+              sleep 10
+            done
+            aws acm wait certificate-validated --certificate-arn "$certificate_arn"
+          fi
+          echo "CLOUDFRONT_CERTIFICATE_ARN=$certificate_arn" >> "$GITHUB_ENV"
+
       - name: Apply database migrations
         if: github.ref == 'refs/heads/main'
         run: bun --cwd packages/db db:migrate:raw

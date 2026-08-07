@@ -8,6 +8,7 @@ import {
 import { getStackName } from "@aws-blocks/blocks/scripts";
 import * as cdk from "aws-cdk-lib";
 import { Mixins, RemovalPolicies } from "aws-cdk-lib";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 
@@ -26,6 +27,7 @@ const awsAccount =
   process.env.CDK_DEFAULT_ACCOUNT ?? process.env.AWS_ACCOUNT_ID;
 const awsRegion =
   process.env.CDK_DEFAULT_REGION ?? process.env.AWS_REGION ?? "us-east-1";
+const cloudfrontCertificateArn = process.env.CLOUDFRONT_CERTIFICATE_ARN;
 
 export const blocksStack = await BlocksStack.create(app, stackName, {
   backendCDKPath: path.join(directory, "index.ts"),
@@ -91,6 +93,15 @@ if (deployFrontend && !sandboxMode) {
       ? {}
       : {
           domain: {
+            ...(cloudfrontCertificateArn
+              ? {
+                  certificate: acm.Certificate.fromCertificateArn(
+                    blocksStack,
+                    "CloudFrontCertificate",
+                    cloudfrontCertificateArn
+                  ),
+                }
+              : {}),
             domainName: ["chewbuu.com", "www.chewbuu.com"],
             hostedZone: "chewbuu.com",
             wwwRedirect: "toApex",
