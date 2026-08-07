@@ -19,7 +19,14 @@ import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { pricingApi, type MembershipPlan } from "@/lib/dating-api";
 
-const HERO_IMAGES = ["/brand/chewbuu-logo-500-trans.png"];
+const HERO_IMAGES = [
+  "/hero/date-rooftop.webp",
+  "/hero/date-volleyball.webp",
+  "/hero/date-food-truck.webp",
+  "/hero/date-bowling.webp",
+  "/hero/date-dinner.webp",
+  "/hero/date-group-bowling.webp",
+];
 
 const DATE_SPOT_PROMISES = [
   {
