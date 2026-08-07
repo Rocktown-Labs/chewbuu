@@ -92,6 +92,10 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}
 
+      - name: Remove stale CloudFormation change set
+        continue-on-error: true
+        run: aws cloudformation delete-change-set --stack-name chewbuu-prod --change-set-name cdk-deploy-change-set
+
       - name: Deploy Blocks backend & frontend
         run: bun run aws:deploy
         env:

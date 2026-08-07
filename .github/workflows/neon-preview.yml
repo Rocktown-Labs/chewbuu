@@ -78,6 +78,11 @@ jobs:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
 
+      - name: Remove stale preview CloudFormation change set
+        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+        continue-on-error: true
+        run: aws cloudformation delete-change-set --stack-name "chewbuu-preview-pr-${{ github.event.number }}" --change-set-name cdk-deploy-change-set
+
       - name: Deploy AWS Blocks preview
         if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
         run: bun run aws:deploy
