@@ -22,10 +22,18 @@ const prNumber = process.env.PR_NUMBER;
 const stackName = prNumber
   ? `chewbuu-preview-pr-${prNumber}`
   : getStackName({ projectRoot, sandbox: sandboxMode });
+const awsAccount =
+  process.env.CDK_DEFAULT_ACCOUNT ?? process.env.AWS_ACCOUNT_ID;
+const awsRegion =
+  process.env.CDK_DEFAULT_REGION ?? process.env.AWS_REGION ?? "us-east-1";
 
 export const blocksStack = await BlocksStack.create(app, stackName, {
   backendCDKPath: path.join(directory, "index.ts"),
   backendHandlerPath: path.join(directory, "index.handler.ts"),
+  env: {
+    ...(awsAccount ? { account: awsAccount } : {}),
+    region: awsRegion,
+  },
 });
 
 // Env vars consumed by the Blocks API handler (packages/aws-blocks/src/

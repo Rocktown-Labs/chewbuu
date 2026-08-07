@@ -47,6 +47,8 @@ jobs:
       - name: Bootstrap CDK environment
         run: |
           account_id=$(aws sts get-caller-identity --query Account --output text)
+          echo "CDK_DEFAULT_ACCOUNT=$account_id" >> "$GITHUB_ENV"
+          echo "CDK_DEFAULT_REGION=$AWS_REGION" >> "$GITHUB_ENV"
           npx cdk bootstrap "aws://${account_id}/${AWS_REGION}"
 
       - name: Wait for an in-progress Blocks stack
