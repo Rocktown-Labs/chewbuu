@@ -669,6 +669,7 @@ export function ChatComposer({
   dateMode = false,
   onSendMedia,
   onSendText,
+  onTyping,
   phase = "continued",
   threadId,
   videoProgress,
@@ -682,6 +683,7 @@ export function ChatComposer({
     text?: string;
   }) => void;
   onSendText: (text: string) => void;
+  onTyping?: (isTyping: boolean) => void;
   phase?: DateRoomPhase;
   threadId?: string;
   videoProgress?: { mine: number; theirs: number; limit: number };
@@ -699,6 +701,7 @@ export function ChatComposer({
   const [recorderRequested, setRecorderRequested] = useState(false);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lockedToVideo = dateMode && isDateRoomLockedToVideo(phase);
   const textUnlocked = !dateMode || canSendTextOrVoice(phase);
@@ -729,7 +732,19 @@ export function ChatComposer({
     setPendingRecorderStart(false);
     setRecorderRequested(false);
     cancelRecorder();
-  }, [cancelRecorder, lockedToVideo, threadId]);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    onTyping?.(false);
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      onTyping?.(false);
+    };
+  }, [cancelRecorder, lockedToVideo, onTyping, threadId]);
 
   useEffect(() => {
     if (
@@ -768,6 +783,11 @@ export function ChatComposer({
 
   const handleSendComposer = () => {
     if (blocked) return;
+    onTyping?.(false);
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
     const nextText = text.trim();
     if (draftAttachment) {
       onSendMedia({
@@ -1079,7 +1099,20 @@ export function ChatComposer({
             !textUnlocked && "opacity-60"
           )}
           disabled={!textUnlocked || mode !== "text"}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            const nextText = event.target.value;
+            setText(nextText);
+            onTyping?.(Boolean(nextText.trim()));
+            if (typingTimeoutRef.current) {
+              clearTimeout(typingTimeoutRef.current);
+            }
+            typingTimeoutRef.current = nextText.trim()
+              ? setTimeout(() => {
+                  onTyping?.(false);
+                  typingTimeoutRef.current = null;
+                }, 1500)
+              : null;
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();

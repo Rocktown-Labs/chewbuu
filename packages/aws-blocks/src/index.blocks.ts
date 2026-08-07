@@ -1481,7 +1481,8 @@ const toRoom = async (
     updated_at: Date;
   },
   participants: ApiChatParticipant[],
-  messages: ApiChatMessage[]
+  messages: ApiChatMessage[],
+  unreadCount: number
 ): Promise<ApiChatRoom> => ({
   activeDateId: room.active_date_id ?? undefined,
   id: room.id,
@@ -1495,6 +1496,15 @@ const toRoom = async (
     room.id
   )) as unknown as RealtimeChannelClient<ApiChatMessage>,
   title: room.title,
+  typingChannel: (await realtime.getChannel(
+    "typing",
+    room.id
+  )) as unknown as RealtimeChannelClient<{
+    isTyping: boolean;
+    roomId: string;
+    userId: string;
+  }>,
+  unreadCount,
   updatedAt: room.updated_at.toISOString(),
 });
 
@@ -1517,7 +1527,7 @@ const loadRoomsFromDatabase = async (userId: string, roomIds?: string[]) => {
   if (rooms.length === 0) return [];
   const ids = rooms.map((room) => room.id);
 
-  const [participants, messages] = await Promise.all([
+  const [participants, messages, readStates] = await Promise.all([
     db
       .selectFrom("chat_participant")
       .selectAll()
@@ -1529,11 +1539,26 @@ const loadRoomsFromDatabase = async (userId: string, roomIds?: string[]) => {
       .where("room_id", "in", ids)
       .orderBy("created_at", "asc")
       .execute(),
+    db
+      .selectFrom("chat_read_state")
+      .selectAll()
+      .where("user_id", "=", userId)
+      .where("room_id", "in", ids)
+      .execute(),
   ]);
 
   const result = await Promise.all(
-    rooms.map(async (room) =>
-      toRoom(
+    rooms.map(async (room) => {
+      const roomMessages = messages.filter(
+        (message) => message.room_id === room.id
+      );
+      const readState = readStates.find((state) => state.room_id === room.id);
+      const unreadCount = roomMessages.filter(
+        (message) =>
+          message.sender_id !== userId &&
+          (!readState || message.created_at > readState.last_read_at)
+      ).length;
+      return toRoom(
         room,
         participants
           .filter((participant) => participant.room_id === room.id)
@@ -1543,14 +1568,10 @@ const loadRoomsFromDatabase = async (userId: string, roomIds?: string[]) => {
             id: participant.id,
             userId: participant.user_id ?? undefined,
           })),
-        await Promise.all(
-          messages
-            .filter((message) => message.room_id === room.id)
-            .slice(-50)
-            .map(toMessage)
-        )
-      )
-    )
+        await Promise.all(roomMessages.slice(-50).map(toMessage)),
+        unreadCount
+      );
+    })
   );
 
   await roomProjection.putBatch(
@@ -2933,6 +2954,34 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
       .orderBy("created_at", "asc")
       .execute();
     return { messages: await Promise.all(messages.map(toMessage)) };
+  },
+
+  async markChatRead(roomId: string) {
+    const sessionUser = await requireSession(context.request.headers);
+    const room = await getOwnedRoom(roomId, sessionUser.id);
+    const now = new Date();
+    const db = await getDb();
+    await db
+      .insertInto("chat_read_state")
+      .values({ last_read_at: now, room_id: room.id, user_id: sessionUser.id })
+      .onConflict((conflict) =>
+        conflict
+          .columns(["room_id", "user_id"])
+          .doUpdateSet({ last_read_at: now })
+      )
+      .execute();
+    return { ok: true as const };
+  },
+
+  async publishTyping(roomId: string, isTyping: boolean) {
+    const sessionUser = await requireSession(context.request.headers);
+    const room = await getOwnedRoom(roomId, sessionUser.id);
+    await realtime.publish("typing", room.id, {
+      isTyping: z.boolean().parse(isTyping),
+      roomId: room.id,
+      userId: sessionUser.id,
+    });
+    return { ok: true as const };
   },
 
   async sendMessage(roomId: string, input: SendChatMessageInput) {

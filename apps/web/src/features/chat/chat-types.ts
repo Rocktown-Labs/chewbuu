@@ -57,6 +57,7 @@ export interface ChatThread {
   activeDate?: ActiveDateContext;
   archived?: boolean;
   id: string;
+  lastActivityAt: number;
   kind: ChatThreadKind;
   lastMessage: string;
   messages: ChatMessage[];

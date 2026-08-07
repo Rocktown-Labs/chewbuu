@@ -73,6 +73,10 @@ export function DashboardChats({
   const [realtimeChannels, setRealtimeChannels] = useState<
     ApiChatRoom["realtimeChannel"][]
   >([]);
+  const [typingChannels, setTypingChannels] = useState<
+    ApiChatRoom["typingChannel"][]
+  >([]);
+  const [typingByRoom, setTypingByRoom] = useState<Record<string, boolean>>({});
   const [mobileShowThread, setMobileShowThread] = useState(
     Boolean(activeChannelId)
   );
@@ -115,39 +119,48 @@ export function DashboardChats({
   const appendMessage = useCallback(
     (threadId: string, message: ChatMessage) => {
       setThreads((prev) =>
-        prev.map((thread) => {
-          if (thread.id !== threadId) return thread;
-          if (thread.messages.some((item) => item.id === message.id)) {
-            return thread;
-          }
+        prev
+          .map((thread) => {
+            if (thread.id !== threadId) return thread;
+            if (thread.messages.some((item) => item.id === message.id)) {
+              return thread;
+            }
 
-          const messages = [...thread.messages, message];
-          const phase =
-            thread.kind === "date_room"
-              ? thread.phase === "continued" ||
-                thread.phase === "picked" ||
-                thread.phase === "friended" ||
-                thread.phase === "blocked"
-                ? thread.phase
-                : derivePhaseFromMessages(messages)
-              : thread.phase;
-          return {
-            ...thread,
-            lastMessage:
-              message.kind === "text"
-                ? (message.text ?? "")
-                : message.kind === "video" || message.kind === "intro_video"
-                  ? "Video"
-                  : message.kind === "voice"
-                    ? "Voice note"
-                    : message.kind === "photo"
-                      ? "Photo"
-                      : (message.text ?? thread.lastMessage),
-            messages,
-            phase,
-            time: "Now",
-          };
-        })
+            const messages = [...thread.messages, message];
+            const phase =
+              thread.kind === "date_room"
+                ? thread.phase === "continued" ||
+                  thread.phase === "picked" ||
+                  thread.phase === "friended" ||
+                  thread.phase === "blocked"
+                  ? thread.phase
+                  : derivePhaseFromMessages(messages)
+                : thread.phase;
+            return {
+              ...thread,
+              lastMessage:
+                message.kind === "text"
+                  ? (message.text ?? "")
+                  : message.kind === "video" || message.kind === "intro_video"
+                    ? "Video"
+                    : message.kind === "voice"
+                      ? "Voice note"
+                      : message.kind === "photo"
+                        ? "Photo"
+                        : (message.text ?? thread.lastMessage),
+              messages,
+              phase,
+              time: "Now",
+              lastActivityAt: Date.now(),
+              unreadCount:
+                message.senderId === "me"
+                  ? thread.unreadCount
+                  : (thread.unreadCount ?? 0) + 1,
+            };
+          })
+          .toSorted(
+            (first, second) => second.lastActivityAt - first.lastActivityAt
+          )
       );
     },
     []
@@ -165,6 +178,7 @@ export function DashboardChats({
       setRealtimeConfigured(true);
       setRealtimeRoomIds(initial.rooms.map((room) => room.id));
       setRealtimeChannels(initial.rooms.map((room) => room.realtimeChannel));
+      setTypingChannels(initial.rooms.map((room) => room.typingChannel));
       setThreads(
         initial.rooms.map((room) => toChatThread(room, initial.currentUserId))
       );
@@ -179,6 +193,7 @@ export function DashboardChats({
           : "Could not load your chats. Please try again."
       );
       setRealtimeRoomIds([]);
+      setTypingChannels([]);
     }
   }, []);
 
@@ -194,8 +209,32 @@ export function DashboardChats({
     ({ data }: { channel: string; data: ApiChatMessage }) => {
       if (!currentUserId) return;
       appendMessage(data.roomId, toChatMessage(data, currentUserId));
+      if (selected?.id === data.roomId) {
+        setThreads((current) =>
+          current.map((thread) =>
+            thread.id === data.roomId ? { ...thread, unreadCount: 0 } : thread
+          )
+        );
+        void chatApi.markChatRead(data.roomId);
+      }
     },
-    [appendMessage, currentUserId]
+    [appendMessage, currentUserId, selected?.id]
+  );
+
+  const handleTypingMessage = useCallback(
+    ({
+      data,
+    }: {
+      channel: string;
+      data: { isTyping: boolean; roomId: string; userId: string };
+    }) => {
+      if (!currentUserId || data.userId === currentUserId) return;
+      setTypingByRoom((current) => ({
+        ...current,
+        [data.roomId]: data.isTyping,
+      }));
+    },
+    [currentUserId]
   );
 
   useChatRealtime<ApiChatMessage>({
@@ -206,10 +245,32 @@ export function DashboardChats({
     onData: handleRealtimeMessage,
   });
 
+  useChatRealtime({
+    channels: typingChannels,
+    enabled: Boolean(
+      realtimeConfigured && currentUserId && typingChannels.length > 0
+    ),
+    onData: handleTypingMessage,
+  });
+
   const selectThread = (threadId: string) => {
     setSelectedId(threadId);
     setMobileShowThread(true);
+    setThreads((current) =>
+      current.map((thread) =>
+        thread.id === threadId ? { ...thread, unreadCount: 0 } : thread
+      )
+    );
+    void chatApi.markChatRead(threadId);
   };
+
+  const publishTyping = useCallback(
+    (isTyping: boolean) => {
+      if (!selected || !currentUserId) return;
+      void chatApi.publishTyping(selected.id, isTyping);
+    },
+    [currentUserId, selected]
+  );
 
   const inviteFriend = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -513,6 +574,7 @@ export function DashboardChats({
 
                   appendMessage(selected.id, createTextMessage(text));
                 }}
+                onTyping={publishTyping}
                 phase={
                   selected.kind === "date_room" ? selectedPhase : "continued"
                 }
@@ -534,11 +596,13 @@ export function DashboardChats({
                   onBack={() => setMobileShowThread(false)}
                   people={selected.participants}
                   subtitle={
-                    selected.kind === "date_room"
-                      ? selected.activeDate
-                        ? `${selected.activeDate.title} · ${selected.activeDate.status}`
-                        : "Date room"
-                      : "Friend"
+                    typingByRoom[selected.id]
+                      ? "Typing…"
+                      : selected.kind === "date_room"
+                        ? selected.activeDate
+                          ? `${selected.activeDate.title} · ${selected.activeDate.status}`
+                          : "Date room"
+                        : "Friend"
                   }
                   title={selected.title}
                   trailing={

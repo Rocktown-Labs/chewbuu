@@ -31,7 +31,13 @@ export interface ApiChatRoom {
   participants: ApiChatParticipant[];
   phase: string;
   realtimeChannel: RealtimeChannelClient<ApiChatMessage>;
+  typingChannel: RealtimeChannelClient<{
+    isTyping: boolean;
+    roomId: string;
+    userId: string;
+  }>;
   title: string;
+  unreadCount: number;
   updatedAt: string;
 }
 
@@ -85,6 +91,8 @@ export interface AwsBlocksApi {
     roomId: string,
     input: SendChatMessageInput
   ) => Promise<SendChatMessageResponse>;
+  markChatRead: (roomId: string) => Promise<{ ok: true }>;
+  publishTyping: (roomId: string, isTyping: boolean) => Promise<{ ok: true }>;
   getDatingSummary: () => Promise<DatingSummaryResponse>;
   getProfile: () => Promise<{ profile: DatingProfileResponse | null }>;
   getPendingReviews: () => Promise<{ reviews: PendingReviewResponse[] }>;

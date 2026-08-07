@@ -67,6 +67,7 @@ export const toChatThread = (
 
   return {
     id: room.id,
+    lastActivityAt: new Date(room.updatedAt).getTime(),
     kind: room.kind === "date_room" ? "date_room" : "friend",
     lastMessage:
       lastMessage?.kind === "text"
@@ -85,6 +86,7 @@ export const toChatThread = (
     phase: room.phase as DateRoomPhase,
     time: formatThreadTime(room.updatedAt),
     title: room.title,
+    unreadCount: room.unreadCount,
   };
 };
 
@@ -94,4 +96,8 @@ export const chatApi = {
     roomId: string,
     body: SendChatMessageInput
   ): Promise<SendChatMessageResponse> => api.sendMessage(roomId, body),
+  markChatRead: (roomId: string): Promise<{ ok: true }> =>
+    api.markChatRead(roomId),
+  publishTyping: (roomId: string, isTyping: boolean): Promise<{ ok: true }> =>
+    api.publishTyping(roomId, isTyping),
 };
