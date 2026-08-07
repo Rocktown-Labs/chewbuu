@@ -69,8 +69,6 @@ export const env = createEnv({
     SENTRY_AUTH_TOKEN: z.string().optional(),
     SENTRY_DSN: z.string().optional(),
     REDIS_URL: z.string().optional(),
-    UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
-    UPSTASH_REDIS_REST_URL: z.url().optional(),
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

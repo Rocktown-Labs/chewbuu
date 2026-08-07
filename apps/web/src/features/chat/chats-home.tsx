@@ -1,3 +1,4 @@
+import { api as blocksApi } from "@chewbuu/aws-blocks";
 import {
   Avatar,
   AvatarFallback,
@@ -13,8 +14,15 @@ import {
   TabsTrigger,
 } from "@chewbuu/ui/components/tabs";
 import { cn } from "@chewbuu/ui/lib/utils";
-import { Heart, MessageCircle, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Heart, MessageCircle, Search, UserPlus } from "lucide-react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { chatApi, toChatMessage, toChatThread } from "@/lib/chat-api";
@@ -69,6 +77,8 @@ export function DashboardChats({
     Boolean(activeChannelId)
   );
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [inviteValue, setInviteValue] = useState("");
+  const [isInviting, setIsInviting] = useState(false);
   const mountedRef = useRef(true);
 
   const visibleThreads = threads.filter(
@@ -199,6 +209,28 @@ export function DashboardChats({
   const selectThread = (threadId: string) => {
     setSelectedId(threadId);
     setMobileShowThread(true);
+  };
+
+  const inviteFriend = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = inviteValue.trim();
+    if (!value) return;
+    setIsInviting(true);
+    try {
+      await blocksApi.createFriendInvite(
+        value.includes("@") ? { email: value } : { phone: value }
+      );
+      setInviteValue("");
+      toast.success(
+        "Friend invite saved. We will use it when invitations are sent."
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not save invite."
+      );
+    } finally {
+      setIsInviting(false);
+    }
   };
 
   const selectedPhase: DateRoomPhase = selected
@@ -580,6 +612,31 @@ export function DashboardChats({
                 Browse matches
               </Button>
             ) : null}
+            <form
+              className="mt-2 flex w-full max-w-sm gap-2"
+              onSubmit={inviteFriend}
+            >
+              <Input
+                aria-label="Friend email or phone"
+                className="rounded-full"
+                onChange={(event) => setInviteValue(event.target.value)}
+                placeholder="Friend email or phone"
+                value={inviteValue}
+              />
+              <Button
+                aria-label="Invite friend"
+                className="shrink-0 rounded-full"
+                disabled={isInviting || !inviteValue.trim()}
+                size="icon"
+                type="submit"
+              >
+                <UserPlus />
+              </Button>
+            </form>
+            <p className="max-w-sm text-[11px] text-muted-foreground">
+              Add a friend or invite someone to start a conversation outside of
+              the date flow.
+            </p>
           </div>
         )}
       </section>

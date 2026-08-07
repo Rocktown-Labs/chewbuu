@@ -47,18 +47,36 @@ jobs:
       - name: Bootstrap CDK environment
         run: |
           account_id=$(aws sts get-caller-identity --query Account --output text)
+          echo "CDK_DEFAULT_ACCOUNT=$account_id" >> "$GITHUB_ENV"
+          echo "CDK_DEFAULT_REGION=$AWS_REGION" >> "$GITHUB_ENV"
           npx cdk bootstrap "aws://${account_id}/${AWS_REGION}"
 
       - name: Wait for an in-progress Blocks stack
         run: |
           if aws cloudformation describe-stacks --stack-name chewbuu-prod >/dev/null 2>&1; then
-            status=$(aws cloudformation describe-stacks \
-              --stack-name chewbuu-prod \
-              --query 'Stacks[0].StackStatus' \
-              --output text)
-            if [ "$status" = "CREATE_IN_PROGRESS" ]; then
-              aws cloudformation wait stack-create-complete --stack-name chewbuu-prod
-            fi
+            for attempt in $(seq 1 60); do
+              status=$(aws cloudformation describe-stacks \
+                --stack-name chewbuu-prod \
+                --query 'Stacks[0].StackStatus' \
+                --output text)
+              case "$status" in
+                *_IN_PROGRESS|*_CLEANUP_IN_PROGRESS)
+                  sleep 10
+                  ;;
+                UPDATE_ROLLBACK_FAILED|ROLLBACK_FAILED|DELETE_FAILED)
+                  echo "CloudFormation stack cannot be deployed from state: $status"
+                  exit 1
+                  ;;
+                *)
+                  echo "CloudFormation stack is ready: $status"
+                  break
+                  ;;
+              esac
+              if [ "$attempt" = "60" ]; then
+                echo "Timed out waiting for CloudFormation stack: $status"
+                exit 1
+              fi
+            done
           fi
 
       - name: Load existing realtime endpoint
@@ -84,11 +102,68 @@ jobs:
             --value "$BETTER_AUTH_SECRET" \
             >/dev/null
 
+      - name: Ensure CloudFront ACM certificate
+        run: |
+          set -euo pipefail
+          certificate_arn=""
+          for candidate_arn in $(aws acm list-certificates \
+            --certificate-statuses ISSUED \
+            --query "CertificateSummaryList[?DomainName=='chewbuu.com'].CertificateArn" \
+            --output text); do
+            certificate_details=$(aws acm describe-certificate \
+              --certificate-arn "$candidate_arn" --output json)
+            if echo "$certificate_details" | jq -e \
+              '.Certificate.SubjectAlternativeNames | index("www.chewbuu.com")' >/dev/null; then
+              certificate_arn="$candidate_arn"
+              break
+            fi
+          done
+          if [ -z "$certificate_arn" ]; then
+            certificate_arn=$(aws acm request-certificate \
+              --domain-name chewbuu.com \
+              --subject-alternative-names www.chewbuu.com \
+              --validation-method DNS \
+              --query CertificateArn \
+              --output text)
+            zone_id=$(aws route53 list-hosted-zones-by-name \
+              --dns-name chewbuu.com. \
+              --query "HostedZones[?Name=='chewbuu.com.'].Id | [0]" \
+              --output text | sed 's#^/hostedzone/##')
+            test -n "$zone_id" && test "$zone_id" != "None"
+            for attempt in $(seq 1 30); do
+              validation=$(aws acm describe-certificate \
+                --certificate-arn "$certificate_arn" --output json)
+              ready=true
+              for domain in chewbuu.com www.chewbuu.com; do
+                record_name=$(echo "$validation" | jq -r --arg domain "$domain" \
+                  '.Certificate.DomainValidationOptions[] | select(.DomainName == $domain) | .ResourceRecord.Name // empty')
+                record_value=$(echo "$validation" | jq -r --arg domain "$domain" \
+                  '.Certificate.DomainValidationOptions[] | select(.DomainName == $domain) | .ResourceRecord.Value // empty')
+                if [ -z "$record_name" ] || [ -z "$record_value" ]; then
+                  ready=false
+                  continue
+                fi
+                cat > /tmp/acm-change.json <<EOF
+          {"Changes":[{"Action":"UPSERT","ResourceRecordSet":{"Name":"$record_name","Type":"CNAME","TTL":300,"ResourceRecords":[{"Value":"$record_value"}]}}]}
+          EOF
+                aws route53 change-resource-record-sets --hosted-zone-id "$zone_id" --change-batch file:///tmp/acm-change.json >/dev/null
+              done
+              if [ "$ready" = true ]; then break; fi
+              sleep 10
+            done
+            aws acm wait certificate-validated --certificate-arn "$certificate_arn"
+          fi
+          echo "CLOUDFRONT_CERTIFICATE_ARN=$certificate_arn" >> "$GITHUB_ENV"
+
       - name: Apply database migrations
         if: github.ref == 'refs/heads/main'
         run: bun --cwd packages/db db:migrate:raw
         env:
           DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}
+
+      - name: Remove stale CloudFormation change set
+        continue-on-error: true
+        run: aws cloudformation delete-change-set --stack-name chewbuu-prod --change-set-name cdk-deploy-change-set
 
       - name: Deploy Blocks backend & frontend
         run: bun run aws:deploy
@@ -122,8 +197,15 @@ jobs:
           STRIPE_SUGAR_ANNUAL_PRICE_ID: ${{ secrets.STRIPE_SUGAR_ANNUAL_PRICE_ID }}
           STRIPE_SUGAR_PRICE_ID: ${{ secrets.STRIPE_SUGAR_PRICE_ID }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
-          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           VITE_SERVER_URL: "/"
           VITE_NEON_AUTH_URL: ${{ secrets.VITE_NEON_AUTH_URL || vars.VITE_NEON_AUTH_URL }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+
+      - name: Show CloudFormation failure events
+        if: failure()
+        continue-on-error: true
+        run: |
+          aws cloudformation describe-stack-events \
+            --stack-name chewbuu-prod \
+            --query "StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
+            --output table

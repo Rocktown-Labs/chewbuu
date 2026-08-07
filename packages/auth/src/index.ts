@@ -4,7 +4,6 @@ import { stripe } from "@better-auth/stripe";
 import { createDb, ensureSchemaMigrated } from "@chewbuu/db";
 import * as schema from "@chewbuu/db/schema/auth";
 import { env } from "@chewbuu/env/server";
-import { Redis } from "@upstash/redis";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins/admin";
@@ -42,16 +41,6 @@ const buildStripePlans = () => [
   },
 ];
 
-export const getRedisClient = () => {
-  if (!env.UPSTASH_REDIS_REST_URL || !env.UPSTASH_REDIS_REST_TOKEN) {
-    return null;
-  }
-  return new Redis({
-    token: env.UPSTASH_REDIS_REST_TOKEN,
-    url: env.UPSTASH_REDIS_REST_URL,
-  });
-};
-
 export const createAuth = () => {
   void ensureSchemaMigrated();
   const db = createDb();
@@ -59,26 +48,6 @@ export const createAuth = () => {
   const stripeEnabled = Boolean(
     env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET
   );
-  const redis = getRedisClient();
-
-  const secondaryStorage = redis
-    ? {
-        delete: async (key: string) => {
-          await redis.del(key);
-        },
-        get: async (key: string) => {
-          const val = await redis.get<string | object>(key);
-          if (!val) return null;
-          return typeof val === "string" ? val : JSON.stringify(val);
-        },
-        set: async (key: string, value: string, ttl?: number) => {
-          await (ttl
-            ? redis.set(key, value, { ex: ttl })
-            : redis.set(key, value));
-        },
-      }
-    : undefined;
-
   return betterAuth({
     advanced: {
       defaultCookieAttributes: {
@@ -164,10 +133,9 @@ export const createAuth = () => {
       },
       enabled: true,
       max: 100,
-      storage: secondaryStorage ? "secondary-storage" : "memory",
+      storage: "database",
       window: 60,
     },
-    secondaryStorage,
     secret: env.BETTER_AUTH_SECRET,
     session: {
       cookieCache: {

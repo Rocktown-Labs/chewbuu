@@ -135,6 +135,19 @@ export interface AwsBlocksApi {
   requestFriendship: (friendUserId: string) => Promise<{
     friendship: FriendshipResponse;
   }>;
+  createFriendInvite: (input: {
+    email?: string;
+    name?: string;
+    phone?: string;
+  }) => Promise<{
+    invite: {
+      email: string | null;
+      id: string;
+      name: string | null;
+      phone: string | null;
+      status: string;
+    };
+  }>;
   respondFriendship: (
     friendshipId: string,
     status: "accepted" | "declined"

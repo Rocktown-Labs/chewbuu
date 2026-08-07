@@ -8,9 +8,6 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { createMiddleware } from "@tanstack/react-start";
-import { RealtimeProvider } from "@upstash/realtime/client";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/react";
 import { evlogErrorHandler } from "evlog/nitro/v3";
 import { Suspense, lazy } from "react";
 import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
@@ -20,7 +17,6 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import { NotFoundPage } from "@/components/not-found-page";
 import { ThemeProvider } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
-import { getApiUrl } from "@/lib/dating-api";
 
 import Header from "../components/header";
 
@@ -70,17 +66,10 @@ const RootDocument = () => {
             redirectTo="/me"
             socialProviders={["google"]}
           >
-            <RealtimeProvider
-              api={{
-                url: getApiUrl("/realtime"),
-                withCredentials: true,
-              }}
-            >
-              <div className="grid min-h-svh grid-rows-[auto_1fr]">
-                <Header />
-                <Outlet />
-              </div>
-            </RealtimeProvider>
+            <div className="grid min-h-svh grid-rows-[auto_1fr]">
+              <Header />
+              <Outlet />
+            </div>
           </AuthProvider>
           <Toaster richColors />
           {import.meta.env.DEV && (
@@ -88,8 +77,6 @@ const RootDocument = () => {
               <AppDevtools />
             </Suspense>
           )}
-          <Analytics />
-          <SpeedInsights />
           <Scripts />
         </ThemeProvider>
       </body>

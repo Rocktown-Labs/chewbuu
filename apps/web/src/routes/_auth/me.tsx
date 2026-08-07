@@ -115,6 +115,7 @@ import {
   dateMediaApi,
   getApiUrl,
   type DatePlace,
+  type DatingMedia,
   type DatingProfilePayload,
   type DatingSummary,
   type PendingReview,
@@ -1030,11 +1031,7 @@ export function MePage({
     };
   }, []);
 
-  const isFullView =
-    activeTab === "chats" ||
-    activeTab === "calendar" ||
-    activeTab === "matches" ||
-    activeTab === "profile";
+  const isFullView = activeTab === "chats" || activeTab === "matches";
   const isSidebarCollapsed = isFullView || userCollapsedSidebar;
   const showRightSidebar = !isFullView;
 
@@ -3859,9 +3856,11 @@ function ProfileEditPanel({
     trustedContactName: profile?.trustedContacts?.[0]?.name ?? "",
     trustedContactPhone: profile?.trustedContacts?.[0]?.phone ?? "",
     trustedContactEmail: profile?.trustedContacts?.[0]?.email ?? "",
+    media: profile?.media ?? [],
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState<string | null>(null);
   const usernameCheck = useUsernameChecker(formData.username);
   const normalizedUsername = formData.username.trim().toLowerCase();
   const usernameWasUnchanged = normalizedUsername === (profile?.username ?? "");
@@ -3919,6 +3918,50 @@ function ProfileEditPanel({
       favoriteThings: nextFavoriteThings,
       interestDetails: nextInterestDetails,
     });
+  };
+
+  const uploadProfileMedia = async (
+    file: File | undefined,
+    kind: DatingMedia["kind"]
+  ) => {
+    if (!file) return;
+    setUploadingMedia(kind);
+    try {
+      const upload = await blocksApi.createMediaUpload({
+        contentType: file.type,
+        fileName: file.name,
+        slot: kind,
+      });
+      const response = await fetch(upload.uploadUrl, {
+        body: file,
+        headers: { "content-type": file.type },
+        method: "PUT",
+      });
+      if (!response.ok) throw new Error("Media upload failed.");
+      setFormData((current) => {
+        const nextMedia =
+          kind === "photo"
+            ? current.media
+            : current.media.filter((item) => item.kind !== kind);
+        return {
+          ...current,
+          media: [
+            ...nextMedia,
+            {
+              isPrimary: kind === "profile_photo",
+              kind,
+              sortOrder: kind === "profile_photo" ? 0 : nextMedia.length,
+              url: upload.mediaUrl,
+            },
+          ],
+        };
+      });
+      toast.success("Media uploaded. Save settings to keep it.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Upload failed.");
+    } finally {
+      setUploadingMedia(null);
+    }
   };
   const formErrors = useMemo(() => {
     const errors: string[] = [];
@@ -4047,6 +4090,7 @@ function ProfileEditPanel({
             email: formData.trustedContactEmail,
           },
         ],
+        media: formData.media,
       };
 
       if (!usernameWasUnchanged) {
@@ -4094,6 +4138,49 @@ function ProfileEditPanel({
           {tier} Tier
         </Badge>
       </div>
+
+      {/* SECTION 1: USERNAME & BASIC IDENTITY */}
+      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <User className="size-4 text-primary" />
+            Profile media
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Replace your profile photo, intro video, or add a photo without
+            returning to the onboarding wizard.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          {(
+            [
+              ["profile_photo", "Profile photo", "image/*"],
+              ["intro_video", "Intro video", "video/*"],
+              ["photo", "Additional photo", "image/*"],
+            ] as const
+          ).map(([kind, label, accept]) => (
+            <label
+              className="flex cursor-pointer flex-col gap-2 rounded-2xl border border-dashed border-border p-4 text-center transition hover:border-primary/60 hover:bg-primary/5"
+              key={kind}
+            >
+              <span className="text-xs font-bold">{label}</span>
+              <span className="text-[11px] text-muted-foreground">
+                {uploadingMedia === kind ? "Uploading..." : "Choose file"}
+              </span>
+              <input
+                accept={accept}
+                className="sr-only"
+                disabled={Boolean(uploadingMedia)}
+                onChange={(event) => {
+                  void uploadProfileMedia(event.target.files?.[0], kind);
+                  event.currentTarget.value = "";
+                }}
+                type="file"
+              />
+            </label>
+          ))}
+        </CardContent>
+      </Card>
 
       {/* SECTION 1: USERNAME & BASIC IDENTITY */}
       <Card className="rounded-3xl border-border bg-card/60 shadow-sm">

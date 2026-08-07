@@ -41,7 +41,7 @@ export const Route = createFileRoute("/auth/sign-in")({
     const session = await authClient.getSession();
     if (session.data?.user) {
       throw redirect({
-        to: "/me",
+        to: session.data.user.hasCompletedOnboarding ? "/me" : "/onboarding",
       });
     }
   },
