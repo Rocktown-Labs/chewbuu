@@ -105,11 +105,20 @@ jobs:
       - name: Ensure CloudFront ACM certificate
         run: |
           set -euo pipefail
-          certificate_arn=$(aws acm list-certificates \
+          certificate_arn=""
+          for candidate_arn in $(aws acm list-certificates \
             --certificate-statuses ISSUED \
-            --query "CertificateSummaryList[?DomainName=='chewbuu.com'].CertificateArn | [0]" \
-            --output text)
-          if [ -z "$certificate_arn" ] || [ "$certificate_arn" = "None" ]; then
+            --query "CertificateSummaryList[?DomainName=='chewbuu.com'].CertificateArn" \
+            --output text); do
+            certificate_details=$(aws acm describe-certificate \
+              --certificate-arn "$candidate_arn" --output json)
+            if echo "$certificate_details" | jq -e \
+              '.Certificate.SubjectAlternativeNames | index("www.chewbuu.com")' >/dev/null; then
+              certificate_arn="$candidate_arn"
+              break
+            fi
+          done
+          if [ -z "$certificate_arn" ]; then
             certificate_arn=$(aws acm request-certificate \
               --domain-name chewbuu.com \
               --subject-alternative-names www.chewbuu.com \
