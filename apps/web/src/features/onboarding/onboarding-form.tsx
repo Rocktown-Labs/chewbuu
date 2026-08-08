@@ -834,11 +834,13 @@ export function OnboardingForm() {
         ...values,
         media,
       });
-      toast.success("Progress saved.", { id: "finish-later" });
+      toast.dismiss("finish-later");
+      toast.success("Progress saved.", { duration: 3000 });
     } catch (error) {
+      toast.dismiss("finish-later");
       toast.error(
         error instanceof Error ? error.message : "Could not save progress.",
-        { id: "finish-later" }
+        { duration: 4000 }
       );
       return;
     }
@@ -1080,18 +1082,23 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
       }
 
       if (!resolvedArea) {
+        toast.dismiss("geo");
         toast.error("Could not determine your area. Enter it manually.", {
-          id: "geo",
+          duration: 4000,
         });
         return;
       }
 
       form.setFieldValue("area", resolvedArea);
       setArea(resolvedArea);
-      toast.success(`Location set to ${resolvedArea}`, { id: "geo" });
+      toast.dismiss("geo");
+      toast.success(`Location set to ${resolvedArea}`, { duration: 3000 });
     } catch (error) {
       console.error("Geolocation error:", error);
-      toast.error("Location permission denied or unavailable.", { id: "geo" });
+      toast.dismiss("geo");
+      toast.error("Location permission denied or unavailable.", {
+        duration: 4000,
+      });
     }
   };
 
@@ -2464,12 +2471,14 @@ function PremiumStep({
         callbackURL: `${window.location.origin}/me`,
       });
       if (res.error) {
-        toast.error(res.error.message, { id: "checkout" });
+        toast.dismiss("checkout");
+        toast.error(res.error.message, { duration: 4000 });
       }
     } catch (error) {
+      toast.dismiss("checkout");
       toast.error(
         error instanceof Error ? error.message : "Failed to start checkout",
-        { id: "checkout" }
+        { duration: 4000 }
       );
     }
   };

@@ -26,6 +26,12 @@ const HERO_IMAGES = [
   "/hero/date-bowling.webp",
   "/hero/date-dinner.webp",
   "/hero/date-group-bowling.webp",
+  "/hero/friends-07.webp",
+  "/hero/friends-08.webp",
+  "/hero/friends-09.webp",
+  "/hero/friends-10.webp",
+  "/hero/friends-11.webp",
+  "/hero/friends-12.webp",
 ];
 
 const DATE_SPOT_PROMISES = [
@@ -124,18 +130,6 @@ const HomeComponent = () => {
             <div
               key={i}
               className="aspect-[2/3] w-full rounded-xl overflow-hidden border border-border"
-            >
-              <img
-                src={image}
-                alt=""
-                className="w-full h-full object-cover grayscale"
-              />
-            </div>
-          ))}
-          {HERO_IMAGES.map((image, i) => (
-            <div
-              key={`dup-${i}`}
-              className="aspect-[2/3] w-full rounded-xl overflow-hidden border border-border hidden md:block"
             >
               <img
                 src={image}

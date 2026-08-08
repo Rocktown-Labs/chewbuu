@@ -85,7 +85,6 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
-  Sun,
   User,
   UserPlus,
   Users,
@@ -622,7 +621,6 @@ function HomeDashboardView({
 
         {/* Live Weather Forecast Badge */}
         <div className="flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-amber-600 shadow-2xs w-fit">
-          <Sun className="size-4 animate-spin-slow text-amber-500" />
           <span className="font-extrabold text-xs">
             {weatherText || "Weather unavailable until a location is set."}
           </span>
