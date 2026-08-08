@@ -55,7 +55,13 @@ export default function UserMenu() {
   }, [session]);
 
   if (isPending) {
-    return <Skeleton className="h-9 w-24 rounded-full" />;
+    if (
+      typeof document !== "undefined" &&
+      !document.cookie.includes("better-auth.session_token=")
+    ) {
+      return null;
+    }
+    return <Skeleton className="size-9 rounded-full" />;
   }
 
   if (!session) {

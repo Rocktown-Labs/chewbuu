@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed toast notifications (Save for later, location detect, checkout redirect) persisting forever after a success/error update by dismissing the loading toast before showing the final toast with an explicit duration.
 - Removed the decorative sun icon from the `/me` weather badge so the weather condition icon and location text render cleanly without wrapping.
 - Expanded the landing hero background grid from six mirrored images to twelve distinct date and friends photos.
+- Fixed the header nav shifting on first load by only rendering the user-menu skeleton when a session cookie is present and sizing it to match the avatar button, instead of showing a wide placeholder for every visitor.
 
 ### Changed
 
