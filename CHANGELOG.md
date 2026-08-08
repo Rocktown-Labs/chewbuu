@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Rendered a full chat layout (room list + message pane) with per-tab empty-state guidance and a "Browse matches" CTA when a user has no conversations, instead of a bare "No chats yet." text, and surfaced `getRooms()` failures with an inline error and "Try again" instead of silently showing an empty state.
 - Required profile photos and intro videos before marking onboarding complete, added profile media uploads to settings, refreshed expiring media URLs when records are read, narrowed full-view navigation to chats and matches, and added persisted friend invites to the empty chat state.
 - Redirected signed-in incomplete users to `/onboarding` from auth entry routes and restored a local branded hero visual for the landing page.
+- Fixed onboarding "Save for later" (and all profile/date-request/review/plan writes) failing on jsonb columns: the `pg-client` engine handed non-empty JS arrays to node-postgres as Postgres array literals (e.g. `{solo}`), which is invalid jsonb input. Added a `jsonb()` serializer used at every jsonb write site.
 
 ### Changed
 

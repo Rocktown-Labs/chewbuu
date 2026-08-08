@@ -13,7 +13,17 @@ import { DATABASE_CA_CERT } from "../generated/database.ca";
 const dbConnectionParameterName = (stackName: string) => `/${stackName}-db-url`;
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
-type JsonColumn<T> = ColumnType<T, T | undefined, T>;
+type JsonColumn<T> = ColumnType<T, T | string | undefined, T | string>;
+
+/**
+ * Serialize a JS value as a JSON string for a jsonb column write.
+ *
+ * The pg-client engine hands values to node-postgres, which serializes JS
+ * objects as JSON but non-empty JS arrays as Postgres array literals (e.g.
+ * `{solo}`) — invalid jsonb input. Passing an explicit JSON string is safe for
+ * every bb-data engine (pg-client, Data API) and casts cleanly to jsonb.
+ */
+export const jsonb = (value: unknown): string => JSON.stringify(value);
 
 export interface ChatRoomTable {
   active_date_id: string | null;
