@@ -8,11 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added SEO metadata for the Chewbuu landing page with canonical tags, FAQ/Organization/WebSite JSON-LD, robots.txt, sitemap.xml, and the branded homepage screenshot as the OG/Twitter image.
+- Added a React Email workspace package with branded auth and lifecycle templates, plus Resend-backed Better Auth verification and password reset emails.
+- Added a signed Resend webhook endpoint at `/api/resend/webhook` for delivery, engagement, bounce, complaint, and inbound event configuration.
 - Added an AWS Blocks backend package with CDK/Lambda deployment entrypoints, local development, typed API calls, and production WebSocket realtime support for chat.
 - Introspected the existing Neon PostgreSQL schema with `bb-data`, added Blocks Database/Kysely access, a DynamoDB room projection, a DynamoDB KV room-list cache, and a migration for the legacy chat read-state key.
 - Added AWS Blocks `Hosting` construct in `packages/aws-blocks/aws-blocks/index.cdk.ts` and enabled `DEPLOY_FRONTEND_TO_AWS` in GitHub Actions for full AWS frontend + backend deployments.
 - Added a bottom-anchored `Sheet` drawer component (`packages/ui/src/components/sheet.tsx`) built on the Base UI dialog primitive with slide-up/down animation, a drag handle, and a scrollable body.
 - Added a raw migration runner (`packages/db/src/migrate-raw.ts`) that applies the timestamped handwritten `.sql` migrations (tracked in a `schema_migrations` table) alongside `drizzle-kit`'s journal-based `db:migrate`.
+- Added AWS Blocks observability with structured backend logs, CloudWatch EMF metrics, X-Ray tracing, API and SSR dashboards, and an admin dashboard link.
 
 ### Fixed
 
@@ -37,11 +41,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Removed the decorative sun icon from the `/me` weather badge so the weather condition icon and location text render cleanly without wrapping.
 - Expanded the landing hero background grid from six mirrored images to twelve distinct date and friends photos.
 - Fixed the header nav shifting on first load by only rendering the user-menu skeleton when a session cookie is present and sizing it to match the avatar button, instead of showing a wide placeholder for every visitor.
+- Fixed AWS-hosted document SSR route guards to read Better Auth sessions through the server API with forwarded request headers instead of using the browser auth client during Lambda rendering.
 
 ### Changed
 
 - Migrated chat room reads and message writes from Hono/Upstash realtime to AWS Blocks while retaining the existing Neon/Drizzle history schema.
 - Kept Vercel for TanStack Start builds and previews, with `VITE_BLOCKS_API_URL` connecting the frontend to the AWS Blocks API.
+- Updated AWS Blocks PR previews to publish a GitHub deployment URL, keep a single preview comment current, and mark preview deployments inactive when the PR closes.
 
 ## [0.7.0] - 2026-07-20
 

@@ -1,6 +1,7 @@
 {
   "extends": "@chewbuu/config/tsconfig.base.json",
   "compilerOptions": {
+    "jsx": "react-jsx",
     "strictNullChecks": true
   },
   "include": ["src/**/*.ts", "generated/**/*.ts", "aws-blocks/**/*.ts"]

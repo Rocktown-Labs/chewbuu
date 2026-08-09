@@ -1,0 +1,28 @@
+{
+  "name": "@chewbuu/emails",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.tsx"
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "dev": "email dev --dir emails --port 3001"
+  },
+  "dependencies": {
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@chewbuu/config": "workspace:*",
+    "@react-email/ui": "6.9.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "catalog:",
+    "react-email": "^6.9.2",
+    "typescript": "^6"
+  }
+}

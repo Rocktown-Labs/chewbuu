@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { Auth } from "@/components/auth/auth";
 import { authClient } from "@/lib/auth-client";
+import { getServerSession } from "@/lib/session.functions";
 
 const AuthPage = ({ view }: { view: "signIn" }) => (
   <main className="grid min-h-full place-items-center px-4 py-10">
@@ -38,7 +39,11 @@ const RouteComponent = () => <AuthPage view="signIn" />;
 
 export const Route = createFileRoute("/auth/sign-in")({
   beforeLoad: async () => {
-    const session = await authClient.getSession();
+    const session =
+      typeof window === "undefined"
+        ? await getServerSession()
+        : await authClient.getSession();
+
     if (session.data?.user) {
       throw redirect({
         to: session.data.user.hasCompletedOnboarding ? "/me" : "/onboarding",

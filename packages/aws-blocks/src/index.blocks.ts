@@ -1,9 +1,13 @@
 import { google } from "@ai-sdk/google";
 import { AppSetting } from "@aws-blocks/bb-app-setting";
+import { Dashboard } from "@aws-blocks/bb-dashboard";
 import { DistributedTable } from "@aws-blocks/bb-distributed-table";
 import { FileBucket } from "@aws-blocks/bb-file-bucket";
 import { KVStore } from "@aws-blocks/bb-kv-store";
+import { Logger, type LogLevel } from "@aws-blocks/bb-logger";
+import { Metrics, type MetricDatum } from "@aws-blocks/bb-metrics";
 import type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middleware";
+import { Tracer } from "@aws-blocks/bb-tracer";
 import { ApiNamespace, Realtime, Scope } from "@aws-blocks/blocks";
 import {
   ChimeSDKMeetingsClient,
@@ -58,6 +62,155 @@ import type {
 type BlocksDbExecutor = Kysely<BlocksDatabase> | Transaction<BlocksDatabase>;
 
 const scope = new Scope("chewbuu-api");
+const LOG_LEVELS = new Set<LogLevel>(["debug", "error", "info", "warn"]);
+const deploymentStage =
+  process.env.CHEWBUU_STAGE ??
+  (process.env.PR_NUMBER
+    ? `preview-pr-${process.env.PR_NUMBER}`
+    : "production");
+const logLevel = LOG_LEVELS.has(process.env.LOG_LEVEL as LogLevel)
+  ? (process.env.LOG_LEVEL as LogLevel)
+  : "info";
+const logger = new Logger(scope, "logger", {
+  defaultContext: {
+    service: "chewbuu-api",
+    stage: deploymentStage,
+  },
+  level: logLevel,
+});
+const metrics = new Metrics(scope, "metrics", {
+  defaultDimensions: {
+    service: "chewbuu-api",
+    stage: deploymentStage,
+  },
+  namespace: "Chewbuu/Application",
+});
+const tracer = new Tracer(scope, "tracer");
+const dashboard = new Dashboard(scope, "dashboard", {
+  dashboardName: `chewbuu-${deploymentStage}-api`,
+  defaultTimeRange: "-PT8H",
+  logger,
+  metricConfigs: [
+    { name: "ApiRequestCount", period: 60, stat: "Sum", title: "API requests" },
+    { name: "ApiErrorCount", period: 60, stat: "Sum", title: "API errors" },
+    { name: "ApiLatency", period: 60, stat: "p95", title: "API latency p95" },
+    { name: "ScheduledJobCount", period: 60, stat: "Sum" },
+    { name: "ScheduledJobErrorCount", period: 60, stat: "Sum" },
+  ],
+  metrics,
+  routePath: "/admin/observability/aws-blocks",
+  title: `Chewbuu API - ${deploymentStage}`,
+  tracer,
+});
+void dashboard;
+
+const errorFields = (error: unknown) =>
+  error instanceof Error
+    ? { errorMessage: error.message, errorName: error.name }
+    : { errorMessage: "Unknown error", errorName: "UnknownError" };
+
+const emitOperationMetrics = (
+  operation: string,
+  status: "error" | "success",
+  durationMs: number
+) => {
+  const metricBatch: MetricDatum[] = [
+    {
+      dimensions: { operation, status },
+      name: "ApiRequestCount",
+      unit: "Count",
+      value: 1,
+    },
+    {
+      dimensions: { operation, status },
+      name: "ApiLatency",
+      unit: "Milliseconds",
+      value: durationMs,
+    },
+  ];
+
+  if (status === "error") {
+    metricBatch.push({
+      dimensions: { operation, status },
+      name: "ApiErrorCount",
+      unit: "Count",
+      value: 1,
+    });
+  }
+
+  metrics.emitBatch(metricBatch);
+};
+
+const observeOperation = async <Result>(
+  operation: string,
+  handler: () => Promise<Result>
+): Promise<Result> => {
+  const startedAt = performance.now();
+  tracer.addAnnotation("operation", operation);
+
+  return tracer.startSegment(operation, async (segment) => {
+    segment.addAnnotation("operation", operation);
+
+    try {
+      const result = await handler();
+      const durationMs = Math.round(performance.now() - startedAt);
+      segment.setHttpStatus(200);
+      emitOperationMetrics(operation, "success", durationMs);
+      logger.info("api operation completed", {
+        durationMs,
+        operation,
+        status: "success",
+        traceId: tracer.getTraceId(),
+      });
+      return result;
+    } catch (error) {
+      const durationMs = Math.round(performance.now() - startedAt);
+      const fields = errorFields(error);
+      segment.addError(
+        error instanceof Error ? error : new Error(fields.errorName)
+      );
+      segment.setHttpStatus(500);
+      emitOperationMetrics(operation, "error", durationMs);
+      logger.error("api operation failed", {
+        ...fields,
+        durationMs,
+        operation,
+        status: "error",
+        traceId: tracer.getTraceId(),
+      });
+      throw error;
+    }
+  });
+};
+
+const observeScheduledJob = async <Result>(
+  operation: string,
+  handler: () => Promise<Result>
+): Promise<Result> => {
+  const startedAt = performance.now();
+
+  try {
+    const result = await observeOperation(operation, handler);
+    metrics.emit("ScheduledJobCount", 1, {
+      dimensions: { operation, status: "success" },
+      unit: "Count",
+    });
+    return result;
+  } catch (error) {
+    metrics.emit("ScheduledJobErrorCount", 1, {
+      dimensions: { operation, status: "error" },
+      unit: "Count",
+    });
+    logger.error("scheduled job failed", {
+      ...errorFields(error),
+      durationMs: Math.round(performance.now() - startedAt),
+      operation,
+      traceId: tracer.getTraceId(),
+    });
+    throw error;
+  }
+};
+
 const chime = new ChimeSDKMeetingsClient({
   region: process.env.CHIME_REGION ?? "us-east-1",
 });
@@ -427,7 +580,7 @@ const ensureAcceptedFriendship = async (
     .execute();
 };
 
-export const runDateLifecycle = async (at?: string) => {
+const runDateLifecycleInternal = async (at?: string) => {
   const now = at ? new Date(at) : new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Lifecycle time is invalid");
   const db = await getDb();
@@ -517,6 +670,9 @@ export const runDateLifecycle = async (at?: string) => {
   }
   return { processed };
 };
+
+export const runDateLifecycle = async (at?: string) =>
+  observeScheduledJob("runDateLifecycle", () => runDateLifecycleInternal(at));
 
 const loadProfile = async (userId: string, sessionUser: SessionUser) => {
   const db = await getDb();
@@ -2840,8 +2996,10 @@ const getRecaps = async () => {
 
 export const api = new ApiNamespace(scope, "api", (context) => ({
   async getDatingSummary() {
-    const sessionUser = await requireSession(context.request.headers);
-    return loadDatingSummary(sessionUser);
+    return observeOperation("getDatingSummary", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return loadDatingSummary(sessionUser);
+    });
   },
 
   async getPendingReviews() {
@@ -2869,91 +3027,105 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async getProfile() {
-    const sessionUser = await requireSession(context.request.headers);
-    return { profile: await loadProfile(sessionUser.id, sessionUser) };
+    return observeOperation("getProfile", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return { profile: await loadProfile(sessionUser.id, sessionUser) };
+    });
   },
 
   async saveProfile(input: unknown) {
-    const sessionUser = await requireSession(context.request.headers);
-    return saveProfile(sessionUser, input, false);
+    return observeOperation("saveProfile", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return saveProfile(sessionUser, input, false);
+    });
   },
 
   async saveProfileDraft(input: unknown) {
-    const sessionUser = await requireSession(context.request.headers);
-    const draft = profileDraftInputSchema.parse(input);
-    const current = await loadProfile(sessionUser.id, sessionUser);
-    return saveProfile(
-      sessionUser,
-      {
-        ageRangeMax: draft.ageRangeMax,
-        ageRangeMin: draft.ageRangeMin,
-        area: draft.area ?? (current?.area as string | undefined) ?? "",
-        bio: draft.bio,
-        birthday:
-          draft.birthday ?? (current?.birthday as string | undefined) ?? "",
-        datingModes: draft.datingModes ?? [],
-        distanceMiles: draft.distanceMiles ?? 25,
-        favoriteThings: draft.favoriteThings ?? [],
-        friendInvites: draft.friendInvites ?? [],
-        height: draft.height,
-        interestDetails: draft.interestDetails ?? {},
-        interestedIn: draft.interestedIn ?? [],
-        interests: draft.interests ?? [],
-        kids: draft.kids,
-        latitude: draft.latitude,
-        lookingFor: draft.lookingFor ?? [],
-        longitude: draft.longitude,
-        maritalStatus: draft.maritalStatus,
-        media: draft.media ?? [],
-        name: draft.name,
-        occupation: draft.occupation,
-        politics: draft.politics,
-        phone: draft.phone,
-        race: draft.race,
-        religion: draft.religion,
-        safetyOptIn: draft.safetyOptIn ?? false,
-        sex: draft.sex ?? (current?.sex as string | undefined) ?? "",
-        sexuality:
-          draft.sexuality ?? (current?.sexuality as string | undefined) ?? "",
-        trustedContacts: draft.trustedContacts ?? [],
-        username:
-          draft.username ?? (current?.username as string | undefined) ?? "",
-        weight: draft.weight,
-        wantsKids: draft.wantsKids,
-      },
-      true
-    );
+    return observeOperation("saveProfileDraft", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const draft = profileDraftInputSchema.parse(input);
+      const current = await loadProfile(sessionUser.id, sessionUser);
+      return saveProfile(
+        sessionUser,
+        {
+          ageRangeMax: draft.ageRangeMax,
+          ageRangeMin: draft.ageRangeMin,
+          area: draft.area ?? (current?.area as string | undefined) ?? "",
+          bio: draft.bio,
+          birthday:
+            draft.birthday ?? (current?.birthday as string | undefined) ?? "",
+          datingModes: draft.datingModes ?? [],
+          distanceMiles: draft.distanceMiles ?? 25,
+          favoriteThings: draft.favoriteThings ?? [],
+          friendInvites: draft.friendInvites ?? [],
+          height: draft.height,
+          interestDetails: draft.interestDetails ?? {},
+          interestedIn: draft.interestedIn ?? [],
+          interests: draft.interests ?? [],
+          kids: draft.kids,
+          latitude: draft.latitude,
+          lookingFor: draft.lookingFor ?? [],
+          longitude: draft.longitude,
+          maritalStatus: draft.maritalStatus,
+          media: draft.media ?? [],
+          name: draft.name,
+          occupation: draft.occupation,
+          politics: draft.politics,
+          phone: draft.phone,
+          race: draft.race,
+          religion: draft.religion,
+          safetyOptIn: draft.safetyOptIn ?? false,
+          sex: draft.sex ?? (current?.sex as string | undefined) ?? "",
+          sexuality:
+            draft.sexuality ?? (current?.sexuality as string | undefined) ?? "",
+          trustedContacts: draft.trustedContacts ?? [],
+          username:
+            draft.username ?? (current?.username as string | undefined) ?? "",
+          weight: draft.weight,
+          wantsKids: draft.wantsKids,
+        },
+        true
+      );
+    });
   },
 
   async createDateRequest(input: unknown) {
-    const sessionUser = await requireSession(context.request.headers);
-    return createDateRequest(sessionUser, input);
+    return observeOperation("createDateRequest", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createDateRequest(sessionUser, input);
+    });
   },
 
   async getDateMeeting(requestId: string) {
-    const sessionUser = await requireSession(context.request.headers);
-    return getDateMeeting(requestId, sessionUser);
+    return observeOperation("getDateMeeting", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getDateMeeting(requestId, sessionUser);
+    });
   },
 
   async getRooms() {
-    const sessionUser = await requireSession(context.request.headers);
-    return {
-      currentUserId: sessionUser.id,
-      rooms: await loadRooms(sessionUser.id),
-    };
+    return observeOperation("getRooms", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return {
+        currentUserId: sessionUser.id,
+        rooms: await loadRooms(sessionUser.id),
+      };
+    });
   },
 
   async getMessages(roomId: string) {
-    const sessionUser = await requireSession(context.request.headers);
-    const db = await getDb();
-    const room = await getOwnedRoom(roomId, sessionUser.id);
-    const messages = await db
-      .selectFrom("chat_message")
-      .selectAll()
-      .where("room_id", "=", room.id)
-      .orderBy("created_at", "asc")
-      .execute();
-    return { messages: await Promise.all(messages.map(toMessage)) };
+    return observeOperation("getMessages", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const db = await getDb();
+      const room = await getOwnedRoom(roomId, sessionUser.id);
+      const messages = await db
+        .selectFrom("chat_message")
+        .selectAll()
+        .where("room_id", "=", room.id)
+        .orderBy("created_at", "asc")
+        .execute();
+      return { messages: await Promise.all(messages.map(toMessage)) };
+    });
   },
 
   async markChatRead(roomId: string) {
@@ -2985,64 +3157,72 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async sendMessage(roomId: string, input: SendChatMessageInput) {
-    const sessionUser = await requireSession(context.request.headers);
-    const db = await getDb();
-    const room = await getOwnedRoom(roomId, sessionUser.id);
-    const body = sendMessageSchema.parse(input);
-    const now = new Date();
-    const [created] = await db
-      .insertInto("chat_message")
-      .values({
-        id: crypto.randomUUID(),
-        kind: body.kind,
-        room_id: room.id,
-        sender_id: sessionUser.id,
-        text: body.text ?? null,
-        duration_sec: body.durationSec ?? null,
-        media_thumb_url: body.mediaThumbUrl ?? null,
-        media_url: body.mediaUrl ?? null,
-        system_icon: null,
-        created_at: now,
-      })
-      .returningAll()
-      .execute();
-    if (!created) throw new Error("Could not create chat message");
-
-    await Promise.all([
-      db
-        .updateTable("chat_room")
-        .set({ updated_at: now })
-        .where("id", "=", room.id)
-        .execute(),
-      db
-        .insertInto("chat_read_state")
+    return observeOperation("sendMessage", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const db = await getDb();
+      const room = await getOwnedRoom(roomId, sessionUser.id);
+      const body = sendMessageSchema.parse(input);
+      const now = new Date();
+      const [created] = await db
+        .insertInto("chat_message")
         .values({
-          last_read_at: now,
+          id: crypto.randomUUID(),
+          kind: body.kind,
           room_id: room.id,
-          user_id: sessionUser.id,
+          sender_id: sessionUser.id,
+          text: body.text ?? null,
+          duration_sec: body.durationSec ?? null,
+          media_thumb_url: body.mediaThumbUrl ?? null,
+          media_url: body.mediaUrl ?? null,
+          system_icon: null,
+          created_at: now,
         })
-        .onConflict((conflict) =>
-          conflict
-            .columns(["room_id", "user_id"])
-            .doUpdateSet({ last_read_at: now })
-        )
-        .execute(),
-      roomListCache.delete(sessionUser.id),
-    ]);
+        .returningAll()
+        .execute();
+      if (!created) throw new Error("Could not create chat message");
 
-    const message = await toMessage(created);
-    try {
-      await realtime.publish("messages", room.id, message);
-      return { message, published: true };
-    } catch (error) {
-      console.error("AWS Blocks realtime publish failed", error);
-      return { message, published: false };
-    }
+      await Promise.all([
+        db
+          .updateTable("chat_room")
+          .set({ updated_at: now })
+          .where("id", "=", room.id)
+          .execute(),
+        db
+          .insertInto("chat_read_state")
+          .values({
+            last_read_at: now,
+            room_id: room.id,
+            user_id: sessionUser.id,
+          })
+          .onConflict((conflict) =>
+            conflict
+              .columns(["room_id", "user_id"])
+              .doUpdateSet({ last_read_at: now })
+          )
+          .execute(),
+        roomListCache.delete(sessionUser.id),
+      ]);
+
+      const message = await toMessage(created);
+      try {
+        await realtime.publish("messages", room.id, message);
+        return { message, published: true };
+      } catch (error) {
+        logger.warn("realtime publish failed", {
+          ...errorFields(error),
+          operation: "sendMessage",
+          traceId: tracer.getTraceId(),
+        });
+        return { message, published: false };
+      }
+    });
   },
 
   async suggestPlaces(input: PlaceSuggestionInput) {
-    const sessionUser = await requireSession(context.request.headers);
-    return suggestPlaces(sessionUser.id, input);
+    return observeOperation("suggestPlaces", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return suggestPlaces(sessionUser.id, input);
+    });
   },
 
   async getPlacePhoto(photoName: string) {
@@ -3051,18 +3231,24 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async checkIn(input: CheckInInput) {
-    const sessionUser = await requireSession(context.request.headers);
-    return checkIn(sessionUser, input);
+    return observeOperation("checkIn", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return checkIn(sessionUser, input);
+    });
   },
 
   async startDate(dateRequestId: string) {
-    const sessionUser = await requireSession(context.request.headers);
-    return startDate(sessionUser, z.string().min(1).parse(dateRequestId));
+    return observeOperation("startDate", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return startDate(sessionUser, z.string().min(1).parse(dateRequestId));
+    });
   },
 
   async completeDate(dateRequestId: string) {
-    const sessionUser = await requireSession(context.request.headers);
-    return completeDate(sessionUser, z.string().min(1).parse(dateRequestId));
+    return observeOperation("completeDate", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return completeDate(sessionUser, z.string().min(1).parse(dateRequestId));
+    });
   },
 
   async runDateLifecycle(input?: { at?: string }) {
@@ -3083,8 +3269,10 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async submitReview(requestId: string, input: ReviewInput) {
-    const sessionUser = await requireSession(context.request.headers);
-    return submitReview(requestId, sessionUser.id, input);
+    return observeOperation("submitReview", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return submitReview(requestId, sessionUser.id, input);
+    });
   },
 
   async getPricingPlans() {
@@ -3092,14 +3280,18 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async seedPricingPlans() {
-    const sessionUser = await requireSession(context.request.headers);
-    requireAdmin(sessionUser);
-    return seedPricingPlans();
+    return observeOperation("seedPricingPlans", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      requireAdmin(sessionUser);
+      return seedPricingPlans();
+    });
   },
 
   async updatePricingPlans(input: { plans: MembershipPlan[] }) {
-    const sessionUser = await requireSession(context.request.headers);
-    return updatePricingPlans(sessionUser, input);
+    return observeOperation("updatePricingPlans", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return updatePricingPlans(sessionUser, input);
+    });
   },
 
   async getFriendships() {
@@ -3141,33 +3333,37 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async uploadDateMedia(input: UploadDateMediaInput) {
-    const sessionUser = await requireSession(context.request.headers);
-    return uploadDateMedia(sessionUser, input);
+    return observeOperation("uploadDateMedia", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return uploadDateMedia(sessionUser, input);
+    });
   },
 
   async createMediaUpload(input: MediaUploadInput) {
-    const sessionUser = await requireSession(context.request.headers);
-    const body = z
-      .object({
-        contentType: z.string().trim().min(1),
-        fileName: z.string().trim().min(1).max(255),
-        slot: z.enum(["intro_video", "photo", "profile_photo"]),
-      })
-      .parse(input);
-    const limit = mediaLimits[body.slot];
-    if (!body.contentType.startsWith(limit.accept)) {
-      throw new Error(`Expected a ${limit.accept.replace("/", "")} upload.`);
-    }
-    const pathname = mediaPath(sessionUser.id, body);
-    const uploadUrl = await mediaBucket.putUrl(pathname, {
-      contentType: body.contentType,
-      expiresIn: 300,
+    return observeOperation("createMediaUpload", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const body = z
+        .object({
+          contentType: z.string().trim().min(1),
+          fileName: z.string().trim().min(1).max(255),
+          slot: z.enum(["intro_video", "photo", "profile_photo"]),
+        })
+        .parse(input);
+      const limit = mediaLimits[body.slot];
+      if (!body.contentType.startsWith(limit.accept)) {
+        throw new Error(`Expected a ${limit.accept.replace("/", "")} upload.`);
+      }
+      const pathname = mediaPath(sessionUser.id, body);
+      const uploadUrl = await mediaBucket.putUrl(pathname, {
+        contentType: body.contentType,
+        expiresIn: 300,
+      });
+      return {
+        mediaUrl: await mediaBucket.getUrl(pathname, { expiresIn: 3600 }),
+        pathname,
+        uploadUrl,
+      };
     });
-    return {
-      mediaUrl: await mediaBucket.getUrl(pathname, { expiresIn: 3600 }),
-      pathname,
-      uploadUrl,
-    };
   },
 
   async getMediaUrl(path: string) {
@@ -3178,17 +3374,21 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async generateAiResponse(messages: AiMessage[]) {
-    await requireSession(context.request.headers);
-    const result = await generateText({
-      messages: await convertToModelMessages(messages),
-      model: google("gemini-2.5-flash"),
+    return observeOperation("generateAiResponse", async () => {
+      await requireSession(context.request.headers);
+      const result = await generateText({
+        messages: await convertToModelMessages(messages),
+        model: google("gemini-2.5-flash"),
+      });
+      return { text: result.text };
     });
-    return { text: result.text };
   },
 
   async publishRecap(input: PublishRecapInput) {
-    const sessionUser = await requireSession(context.request.headers);
-    return publishRecap(sessionUser, input);
+    return observeOperation("publishRecap", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return publishRecap(sessionUser, input);
+    });
   },
 
   async getRecaps() {

@@ -5,13 +5,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-  pull_request:
-    branches:
-      - main
-    types:
-      - opened
-      - reopened
-      - synchronize
 
 permissions:
   contents: read
@@ -28,10 +21,10 @@ jobs:
     environment: production
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -170,6 +163,8 @@ jobs:
         env:
           DEPLOY_FRONTEND_TO_AWS: "true"
           NITRO_PRESET: "aws-lambda"
+          CHEWBUU_STAGE: production
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'info' }}
           BLOCKS_DB_URL: ${{ secrets.BLOCKS_DB_URL }}
           BLOCKS_SSM_PARAM_DB_URL: /chewbuu-prod-db-url
           DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}
@@ -189,6 +184,8 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL }}
+          RESEND_WEBHOOK_SECRET: ${{ secrets.RESEND_WEBHOOK_SECRET }}
           STREAM_API_KEY: ${{ secrets.STREAM_API_KEY }}
           STREAM_API_SECRET: ${{ secrets.STREAM_API_SECRET }}
           STRIPE_MINGLE_ANNUAL_PRICE_ID: ${{ secrets.STRIPE_MINGLE_ANNUAL_PRICE_ID }}

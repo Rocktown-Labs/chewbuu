@@ -17,6 +17,13 @@ import { AuthProvider } from "@/components/auth/auth-provider";
 import { NotFoundPage } from "@/components/not-found-page";
 import { ThemeProvider } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
+import {
+  OG_IMAGE_URL,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TITLE,
+  getCanonicalUrl,
+} from "@/lib/seo";
 
 import Header from "../components/header";
 
@@ -108,11 +115,10 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         name: "viewport",
       },
       {
-        title: "Chewbuu | Real People, Real Dates, Real Results",
+        title: SITE_TITLE,
       },
       {
-        content:
-          "Chewbuu gets real people onto real dates with curated plans, video-first matching, and warm social circles.",
+        content: SITE_DESCRIPTION,
         name: "description",
       },
       {
@@ -121,37 +127,51 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         name: "keywords",
       },
       {
+        content: SITE_NAME,
+        property: "og:site_name",
+      },
+      {
+        content: getCanonicalUrl(),
+        property: "og:url",
+      },
+      {
         content: "website",
         property: "og:type",
       },
       {
-        content: "Chewbuu | Real People, Real Dates, Real Results",
+        content: SITE_TITLE,
         property: "og:title",
       },
       {
-        content:
-          "Chewbuu gets real people onto real dates with curated plans, video-first matching, and warm social circles.",
+        content: SITE_DESCRIPTION,
         property: "og:description",
       },
       {
-        content: "/brand/chewbuu-logo-500.png",
+        content: OG_IMAGE_URL,
         property: "og:image",
+      },
+      {
+        content: "1864",
+        property: "og:image:width",
+      },
+      {
+        content: "913",
+        property: "og:image:height",
       },
       {
         content: "summary_large_image",
         name: "twitter:card",
       },
       {
-        content: "Chewbuu | Real People, Real Dates, Real Results",
+        content: SITE_TITLE,
         name: "twitter:title",
       },
       {
-        content:
-          "Chewbuu gets real people onto real dates with curated plans, video-first matching, and warm social circles.",
+        content: SITE_DESCRIPTION,
         name: "twitter:description",
       },
       {
-        content: "/brand/chewbuu-logo-500.png",
+        content: OG_IMAGE_URL,
         name: "twitter:image",
       },
     ],

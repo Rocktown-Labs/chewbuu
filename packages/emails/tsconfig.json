@@ -1,0 +1,9 @@
+{
+  "extends": "@chewbuu/config/tsconfig.base.json",
+  "include": ["emails/**/*.tsx", "src/**/*.ts", "src/**/*.tsx"],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "noEmit": true
+  }
+}

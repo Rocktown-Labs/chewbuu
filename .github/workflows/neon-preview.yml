@@ -10,7 +10,10 @@ on:
 
 permissions:
   contents: read
+  deployments: write
   id-token: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -40,7 +43,7 @@ jobs:
     environment: production
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -57,29 +60,42 @@ jobs:
       - name: Create or Reuse Neon Branch
         id: create_neon_branch
         uses: neondatabase/create-branch-action@v6
-        continue-on-error: true
         with:
           api_key: ${{ secrets.NEON_API_KEY }}
           branch_name: preview/pr-${{ github.event.number }}
           expires_at: ${{ env.EXPIRES_AT }}
           project_id: ${{ vars.NEON_PROJECT_ID }}
 
-      - name: Run Database Migrations
-        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+      - name: Reset Reused Neon Branch
+        id: reset_neon_branch
+        if: steps.create_neon_branch.outputs.created == 'false'
+        uses: neondatabase/reset-branch-action@v1
+        with:
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch: preview/pr-${{ github.event.number }}
+          parent: true
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+
+      - name: Select Neon Connection URLs
+        id: neon_urls
         run: |
-          bun --cwd packages/db db:migrate
-          bun --cwd packages/db db:migrate:raw
+          echo "db_url=${{ steps.reset_neon_branch.outputs.db_url || steps.create_neon_branch.outputs.db_url }}" >> "$GITHUB_OUTPUT"
+          echo "db_url_pooled=${{ steps.reset_neon_branch.outputs.db_url_with_pooler || steps.create_neon_branch.outputs.db_url_pooled }}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Database Migrations
+        if: steps.neon_urls.outputs.db_url != ''
+        run: bun --cwd packages/db db:migrate:raw
         env:
-          DATABASE_URL: "${{ steps.create_neon_branch.outputs.db_url_with_pooler }}"
+          DATABASE_URL: "${{ steps.neon_urls.outputs.db_url }}"
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
 
       - name: Wait for preview CloudFormation stack
-        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+        if: steps.neon_urls.outputs.db_url_pooled != ''
         run: |
           stack_name="chewbuu-preview-pr-${{ github.event.number }}"
           if aws cloudformation describe-stacks --stack-name "$stack_name" >/dev/null 2>&1; then
@@ -104,19 +120,21 @@ jobs:
           fi
 
       - name: Remove stale preview CloudFormation change set
-        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+        if: steps.neon_urls.outputs.db_url_pooled != ''
         continue-on-error: true
         run: aws cloudformation delete-change-set --stack-name "chewbuu-preview-pr-${{ github.event.number }}" --change-set-name cdk-deploy-change-set
 
       - name: Deploy AWS Blocks preview
-        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+        if: steps.neon_urls.outputs.db_url_pooled != ''
         run: bun run aws:deploy
         env:
           DEPLOY_FRONTEND_TO_AWS: "true"
           NITRO_PRESET: "aws-lambda"
           PR_NUMBER: ${{ github.event.number }}
-          BLOCKS_DB_URL: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
-          DATABASE_URL: ${{ steps.create_neon_branch.outputs.db_url_with_pooler }}
+          CHEWBUU_STAGE: preview-pr-${{ github.event.number }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'info' }}
+          BLOCKS_DB_URL: ${{ steps.neon_urls.outputs.db_url_pooled }}
+          DATABASE_URL: ${{ steps.neon_urls.outputs.db_url_pooled }}
           BLOCKS_SSM_PARAM_DB_URL: /chewbuu-prod-db-url
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
@@ -124,18 +142,56 @@ jobs:
           BETTER_AUTH_ADMIN_EMAILS: ${{ vars.BETTER_AUTH_ADMIN_EMAILS || 'cg@rocktownlabs.com' }}
           CORS_ORIGIN: ${{ vars.CORS_ORIGIN }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ vars.RESEND_FROM_EMAIL }}
+          RESEND_WEBHOOK_SECRET: ${{ secrets.RESEND_WEBHOOK_SECRET }}
           VITE_SERVER_URL: "/"
           VITE_NEON_AUTH_URL: ${{ vars.VITE_NEON_AUTH_URL }}
 
       - name: Load preview URL
         id: preview_url
-        if: steps.create_neon_branch.outputs.db_url_with_pooler != ''
+        if: steps.neon_urls.outputs.db_url_pooled != ''
         run: |
           url=$(aws cloudformation describe-stacks \
             --stack-name "chewbuu-preview-pr-${{ github.event.number }}" \
             --query "Stacks[0].Outputs[?OutputKey=='HostingUrl'].OutputValue" \
             --output text)
           echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Record preview deployment
+        if: steps.preview_url.outputs.url != '' && steps.preview_url.outputs.url != 'None'
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.preview_url.outputs.url }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullRequest = context.payload.pull_request;
+            const environment = `preview-pr-${context.issue.number}`;
+            const logUrl = `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+            const deployment = await github.rest.repos.createDeployment({
+              owner,
+              repo,
+              ref: pullRequest.head.sha,
+              auto_merge: false,
+              required_contexts: [],
+              environment,
+              description: `AWS Blocks preview for PR #${context.issue.number}`,
+              production_environment: false,
+              transient_environment: true,
+            });
+
+            await github.rest.repos.createDeploymentStatus({
+              owner,
+              repo,
+              deployment_id: deployment.data.id,
+              state: "success",
+              environment_url: process.env.PREVIEW_URL,
+              log_url: logUrl,
+              description: "AWS Blocks preview is ready",
+            });
 
       - name: Comment preview URL
         if: steps.preview_url.outputs.url != '' && steps.preview_url.outputs.url != 'None'
@@ -144,11 +200,47 @@ jobs:
           PREVIEW_URL: ${{ steps.preview_url.outputs.url }}
         with:
           script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            const marker = "<!-- chewbuu-aws-preview -->";
+            const body = [
+              marker,
+              "### AWS Blocks preview is ready",
+              "",
+              `Preview URL: ${process.env.PREVIEW_URL}`,
+              "",
+              `- Frontend and backend are deployed together in \`chewbuu-preview-pr-${issue_number}\``,
+              `- The app uses the preview Neon branch \`preview/pr-${issue_number}\``,
+              "- The preview is refreshed on each PR update and removed when the PR closes",
+            ].join("\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existingComment = comments.find(
+              (comment) =>
+                comment.user?.type === "Bot" && comment.body?.includes(marker)
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body,
+              });
+              return;
+            }
+
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `AWS preview deployed: ${process.env.PREVIEW_URL}`,
+              owner,
+              repo,
+              issue_number,
+              body,
             });
 
   delete_neon_branch:
@@ -183,7 +275,7 @@ jobs:
           project_id: ${{ vars.NEON_PROJECT_ID }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -191,3 +283,74 @@ jobs:
       - name: Delete AWS Blocks preview stack
         continue-on-error: true
         run: aws cloudformation delete-stack --stack-name "chewbuu-preview-pr-${{ github.event.number }}"
+
+      - name: Mark preview deployments inactive
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const environment = `preview-pr-${context.issue.number}`;
+            const logUrl = `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const { data: deployments } = await github.rest.repos.listDeployments({
+              owner,
+              repo,
+              environment,
+              per_page: 20,
+            });
+
+            for (const deployment of deployments) {
+              await github.rest.repos.createDeploymentStatus({
+                owner,
+                repo,
+                deployment_id: deployment.id,
+                state: "inactive",
+                log_url: logUrl,
+                description: "AWS Blocks preview was removed",
+              });
+            }
+
+      - name: Comment preview cleanup
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            const marker = "<!-- chewbuu-aws-preview -->";
+            const body = [
+              marker,
+              "### AWS Blocks preview removed",
+              "",
+              `The preview stack \`chewbuu-preview-pr-${issue_number}\` and Neon preview branch \`preview/pr-${issue_number}\` were queued for cleanup because this PR was closed.`,
+            ].join("\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existingComment = comments.find(
+              (comment) =>
+                comment.user?.type === "Bot" && comment.body?.includes(marker)
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body,
+              });
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number,
+              body,
+            });
