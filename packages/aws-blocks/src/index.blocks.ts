@@ -77,7 +77,6 @@ const logger = new Logger(scope, "logger", {
     stage: deploymentStage,
   },
   level: logLevel,
-  retention: 30,
 });
 const metrics = new Metrics(scope, "metrics", {
   defaultDimensions: {
