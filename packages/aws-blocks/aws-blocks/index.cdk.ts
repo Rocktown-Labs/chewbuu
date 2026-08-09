@@ -69,6 +69,7 @@ const runtimeEnvironment: Record<string, string | undefined> = {
   REDIS_URL: process.env.REDIS_URL,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
+  RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET,
   SENT_DM_API_KEY: process.env.SENT_DM_API_KEY,
   SENT_DM_BASE_URL: process.env.SENT_DM_BASE_URL,
   SENT_DM_FROM: process.env.SENT_DM_FROM,

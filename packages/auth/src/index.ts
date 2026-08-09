@@ -11,6 +11,7 @@ import { username } from "better-auth/plugins/username";
 import { eq } from "drizzle-orm";
 import Stripe from "stripe";
 
+import { sendPasswordResetEmail, sendVerificationEmail } from "./email";
 import {
   ADMIN_MEMBERSHIP_TIER,
   DEFAULT_MEMBERSHIP_TIER,
@@ -97,6 +98,11 @@ export const createAuth = () => {
     },
     emailAndPassword: {
       enabled: true,
+      sendResetPassword: sendPasswordResetEmail,
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      sendVerificationEmail,
     },
     plugins: [
       expo(),

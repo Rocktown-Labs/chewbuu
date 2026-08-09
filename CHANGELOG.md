@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added SEO metadata for the Chewbuu landing page with canonical tags, FAQ/Organization/WebSite JSON-LD, robots.txt, sitemap.xml, and the branded homepage screenshot as the OG/Twitter image.
+- Added a React Email workspace package with branded auth and lifecycle templates, plus Resend-backed Better Auth verification and password reset emails.
+- Added a signed Resend webhook endpoint at `/api/resend/webhook` for delivery, engagement, bounce, complaint, and inbound event configuration.
 - Added an AWS Blocks backend package with CDK/Lambda deployment entrypoints, local development, typed API calls, and production WebSocket realtime support for chat.
 - Introspected the existing Neon PostgreSQL schema with `bb-data`, added Blocks Database/Kysely access, a DynamoDB room projection, a DynamoDB KV room-list cache, and a migration for the legacy chat read-state key.
 - Added AWS Blocks `Hosting` construct in `packages/aws-blocks/aws-blocks/index.cdk.ts` and enabled `DEPLOY_FRONTEND_TO_AWS` in GitHub Actions for full AWS frontend + backend deployments.

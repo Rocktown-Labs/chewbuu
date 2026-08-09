@@ -58,6 +58,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "require-in-the-middle": "^8.0.1",
+    "resend": "^6.6.0",
     "sonner": "catalog:",
     "streamdown": "^2.5.0",
     "tailwindcss": "catalog:",

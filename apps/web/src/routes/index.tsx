@@ -18,6 +18,14 @@ import { useEffect, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { pricingApi, type MembershipPlan } from "@/lib/dating-api";
+import {
+  OG_IMAGE_URL,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TAGLINE,
+  SITE_TITLE,
+  getCanonicalUrl,
+} from "@/lib/seo";
 
 const HERO_IMAGES = [
   "/hero/date-rooftop.webp",
@@ -389,5 +397,86 @@ export const Route = createFileRoute("/")({
     return { session };
   },
   component: IndexComponent,
-  ssr: false,
+  head: () => ({
+    links: [
+      {
+        href: getCanonicalUrl(),
+        rel: "canonical",
+      },
+    ],
+    meta: [
+      { title: SITE_TITLE },
+      {
+        content: SITE_DESCRIPTION,
+        name: "description",
+      },
+      {
+        content: getCanonicalUrl(),
+        property: "og:url",
+      },
+      {
+        content: SITE_TITLE,
+        property: "og:title",
+      },
+      {
+        content: SITE_DESCRIPTION,
+        property: "og:description",
+      },
+      {
+        content: OG_IMAGE_URL,
+        property: "og:image",
+      },
+      {
+        content: SITE_TITLE,
+        name: "twitter:title",
+      },
+      {
+        content: SITE_DESCRIPTION,
+        name: "twitter:description",
+      },
+      {
+        content: OG_IMAGE_URL,
+        name: "twitter:image",
+      },
+    ],
+    scripts: [
+      {
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          description: SITE_DESCRIPTION,
+          logo: getCanonicalUrl("/brand/chewbuu-logo-500.png"),
+          name: SITE_NAME,
+          slogan: SITE_TAGLINE,
+          url: getCanonicalUrl(),
+        }),
+        type: "application/ld+json",
+      },
+      {
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          description: SITE_DESCRIPTION,
+          name: SITE_NAME,
+          url: getCanonicalUrl(),
+        }),
+        type: "application/ld+json",
+      },
+      {
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: FAQS.map((faq) => ({
+            "@type": "Question",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: faq.a,
+            },
+            name: faq.q,
+          })),
+        }),
+        type: "application/ld+json",
+      },
+    ],
+  }),
 });
