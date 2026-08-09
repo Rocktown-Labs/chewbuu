@@ -84,9 +84,7 @@ jobs:
 
       - name: Run Database Migrations
         if: steps.neon_urls.outputs.db_url != ''
-        run: |
-          bun --cwd packages/db db:migrate
-          bun --cwd packages/db db:migrate:raw
+        run: bun --cwd packages/db db:migrate:raw
         env:
           DATABASE_URL: "${{ steps.neon_urls.outputs.db_url }}"
 
