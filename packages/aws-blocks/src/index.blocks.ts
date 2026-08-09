@@ -84,12 +84,9 @@ const metrics = new Metrics(scope, "metrics", {
     service: "chewbuu-api",
     stage: deploymentStage,
   },
-  logger: logger.child({ component: "metrics" }),
   namespace: "Chewbuu/Application",
 });
-const tracer = new Tracer(scope, "tracer", {
-  logger: logger.child({ component: "tracer" }),
-});
+const tracer = new Tracer(scope, "tracer");
 const dashboard = new Dashboard(scope, "dashboard", {
   dashboardName: `chewbuu-${deploymentStage}-api`,
   defaultTimeRange: "-PT8H",
