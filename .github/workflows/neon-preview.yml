@@ -68,12 +68,12 @@ jobs:
           project_id: ${{ vars.NEON_PROJECT_ID }}
 
       - name: Run Database Migrations
-        if: steps.create_neon_branch.outputs.db_url_pooled != ''
+        if: steps.create_neon_branch.outputs.db_url != ''
         run: |
           bun --cwd packages/db db:migrate
           bun --cwd packages/db db:migrate:raw
         env:
-          DATABASE_URL: "${{ steps.create_neon_branch.outputs.db_url_pooled }}"
+          DATABASE_URL: "${{ steps.create_neon_branch.outputs.db_url }}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
