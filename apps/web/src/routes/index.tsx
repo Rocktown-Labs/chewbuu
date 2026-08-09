@@ -4,6 +4,7 @@ import {
   useNavigate,
   redirect,
 } from "@tanstack/react-router";
+import { getRequest } from "@tanstack/react-start/server";
 import {
   Check,
   ChevronDown,
@@ -388,7 +389,15 @@ function IndexComponent() {
 
 export const Route = createFileRoute("/")({
   beforeLoad: async () => {
-    const session = await authClient.getSession();
+    const session = await authClient.getSession(
+      typeof window === "undefined"
+        ? {
+            fetchOptions: {
+              headers: getRequest().headers,
+            },
+          }
+        : undefined
+    );
     if (session.data?.user) {
       throw redirect({
         to: "/me",

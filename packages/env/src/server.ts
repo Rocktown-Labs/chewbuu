@@ -62,7 +62,7 @@ export const env = createEnv({
     STREAM_API_KEY: z.string().optional(),
     STREAM_API_SECRET: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
-    RESEND_FROM_EMAIL: z.string().default("Chewbuu <onboarding@chewbuu.com>"),
+    RESEND_FROM_EMAIL: z.string().default("Chewbuu <noreply@news.chewbuu.com>"),
     RESEND_WEBHOOK_SECRET: z.string().optional(),
     SENT_DM_API_KEY: z.string().optional(),
     SENT_DM_BASE_URL: z.url().default("https://api.sent.dm"),

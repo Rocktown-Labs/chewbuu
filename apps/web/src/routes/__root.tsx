@@ -105,10 +105,6 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         rel: "icon",
         type: "image/png",
       },
-      {
-        href: getCanonicalUrl(),
-        rel: "canonical",
-      },
     ],
     meta: [
       {
