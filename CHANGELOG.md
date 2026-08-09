@@ -40,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Removed the decorative sun icon from the `/me` weather badge so the weather condition icon and location text render cleanly without wrapping.
 - Expanded the landing hero background grid from six mirrored images to twelve distinct date and friends photos.
 - Fixed the header nav shifting on first load by only rendering the user-menu skeleton when a session cookie is present and sizing it to match the avatar button, instead of showing a wide placeholder for every visitor.
+- Fixed AWS-hosted document SSR route guards to read Better Auth sessions through the server API with forwarded request headers instead of using the browser auth client during Lambda rendering.
 
 ### Changed
 

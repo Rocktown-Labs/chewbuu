@@ -18,7 +18,6 @@ import { useEffect, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { pricingApi, type MembershipPlan } from "@/lib/dating-api";
-import { getHomepageSession } from "@/lib/home-session.functions";
 import {
   OG_IMAGE_URL,
   SITE_DESCRIPTION,
@@ -27,6 +26,7 @@ import {
   SITE_TITLE,
   getCanonicalUrl,
 } from "@/lib/seo";
+import { getServerSession } from "@/lib/session.functions";
 
 const HERO_IMAGES = [
   "/hero/date-rooftop.webp",
@@ -391,7 +391,7 @@ export const Route = createFileRoute("/")({
   beforeLoad: async () => {
     const session =
       typeof window === "undefined"
-        ? await getHomepageSession()
+        ? await getServerSession()
         : await authClient.getSession();
 
     if (session.data?.user) {
