@@ -45,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Migrated chat room reads and message writes from Hono/Upstash realtime to AWS Blocks while retaining the existing Neon/Drizzle history schema.
 - Kept Vercel for TanStack Start builds and previews, with `VITE_BLOCKS_API_URL` connecting the frontend to the AWS Blocks API.
+- Updated AWS Blocks PR previews to publish a GitHub deployment URL, keep a single preview comment current, and mark preview deployments inactive when the PR closes.
 
 ## [0.7.0] - 2026-07-20
 

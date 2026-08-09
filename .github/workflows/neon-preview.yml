@@ -10,7 +10,10 @@ on:
 
 permissions:
   contents: read
+  deployments: write
   id-token: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -140,6 +143,41 @@ jobs:
             --output text)
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
+      - name: Record preview deployment
+        if: steps.preview_url.outputs.url != '' && steps.preview_url.outputs.url != 'None'
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.preview_url.outputs.url }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullRequest = context.payload.pull_request;
+            const environment = `preview-pr-${context.issue.number}`;
+            const logUrl = `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+            const deployment = await github.rest.repos.createDeployment({
+              owner,
+              repo,
+              ref: pullRequest.head.sha,
+              auto_merge: false,
+              required_contexts: [],
+              environment,
+              description: `AWS Blocks preview for PR #${context.issue.number}`,
+              production_environment: false,
+              transient_environment: true,
+            });
+
+            await github.rest.repos.createDeploymentStatus({
+              owner,
+              repo,
+              deployment_id: deployment.data.id,
+              state: "success",
+              environment_url: process.env.PREVIEW_URL,
+              log_url: logUrl,
+              description: "AWS Blocks preview is ready",
+            });
+
       - name: Comment preview URL
         if: steps.preview_url.outputs.url != '' && steps.preview_url.outputs.url != 'None'
         uses: actions/github-script@v7
@@ -147,11 +185,47 @@ jobs:
           PREVIEW_URL: ${{ steps.preview_url.outputs.url }}
         with:
           script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            const marker = "<!-- chewbuu-aws-preview -->";
+            const body = [
+              marker,
+              "### AWS Blocks preview is ready",
+              "",
+              `Preview URL: ${process.env.PREVIEW_URL}`,
+              "",
+              `- Frontend and backend are deployed together in \`chewbuu-preview-pr-${issue_number}\``,
+              `- The app uses the preview Neon branch \`preview/pr-${issue_number}\``,
+              "- The preview is refreshed on each PR update and removed when the PR closes",
+            ].join("\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existingComment = comments.find(
+              (comment) =>
+                comment.user?.type === "Bot" && comment.body?.includes(marker)
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body,
+              });
+              return;
+            }
+
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `AWS preview deployed: ${process.env.PREVIEW_URL}`,
+              owner,
+              repo,
+              issue_number,
+              body,
             });
 
   delete_neon_branch:
@@ -194,3 +268,74 @@ jobs:
       - name: Delete AWS Blocks preview stack
         continue-on-error: true
         run: aws cloudformation delete-stack --stack-name "chewbuu-preview-pr-${{ github.event.number }}"
+
+      - name: Mark preview deployments inactive
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const environment = `preview-pr-${context.issue.number}`;
+            const logUrl = `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const { data: deployments } = await github.rest.repos.listDeployments({
+              owner,
+              repo,
+              environment,
+              per_page: 20,
+            });
+
+            for (const deployment of deployments) {
+              await github.rest.repos.createDeploymentStatus({
+                owner,
+                repo,
+                deployment_id: deployment.id,
+                state: "inactive",
+                log_url: logUrl,
+                description: "AWS Blocks preview was removed",
+              });
+            }
+
+      - name: Comment preview cleanup
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            const marker = "<!-- chewbuu-aws-preview -->";
+            const body = [
+              marker,
+              "### AWS Blocks preview removed",
+              "",
+              `The preview stack \`chewbuu-preview-pr-${issue_number}\` and Neon preview branch \`preview/pr-${issue_number}\` were queued for cleanup because this PR was closed.`,
+            ].join("\n");
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existingComment = comments.find(
+              (comment) =>
+                comment.user?.type === "Bot" && comment.body?.includes(marker)
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body,
+              });
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number,
+              body,
+            });
