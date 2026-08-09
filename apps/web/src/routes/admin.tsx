@@ -10,6 +10,7 @@ import { Input } from "@chewbuu/ui/components/input";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  Activity,
   BadgeCheck,
   Crown,
   RefreshCw,
@@ -37,6 +38,11 @@ const ADMIN_SECTIONS = [
     icon: UsersRound,
     label: "Circles",
     text: "The admin surface is ready to grow into moderation, party, circle, and event tooling.",
+  },
+  {
+    icon: Activity,
+    label: "Observability",
+    text: "CloudWatch dashboards, structured API logs, latency metrics, and X-Ray traces are wired for deployed AWS Blocks environments.",
   },
 ] as const;
 
@@ -122,7 +128,7 @@ const RouteComponent = () => {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         {ADMIN_SECTIONS.map(({ icon: Icon, label, text }) => (
           <Card key={label}>
             <CardHeader>
@@ -133,6 +139,31 @@ const RouteComponent = () => {
           </Card>
         ))}
       </div>
+
+      <section className="mt-8 rounded-lg border bg-card p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <Badge className="mb-3 rounded-full" variant="secondary">
+              AWS
+            </Badge>
+            <h2 className="font-semibold text-2xl">Operational visibility</h2>
+            <p className="text-muted-foreground">
+              Open the AWS Blocks dashboard for Lambda health, API metrics,
+              recent backend errors, and X-Ray trace entry points.
+            </p>
+          </div>
+          <Button
+            className="rounded-full"
+            onClick={() => {
+              window.location.assign("/admin/observability/aws-blocks");
+            }}
+            type="button"
+          >
+            <Activity data-icon="inline-start" />
+            Open dashboard
+          </Button>
+        </div>
+      </section>
 
       <section className="mt-8 rounded-lg border bg-card p-5">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">

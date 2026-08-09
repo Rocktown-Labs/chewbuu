@@ -172,11 +172,15 @@
       "dependencies": {
         "@ai-sdk/google": "^4.0.7",
         "@aws-blocks/bb-app-setting": "^0.1.3",
+        "@aws-blocks/bb-dashboard": "^0.1.2",
         "@aws-blocks/bb-data": "^0.2.2",
         "@aws-blocks/bb-distributed-table": "^0.1.3",
         "@aws-blocks/bb-file-bucket": "^0.1.2",
         "@aws-blocks/bb-kv-store": "^0.1.4",
+        "@aws-blocks/bb-logger": "^0.1.3",
+        "@aws-blocks/bb-metrics": "^0.1.3",
         "@aws-blocks/bb-realtime": "^0.1.3",
+        "@aws-blocks/bb-tracer": "^0.1.5",
         "@aws-blocks/blocks": "^0.2.3",
         "@aws-sdk/client-chime-sdk-meetings": "^3.1101.0",
         "@chewbuu/auth": "workspace:*",
@@ -366,13 +370,13 @@
 
     "@aws-blocks/bb-kv-store": ["@aws-blocks/bb-kv-store@0.1.4", "", { "dependencies": { "@aws-blocks/bb-logger": "^0.1.2", "@aws-blocks/core": "^0.1.6", "@aws-sdk/client-dynamodb": "^3.0.0", "@aws-sdk/lib-dynamodb": "^3.0.0", "@standard-schema/spec": "^1.1.0" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-bfYDnO6xXrx5WwA44rd5UEfA0kvaGPGrrA/0rZsXj2wwix7ritSlo3o1uBJE7ufqxpYNEf9RfWqWLvKLuX727Q=="],
 
-    "@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+    "@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.3", "", { "dependencies": { "@aws-blocks/core": "^0.1.17" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-Mobz5QgFyQi24D0GsDipdS3+jwqjkUsgzZUYgjB8jQZrkaTU7YiV4qK4Y4xCOnBWlMH5tliRZ3iMPzGAPHlSrQ=="],
 
-    "@aws-blocks/bb-metrics": ["@aws-blocks/bb-metrics@0.1.2", "", { "dependencies": { "@aws-blocks/bb-logger": "^0.1.2", "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-FGSCV5oM5+kB/CyTJC0aYUglsy8ZwQr/QPElRPrR1r4QAGTvWGHRgquH6qRaKlJYg3G1AzBmSfyep9uDn2hyRA=="],
+    "@aws-blocks/bb-metrics": ["@aws-blocks/bb-metrics@0.1.3", "", { "dependencies": { "@aws-blocks/bb-logger": "^0.1.3", "@aws-blocks/core": "^0.1.17" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-OaayzT9Cfc3P4nUll1Ry376v0IOEfUwYNR5NAxyCb3NgkvpYZuRafj8Hy5LvyBW/LBZsHlal8yID3qCZ5AkqAg=="],
 
     "@aws-blocks/bb-realtime": ["@aws-blocks/bb-realtime@0.1.3", "", { "dependencies": { "@aws-blocks/bb-app-setting": "^0.1.3", "@aws-blocks/bb-distributed-table": "^0.1.3", "@aws-blocks/bb-logger": "^0.1.2", "@aws-blocks/core": "^0.1.1", "@aws-sdk/client-apigatewaymanagementapi": "^3.1040.0", "@standard-schema/spec": "^1.1.0", "ws": "^8.18.0" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-l9YAcUTjnxtQDb60v/wnXjnX/dW8W3g+m6vaahsdyUVXCFw1n18f+rKusuWO9Ajzej0RboPqVj8CmSVgbTZNHg=="],
 
-    "@aws-blocks/bb-tracer": ["@aws-blocks/bb-tracer@0.1.4", "", { "dependencies": { "@aws-blocks/bb-logger": "^0.1.2", "@aws-blocks/core": "^0.1.2", "aws-xray-sdk-core": "^3.9.0" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-Y4JAHaKCGLCbWuCBebau9pIFsNB8jPgFbI8o15ff6RHQnMUEHlvr+eRefmwKL7akyis7VicUiaa2gREdxmlFGw=="],
+    "@aws-blocks/bb-tracer": ["@aws-blocks/bb-tracer@0.1.5", "", { "dependencies": { "@aws-blocks/bb-logger": "^0.1.3", "@aws-blocks/core": "^0.1.17", "aws-xray-sdk-core": "^3.9.0" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-D8ludcBJ5fdWSL6knWy0SXchLFw7ZRgY7Kcwbg7n+6OOo+2oKJBE4aE16HjdytbMTPHYQOiOwJsv2tyXEfOr9A=="],
 
     "@aws-blocks/blocks": ["@aws-blocks/blocks@0.2.3", "", { "dependencies": { "@aws-blocks/auth-common": "^0.1.3", "@aws-blocks/bb-agent": "^0.3.2", "@aws-blocks/bb-app-setting": "^0.1.3", "@aws-blocks/bb-async-job": "^0.1.2", "@aws-blocks/bb-auth-basic": "^0.1.3", "@aws-blocks/bb-auth-cognito": "^0.1.5", "@aws-blocks/bb-auth-oidc": "^0.1.6", "@aws-blocks/bb-cron-job": "^0.1.3", "@aws-blocks/bb-dashboard": "^0.1.2", "@aws-blocks/bb-data": "^0.2.1", "@aws-blocks/bb-distributed-data": "^0.1.3", "@aws-blocks/bb-distributed-table": "^0.1.3", "@aws-blocks/bb-email-client": "^0.1.3", "@aws-blocks/bb-file-bucket": "^0.1.2", "@aws-blocks/bb-knowledge-base": "^0.2.0", "@aws-blocks/bb-kv-store": "^0.1.4", "@aws-blocks/bb-logger": "^0.1.2", "@aws-blocks/bb-metrics": "^0.1.2", "@aws-blocks/bb-realtime": "^0.1.3", "@aws-blocks/bb-tracer": "^0.1.4", "@aws-blocks/core": "^0.1.10" }, "bin": { "blocks-vendorize": "dist/vendorize.js" } }, "sha512-VuRBJWlzNjnoKWg/mgdPqdbkCoBN6aHrpY0/vH1ovY1AzcLXe0sPE9zZlcwzxCgxx1iz569hR0Yg6fBX5VjhLw=="],
 
@@ -3773,6 +3777,50 @@
     "zustand": ["zustand@5.0.14", "", { "peerDependencies": { "@types/react": ">=18.0.0", "immer": ">=9.0.6", "react": ">=18.0.0", "use-sync-external-store": ">=1.2.0" }, "optionalPeers": ["@types/react", "immer", "react", "use-sync-external-store"] }, "sha512-/8tAspM5LMPr28b3fwLYrtdj77ECpfZviaP75CMTnwO8ISyaE4GDIG/9rDDYq/cH9D2Xw2A2RXglLInmVBQB/g=="],
 
     "zwitch": ["zwitch@2.0.4", "", {}, "sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A=="],
+
+    "@aws-blocks/bb-agent/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-app-setting/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-async-job/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-auth-basic/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-auth-cognito/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-auth-oidc/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-cron-job/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-data/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-distributed-data/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-distributed-table/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-email-client/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-file-bucket/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-knowledge-base/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-kv-store/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-logger/@aws-blocks/core": ["@aws-blocks/core@0.1.17", "", { "dependencies": { "@aws-blocks/hosting": "*", "@aws-blocks/pipeline": "*", "@aws-sdk/client-s3": "^3.700.0", "@aws-sdk/client-ssm": "^3.700.0", "cross-spawn": "^7.0.6", "http-proxy": "^1.18.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0", "next": ">=13.0.0", "unctx": ">=2.0.0" }, "optionalPeers": ["next", "unctx"], "bin": { "blocks-generate-spec": "dist/scripts/generate-spec-cli.js", "blocks-telemetry": "dist/scripts/telemetry-cli.js" } }, "sha512-0XFehnL3ANcxtJTH7PISo6s4+2NfpzAP7/AYhpcqjO4NFpC/fzZDEMmUzgIa9axwiE6S3XHzs/XUjyi9fuwEEA=="],
+
+    "@aws-blocks/bb-metrics/@aws-blocks/core": ["@aws-blocks/core@0.1.17", "", { "dependencies": { "@aws-blocks/hosting": "*", "@aws-blocks/pipeline": "*", "@aws-sdk/client-s3": "^3.700.0", "@aws-sdk/client-ssm": "^3.700.0", "cross-spawn": "^7.0.6", "http-proxy": "^1.18.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0", "next": ">=13.0.0", "unctx": ">=2.0.0" }, "optionalPeers": ["next", "unctx"], "bin": { "blocks-generate-spec": "dist/scripts/generate-spec-cli.js", "blocks-telemetry": "dist/scripts/telemetry-cli.js" } }, "sha512-0XFehnL3ANcxtJTH7PISo6s4+2NfpzAP7/AYhpcqjO4NFpC/fzZDEMmUzgIa9axwiE6S3XHzs/XUjyi9fuwEEA=="],
+
+    "@aws-blocks/bb-realtime/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/bb-tracer/@aws-blocks/core": ["@aws-blocks/core@0.1.17", "", { "dependencies": { "@aws-blocks/hosting": "*", "@aws-blocks/pipeline": "*", "@aws-sdk/client-s3": "^3.700.0", "@aws-sdk/client-ssm": "^3.700.0", "cross-spawn": "^7.0.6", "http-proxy": "^1.18.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0", "next": ">=13.0.0", "unctx": ">=2.0.0" }, "optionalPeers": ["next", "unctx"], "bin": { "blocks-generate-spec": "dist/scripts/generate-spec-cli.js", "blocks-telemetry": "dist/scripts/telemetry-cli.js" } }, "sha512-0XFehnL3ANcxtJTH7PISo6s4+2NfpzAP7/AYhpcqjO4NFpC/fzZDEMmUzgIa9axwiE6S3XHzs/XUjyi9fuwEEA=="],
+
+    "@aws-blocks/blocks/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
+
+    "@aws-blocks/blocks/@aws-blocks/bb-metrics": ["@aws-blocks/bb-metrics@0.1.2", "", { "dependencies": { "@aws-blocks/bb-logger": "^0.1.2", "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-FGSCV5oM5+kB/CyTJC0aYUglsy8ZwQr/QPElRPrR1r4QAGTvWGHRgquH6qRaKlJYg3G1AzBmSfyep9uDn2hyRA=="],
+
+    "@aws-blocks/blocks/@aws-blocks/bb-tracer": ["@aws-blocks/bb-tracer@0.1.4", "", { "dependencies": { "@aws-blocks/bb-logger": "^0.1.2", "@aws-blocks/core": "^0.1.2", "aws-xray-sdk-core": "^3.9.0" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-Y4JAHaKCGLCbWuCBebau9pIFsNB8jPgFbI8o15ff6RHQnMUEHlvr+eRefmwKL7akyis7VicUiaa2gREdxmlFGw=="],
+
+    "@aws-blocks/data-common/@aws-blocks/bb-logger": ["@aws-blocks/bb-logger@0.1.2", "", { "dependencies": { "@aws-blocks/core": "^0.1.1" }, "peerDependencies": { "aws-cdk-lib": "^2.257.0", "constructs": "^10.6.0" } }, "sha512-CT/EOEw2Dl2QNJPQJzQqNGwnDQ0EGPEbFphu+XFZ0qAzN4g3ohC0scyXOlWhw13WaTIvwSEFVOA1HSo+Mun4NQ=="],
 
     "@aws-blocks/hosting/jiti": ["jiti@2.7.0", "", { "bin": { "jiti": "lib/jiti-cli.mjs" } }, "sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ=="],
 

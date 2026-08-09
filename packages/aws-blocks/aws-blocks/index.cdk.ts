@@ -9,6 +9,7 @@ import { getStackName } from "@aws-blocks/blocks/scripts";
 import * as cdk from "aws-cdk-lib";
 import { Mixins, RemovalPolicies } from "aws-cdk-lib";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
+import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 
@@ -28,6 +29,7 @@ const awsAccount =
 const awsRegion =
   process.env.CDK_DEFAULT_REGION ?? process.env.AWS_REGION ?? "us-east-1";
 const cloudfrontCertificateArn = process.env.CLOUDFRONT_CERTIFICATE_ARN;
+const deploymentStage = prNumber ? `preview-pr-${prNumber}` : "production";
 
 export const blocksStack = await BlocksStack.create(app, stackName, {
   backendCDKPath: path.join(directory, "index.ts"),
@@ -49,6 +51,7 @@ const runtimeEnvironment: Record<string, string | undefined> = {
   BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
   BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
   BLOCKS_AUTH_SECRET_PARAMETER: process.env.BLOCKS_AUTH_SECRET_PARAMETER,
+  CHEWBUU_STAGE: process.env.CHEWBUU_STAGE ?? deploymentStage,
   CHIME_MEDIA_REGION: process.env.CHIME_MEDIA_REGION,
   CHIME_REGION: process.env.CHIME_REGION,
   CORS_ORIGIN: process.env.CORS_ORIGIN,
@@ -61,6 +64,8 @@ const runtimeEnvironment: Record<string, string | undefined> = {
   KV_REST_API_TOKEN: process.env.KV_REST_API_TOKEN,
   KV_REST_API_URL: process.env.KV_REST_API_URL,
   KV_URL: process.env.KV_URL,
+  LOG_LEVEL: process.env.LOG_LEVEL,
+  PR_NUMBER: process.env.PR_NUMBER,
   R2_ACCESS_KEY_ID: process.env.R2_ACCESS_KEY_ID,
   R2_ACCOUNT_ID: process.env.R2_ACCOUNT_ID,
   R2_BUCKET_NAME: process.env.R2_BUCKET_NAME,
@@ -168,4 +173,68 @@ if (webHosting) {
     value: webHosting.url,
   });
   void hostingUrlOutput;
+
+  const { ssrFunction } = webHosting;
+  if (ssrFunction) {
+    const ssrFunctionMetric = (metricName: string, statistic: string) =>
+      new cloudwatch.Metric({
+        dimensionsMap: {
+          FunctionName: ssrFunction.functionName,
+        },
+        metricName,
+        namespace: "AWS/Lambda",
+        period: cdk.Duration.minutes(1),
+        statistic,
+      });
+
+    const ssrDashboard = new cloudwatch.Dashboard(
+      blocksStack,
+      "WebSsrDashboard",
+      {
+        dashboardName: `chewbuu-${deploymentStage}-web-ssr`,
+        start: "-PT8H",
+        widgets: [
+          [
+            new cloudwatch.TextWidget({
+              height: 1,
+              markdown: `# Chewbuu Web SSR - ${deploymentStage}`,
+              width: 24,
+            }),
+          ],
+          [
+            new cloudwatch.GraphWidget({
+              height: 6,
+              left: [
+                ssrFunctionMetric("Invocations", "Sum"),
+                ssrFunctionMetric("Errors", "Sum"),
+              ],
+              title: "SSR invocations and errors",
+              width: 12,
+            }),
+            new cloudwatch.GraphWidget({
+              height: 6,
+              left: [ssrFunctionMetric("Duration", "p95")],
+              title: "SSR duration p95",
+              width: 12,
+            }),
+          ],
+          [
+            new cloudwatch.LogQueryWidget({
+              height: 8,
+              logGroupNames: [`/aws/lambda/${ssrFunction.functionName}`],
+              queryLines: [
+                "fields @timestamp, @message",
+                "filter @message like /ERROR|Error|Service Temporarily Unavailable|500/",
+                "sort @timestamp desc",
+                "limit 50",
+              ],
+              title: "Recent SSR errors",
+              width: 24,
+            }),
+          ],
+        ],
+      }
+    );
+    void ssrDashboard;
+  }
 }

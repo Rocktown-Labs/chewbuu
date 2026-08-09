@@ -131,6 +131,8 @@ jobs:
           DEPLOY_FRONTEND_TO_AWS: "true"
           NITRO_PRESET: "aws-lambda"
           PR_NUMBER: ${{ github.event.number }}
+          CHEWBUU_STAGE: preview-pr-${{ github.event.number }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL || 'info' }}
           BLOCKS_DB_URL: ${{ steps.neon_urls.outputs.db_url_pooled }}
           DATABASE_URL: ${{ steps.neon_urls.outputs.db_url_pooled }}
           BLOCKS_SSM_PARAM_DB_URL: /chewbuu-prod-db-url

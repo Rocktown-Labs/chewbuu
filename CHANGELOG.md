@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added AWS Blocks `Hosting` construct in `packages/aws-blocks/aws-blocks/index.cdk.ts` and enabled `DEPLOY_FRONTEND_TO_AWS` in GitHub Actions for full AWS frontend + backend deployments.
 - Added a bottom-anchored `Sheet` drawer component (`packages/ui/src/components/sheet.tsx`) built on the Base UI dialog primitive with slide-up/down animation, a drag handle, and a scrollable body.
 - Added a raw migration runner (`packages/db/src/migrate-raw.ts`) that applies the timestamped handwritten `.sql` migrations (tracked in a `schema_migrations` table) alongside `drizzle-kit`'s journal-based `db:migrate`.
+- Added AWS Blocks observability with structured backend logs, CloudWatch EMF metrics, X-Ray tracing, API and SSR dashboards, and an admin dashboard link.
 
 ### Fixed
 
