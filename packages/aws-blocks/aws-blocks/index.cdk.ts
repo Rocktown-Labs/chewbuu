@@ -88,7 +88,6 @@ const runtimeEnvironment: Record<string, string | undefined> = {
   STRIPE_SUGAR_ANNUAL_PRICE_ID: process.env.STRIPE_SUGAR_ANNUAL_PRICE_ID,
   STRIPE_SUGAR_PRICE_ID: process.env.STRIPE_SUGAR_PRICE_ID,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
-  VITE_NEON_AUTH_URL: process.env.VITE_NEON_AUTH_URL,
 };
 
 let webHosting: Hosting | undefined;

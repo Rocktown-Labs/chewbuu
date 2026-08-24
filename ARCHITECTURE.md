@@ -8,7 +8,7 @@ flowchart LR
   expo["Expo app"]
   auth["Better Auth\nTanStack route"]
   blocks["AWS Blocks API\nApi namespaces"]
-  db["Neon PostgreSQL\nBlocks Database + Kysely"]
+  db["PlanetScale PostgreSQL\nBlocks Database + Kysely"]
   kv["Blocks KVStore\nshort-lived cache/idempotency"]
   table["Blocks DistributedTable\nroom/story projections"]
   realtime["Blocks Realtime\nchat and presence"]

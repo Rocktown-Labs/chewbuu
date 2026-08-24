@@ -1,21 +1,126 @@
-# Chewbuu AWS Blocks
+# Chewbuu AWS Blocks backend
 
-This package owns the AWS Blocks backend boundary. The local Blocks server runs the same `ApiNamespace` and `Realtime` declarations that are deployed through CDK and Lambda.
+`packages/aws-blocks` is the production backend boundary for Chewbuu. It contains the AWS Blocks API, realtime declarations, Lambda/CDK deployment entrypoints, and the Kysely query layer used by the backend.
+
+## Architecture
+
+- **AWS Blocks** provides the API, Lambda hosting, CloudFront, WebSocket realtime, and deployment infrastructure.
+- **PlanetScale Postgres** is an external database. AWS does not provision or own the database cluster.
+- **Kysely** is the application query layer. `packages/aws-blocks/src/database.ts` exposes the typed `Kysely<BlocksDatabase>` adapter created by `@aws-blocks/bb-data`.
+- **Better Auth** uses the shared PostgreSQL/Kysely database layer from `packages/db`.
+- **Migrations** are plain SQL files in `packages/aws-blocks/migrations/`. They are applied by `packages/db/src/migrate.ts` before the AWS deployment.
+
+The database is intentionally accessed through two connection modes:
+
+| Use | PlanetScale port | Secret | Reason |
+| --- | --: | --- | --- |
+| Application/runtime traffic | `6432` | `BLOCKS_DB_URL` | Pooled connections for Lambda and web requests |
+| Schema migrations | `5432` | `BLOCKS_MIGRATION_DB_URL` | Stable session for DDL and advisory locking |
+
+Do not commit either connection string. Store them in the GitHub `production` environment or in an untracked local environment file.
 
 ## Local development
 
-Run `bun run dev:blocks` from the repository root. The Blocks front door runs on `http://localhost:3000` and proxies the TanStack Start app on port `3001`.
+Install dependencies from the repository root:
 
-Realtime is transport only. Chat messages are written to PostgreSQL through Blocks `Database`/Kysely before they are published, and clients must re-read history after a reconnect because AWS Blocks Realtime does not provide replay or delivery guarantees.
+```bash
+bun install
+```
 
-The existing PostgreSQL schema was introspected with the `bb-data` pull generator. Generated table types and metadata live under `generated/`; the application query layer uses the Blocks Kysely adapter. Better Auth uses the shared Drizzle adapter against the same database.
+Start the AWS Blocks local server:
 
-PlanetScale Postgres is external to the AWS stack. Runtime traffic uses the pooled connection URL on port `6432`; production migrations use a direct connection URL on port `5432`. The deploy script writes `BLOCKS_DB_URL` to a stack-scoped SSM SecureString. Set `DATABASE_CA_CERT` or commit the provider CA in `generated/database.ca.ts` when the provider requires a custom certificate.
+```bash
+bun run dev:blocks
+```
 
-The GitHub Actions deployment expects a `production` environment with `AWS_ROLE_ARN`, `BLOCKS_DB_URL`, and `BLOCKS_MIGRATION_DB_URL` secrets, plus an `AWS_REGION` variable. GitHub OIDC is used; no long-lived AWS access key is required.
+The Blocks front door listens on `http://localhost:3000` and proxies the TanStack Start application on port `3001`. Local Blocks mocks persist under `.bb-data/`.
 
-## Deployment topology
+For the complete application development environment, use:
 
-Vercel remains the TanStack Start frontend and continues to provide GitHub PR previews. Set `BLOCKS_API_URL` in each Vercel environment; the web build exposes it as `VITE_BLOCKS_API_URL`. Deploy the Blocks API and WebSocket infrastructure with `bun run aws:deploy` using AWS credentials or an OIDC-backed CI role.
+```bash
+bun run dev
+```
 
-The target database is PlanetScale Postgres. Populate a fresh instance with the baseline and raw migrations before cutover; subsequent schema changes belong in `migrations/` and are applied by the Blocks external-database deployment lifecycle. PlanetScale can reuse the generated types and `fromExisting()` connection without changing the API contract.
+A local PostgreSQL URL must be available as `DATABASE_URL` when loading the auth or database packages. The URL may point to a local PostgreSQL instance or a disposable PlanetScale development branch. Never put credentials in committed `.env.example` files or source code.
+
+## Database migrations
+
+Migration history has one source of truth: `packages/aws-blocks/migrations/`.
+
+- `000_baseline.sql` creates the original application and Better Auth schema.
+- The numbered and timestamped files apply subsequent Better Auth, dating, profile, chat, notification, and matching changes.
+- `20260801091000_chat_read_state_primary_key.sql` fixes the legacy chat read-state primary key after the chat tables exist.
+- Migration state is stored in the PostgreSQL `_migrations` table.
+
+Run migrations locally with the direct/session connection:
+
+```bash
+BLOCKS_MIGRATION_DB_URL='postgres://...:5432/...' bun run db:migrate
+```
+
+The runner:
+
+1. Rewrites the migration URL to port `5432`.
+2. Takes a PostgreSQL advisory lock so concurrent deploys cannot migrate simultaneously.
+3. Runs each SQL file in lexical order, inside a transaction.
+4. Records successful files in `_migrations`.
+5. Recognizes the previous `schema_migrations` table and the old baseline tables when upgrading an existing database.
+6. Reports PostgreSQL error codes, details, hints, tables, columns, and constraints without printing credentials.
+
+Migration files are immutable once applied. Add a new timestamped SQL file for every schema change. Prefer idempotent SQL (`IF NOT EXISTS`, `IF EXISTS`) for changes that may be replayed while moving an existing database.
+
+## Production deployment
+
+The GitHub Actions workflow `.github/workflows/aws-blocks.yml`:
+
+1. Authenticates to AWS with GitHub Enterprise OIDC.
+2. Runs `bun run db:migrate` using `BLOCKS_MIGRATION_DB_URL` on port `5432`.
+3. Deploys AWS Blocks with `BLOCKS_DB_URL` on port `6432` as the runtime connection.
+4. Stores the runtime database URL in the stack-scoped SSM parameter used by the Lambdas.
+5. Deploys the API, realtime infrastructure, and optional frontend hosting.
+
+The production GitHub environment requires:
+
+- `AWS_ROLE_ARN`
+- `BLOCKS_DB_URL`
+- `BLOCKS_MIGRATION_DB_URL`
+- `BETTER_AUTH_SECRET`
+- the application provider secrets listed in the workflow
+
+The database migration credential must be able to create and alter tables, indexes, constraints, and the `_migrations` table. Runtime credentials must be able to perform the application queries required by the API and Better Auth.
+
+Deploy manually only from a configured AWS account and with the same environment variables as CI:
+
+```bash
+bun run aws:deploy
+```
+
+Do not run `cdk deploy` directly; the Blocks deployment script prepares the CDK context, frontend bundle, and environment wiring.
+
+## Vercel
+
+Vercel is used for web previews and the TanStack Start frontend workflow. AWS Blocks is the production API and realtime boundary. This repository does not define a `bun run vercel` script; use the Vercel dashboard or the repository's configured Vercel integration for frontend deployments.
+
+Set the frontend's `VITE_BLOCKS_API_URL` to the deployed Blocks API URL when the frontend and backend use different origins. For same-origin AWS hosting, the workflow uses `VITE_SERVER_URL=/`.
+
+## Important files
+
+- `src/database.ts` — external PlanetScale connection and typed Kysely adapter.
+- `src/index.blocks.ts` — API/realtime composition and runtime environment setup.
+- `aws-blocks/index.cdk.ts` — CDK stack and hosting configuration.
+- `aws-blocks/scripts/deploy.ts` — production deployment entrypoint.
+- `aws-blocks/scripts/server.ts` — local Blocks server entrypoint.
+- `migrations/` — immutable SQL migration history.
+- `generated/` — generated database metadata and provider CA material.
+
+## Checks
+
+Run repository checks from the root:
+
+```bash
+bun run check
+bun run check-types
+bun test
+```
+
+For a deployment change, also verify the CloudFormation stack state and inspect the migration output before investigating application-level failures.

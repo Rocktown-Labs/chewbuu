@@ -1,14 +1,11 @@
 import { expo } from "@better-auth/expo";
 import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
-import { createDb, ensureSchemaMigrated } from "@chewbuu/db";
-import * as schema from "@chewbuu/db/schema/auth";
+import { createDb } from "@chewbuu/db";
 import { env } from "@chewbuu/env/server";
 import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins/admin";
 import { username } from "better-auth/plugins/username";
-import { eq } from "drizzle-orm";
 import Stripe from "stripe";
 
 import { sendPasswordResetEmail, sendVerificationEmail } from "./email";
@@ -43,7 +40,6 @@ const buildStripePlans = () => [
 ];
 
 export const createAuth = () => {
-  void ensureSchemaMigrated();
   const db = createDb();
   const adminEmails = parseAdminEmails(env.BETTER_AUTH_ADMIN_EMAILS);
   const stripeEnabled = Boolean(
@@ -71,11 +67,12 @@ export const createAuth = () => {
       fallback: env.BETTER_AUTH_URL,
       protocol: process.env.NODE_ENV === "development" ? "http" : "https",
     },
-    database: drizzleAdapter(db, {
-      provider: "pg",
-
-      schema,
-    }),
+    database: {
+      casing: "snake",
+      db,
+      transaction: true,
+      type: "postgres",
+    },
     databaseHooks: {
       user: {
         create: {
@@ -85,13 +82,14 @@ export const createAuth = () => {
             }
 
             await db
-              .update(schema.user)
+              .updateTable("user")
               .set({
-                dailyDateLimit: ADMIN_MEMBERSHIP_TIER.dailyDateLimit,
-                membershipTier: ADMIN_MEMBERSHIP_TIER.id,
+                daily_date_limit: ADMIN_MEMBERSHIP_TIER.dailyDateLimit,
+                membership_tier: ADMIN_MEMBERSHIP_TIER.id,
                 role: "admin",
               })
-              .where(eq(schema.user.id, user.id));
+              .where("id", "=", user.id)
+              .execute();
           },
         },
       },

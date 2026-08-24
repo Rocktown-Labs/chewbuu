@@ -1,130 +1,193 @@
-# chewbuu
+# Chewbuu
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Start, Hono, and more.
+Chewbuu is a full-stack dating and social application built with TypeScript, TanStack Start, React, Expo, Hono, Better Auth, AWS Blocks, and PlanetScale Postgres.
 
-## Features
+## Stack
 
-- **TypeScript** - For type safety and improved developer experience
-- **TanStack Start** - SSR framework with TanStack Router
-- **React Native** - Build mobile apps using React
-- **Expo** - Tools for React Native development
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Hono** - Lightweight, performant server framework
-- **Node.js** - Runtime environment
-- **Drizzle** - TypeScript-first ORM
-- **PostgreSQL** - Database engine
-- **Authentication** - Better-Auth
-- **Oxlint** - Oxlint + Oxfmt (linting & formatting)
-- **Turborepo** - Optimized monorepo build system
+- **Web:** TanStack Start, React, TanStack Router, Vite, Tailwind CSS
+- **Mobile:** Expo and React Native
+- **API:** Hono
+- **Production backend:** AWS Blocks, AWS Lambda, API Gateway, CloudFront, and WebSocket realtime
+- **Database:** PlanetScale Postgres
+- **Database access:** Kysely with the PostgreSQL `pg` driver
+- **Authentication:** Better Auth with its built-in PostgreSQL/Kysely adapter
+- **Email:** Resend and React Email
+- **Storage and caching:** provider integrations configured through the environment
+- **Monorepo:** Bun workspaces and Turborepo
+- **Quality:** TypeScript, Oxlint, Oxfmt, and Ultracite
 
-## Getting Started
+## Repository layout
 
-First, install the dependencies:
+```text
+chewbuu/
+├── apps/
+│   ├── web/              # TanStack Start web application
+│   ├── native/           # Expo/React Native application
+│   └── server/           # Hono API and Better Auth route mounting
+├── packages/
+│   ├── auth/             # Better Auth configuration and email flows
+│   ├── aws-blocks/       # AWS Blocks API, realtime, CDK, and SQL migrations
+│   ├── db/               # Shared pg pool, Kysely types, and migration runner
+│   ├── emails/           # React Email templates
+│   ├── env/              # Server/client environment validation
+│   └── ui/               # Shared UI components and styles
+├── .github/workflows/    # CI and production deployment workflows
+└── vercel.json           # Vercel frontend configuration
+```
+
+## Getting started
+
+Install dependencies from the repository root:
 
 ```bash
 bun install
 ```
 
-## Database Setup
-
-This project uses PostgreSQL with Drizzle ORM.
-
-1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` file with your PostgreSQL connection details.
-
-3. Apply the schema to your database:
-
-```bash
-bun run db:push
-```
-
-Then, run the development server:
+Start all development services:
 
 ```bash
 bun run dev
 ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application. Use the Expo Go app to run the mobile application. The API is running at [http://localhost:3000](http://localhost:3000).
+The web application is normally available at `http://localhost:3001`. The Hono API and AWS Blocks local front door use the ports documented by their package scripts.
 
-## UI Customization
+Start individual services when needed:
 
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
+```bash
+bun run dev:web
+bun run dev:native
+bun run dev:blocks
+```
 
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
+The native app requires an Expo-compatible simulator or device. The Blocks local server uses local mocks and persists their data under `.bb-data/`.
 
-### Add more shared components
+## Environment configuration
 
-Run this from the project root to add more primitives to the shared UI package:
+Environment validation lives in `packages/env`. Use untracked environment files for local development and configure production values in the hosting provider or GitHub environment. Never commit connection strings, auth secrets, API keys, or provider certificates.
+
+The database variables are:
+
+| Variable | Use |
+| --- | --- |
+| `DATABASE_URL` | Application database URL used by Better Auth and local server code |
+| `BLOCKS_DB_URL` | AWS Blocks runtime URL; use PlanetScale pooled port `6432` |
+| `BLOCKS_MIGRATION_DB_URL` | Migration URL; use PlanetScale direct/session port `5432` |
+| `DATABASE_CA_CERT` | Optional provider CA certificate when TLS verification needs a pinned CA |
+
+For local work, `DATABASE_URL` can point to a local PostgreSQL instance. For a PlanetScale branch, keep the pooled and direct URLs separate and use the direct URL only for migrations.
+
+## Database and migrations
+
+Kysely is the only application database ORM. Better Auth uses its built-in Kysely/PostgreSQL adapter, and AWS Blocks uses its typed Kysely adapter. Drizzle is not part of the runtime or migration toolchain.
+
+SQL migration history lives in one place:
+
+```text
+packages/aws-blocks/migrations/
+```
+
+The migration directory contains an immutable baseline followed by numbered and timestamped deltas. Migration state is stored in the PostgreSQL `_migrations` table.
+
+Run migrations locally with a direct/session URL:
+
+```bash
+BLOCKS_MIGRATION_DB_URL='postgres://...:5432/...' bun run db:migrate
+```
+
+The runner in `packages/db/src/migrate.ts`:
+
+- forces migrations to the direct `5432` session port;
+- serializes deploys with a PostgreSQL advisory lock;
+- runs each migration transactionally;
+- recognizes the previous `schema_migrations` table and old baseline tables during cutover;
+- records successful files in `_migrations`; and
+- prints sanitized PostgreSQL diagnostics without exposing credentials.
+
+Never edit an applied migration. Add a new timestamped `.sql` file, test it against an isolated database, and then deploy it through the production workflow.
+
+## AWS Blocks production deployment
+
+The production workflow is `.github/workflows/aws-blocks.yml`. It performs migrations before the AWS deployment:
+
+```text
+BLOCKS_MIGRATION_DB_URL: PlanetScale 5432 direct/session connection
+        │
+        └── bun run db:migrate
+
+BLOCKS_DB_URL: PlanetScale 6432 pooled runtime connection
+        │
+        └── bun run aws:deploy
+```
+
+Required production database secrets:
+
+- `BLOCKS_DB_URL`
+- `BLOCKS_MIGRATION_DB_URL`
+
+The migration credential needs DDL permissions. The runtime credential needs the application’s normal read/write permissions. AWS credentials are supplied through GitHub Enterprise OIDC; long-lived AWS access keys are not required.
+
+Run a configured deployment manually with:
+
+```bash
+bun run aws:deploy
+```
+
+Use `bun run aws:sandbox` for an AWS Blocks sandbox deployment. Do not bypass the deployment wrapper with a raw `cdk deploy`, because the wrapper prepares the Blocks project context and hosting artifacts.
+
+More backend-specific details are in [`packages/aws-blocks/README.md`](packages/aws-blocks/README.md).
+
+## Vercel frontend deployment
+
+The repository contains Vercel configuration, but it does not define a `bun run vercel` command. Use the linked Vercel project/dashboard or the Vercel CLI directly when required.
+
+The frontend uses `VITE_BLOCKS_API_URL` when the AWS Blocks API is on another origin. AWS-hosted same-origin deployments use `VITE_SERVER_URL=/`.
+
+## UI development
+
+Shared UI primitives live in `packages/ui`:
 
 ```bash
 npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
 ```
 
-Import shared components like this:
+Import shared components through the package boundary:
 
 ```tsx
 import { Button } from "@chewbuu/ui/components/button";
 ```
 
-### Add app-specific blocks
+## Available scripts
 
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
+Run these from the repository root:
 
-## Deployment
+| Command               | Purpose                                            |
+| --------------------- | -------------------------------------------------- |
+| `bun run dev`         | Start the development tasks through Turborepo      |
+| `bun run dev:web`     | Start the web application                          |
+| `bun run dev:native`  | Start the Expo application                         |
+| `bun run dev:blocks`  | Start the local AWS Blocks server                  |
+| `bun run build`       | Build workspace packages and applications          |
+| `bun run check`       | Run Ultracite lint and format checks               |
+| `bun run fix`         | Apply Ultracite fixes                              |
+| `bun run check-types` | Typecheck the workspace                            |
+| `bun test`            | Run workspace tests                                |
+| `bun run test:e2e`    | Run Playwright browser tests                       |
+| `bun run db:migrate`  | Apply SQL migrations using the direct database URL |
+| `bun run aws:sandbox` | Deploy an AWS Blocks sandbox                       |
+| `bun run aws:deploy`  | Deploy the production AWS Blocks stack             |
 
-### Vercel Services
+There are intentionally no Drizzle schema-generation, database-studio, or `bun run vercel` scripts. Database changes are SQL migrations reviewed with the application code, and Vercel deployment is managed by the linked Vercel project.
 
-- Target: web + server
-- Config: `vercel.json`
-- Link the project first: bun run deploy:setup
-- Local Vercel dev: bun run dev:vercel
-- Sync preview env: bun run env:preview
-- Sync production env: bun run env:production
-- Dry-run check (no upload): bun run deploy:check
-- Preview deploy: bun run deploy
-- Production deploy: bun run deploy:prod
-- Web requests under `/api/*` route to the server service and are rewritten before reaching the backend. Vercel Services share project environment variables, but deploys do not upload local `.env` files automatically. Link the project with `vercel link`, then run the env sync command before your first deploy (otherwise the deployment starts with no env vars), or pass one-off envs with `vercel deploy -e KEY=value`. Pass Vercel CLI flags to the env sync command directly, for example: `bun run env:production --scope your-team`.
+## Checks before a pull request
 
-For more details, see the guide on [Deploying to Vercel](https://www.better-t-stack.dev/docs/guides/vercel).
-
-## Git Hooks and Formatting
-
-- Run checks: `bun run check`
-
-## Project Structure
-
-```
-chewbuu/
-├── apps/
-│   ├── web/         # Frontend application (React + TanStack Start)
-│   ├── native/      # Mobile application (React Native, Expo)
-│   └── server/      # Backend API (Hono)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── auth/        # Authentication configuration & logic
-│   └── db/          # Database schema & queries
+```bash
+bun run check
+bun run check-types
+bun test
 ```
 
-## Available Scripts
+For browser-facing changes, also run:
 
-- `bun run dev`: Start all applications in development mode
-- `bun run build`: Build all applications
-- `bun run dev:web`: Start only the web application
-- `bun run dev:server`: Start only the server
-- `bun run check-types`: Check TypeScript types across all apps
-- `bun run dev:native`: Start the React Native/Expo development server
-- `bun run db:push`: Push schema changes to database
-- `bun run db:generate`: Generate database client/types
-- `bun run db:migrate`: Run database migrations
-- `bun run db:studio`: Open database studio UI
-- `bun run check`: Run Oxlint and Oxfmt
-- `bun run deploy:setup`: Link this repo to a Vercel project (first-time setup)
-- `bun run dev:vercel`: Run the Vercel Services dev environment locally
-- `bun run env:preview`: Sync local env files to the Vercel preview environment
-- `bun run env:production`: Sync local env files to the Vercel production environment
-- `bun run deploy`: Create a Vercel preview deployment
-- `bun run deploy:prod`: Deploy to Vercel production
-- `bun run deploy:check`: Dry-run a deploy to preview framework detection and included files without uploading
+```bash
+bun run test:e2e
+```
