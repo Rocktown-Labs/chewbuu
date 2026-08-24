@@ -149,7 +149,7 @@ jobs:
           echo "CLOUDFRONT_CERTIFICATE_ARN=$certificate_arn" >> "$GITHUB_ENV"
 
       - name: Apply database migrations
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         run: bun --cwd packages/db db:migrate:raw
         env:
           DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}

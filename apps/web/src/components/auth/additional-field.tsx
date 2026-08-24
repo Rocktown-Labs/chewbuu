@@ -404,6 +404,11 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
         required={field.required}
         readOnly={field.readOnly}
         disabled={isPending}
+        className={
+          name === "username"
+            ? "h-10 rounded-full border border-border bg-background px-4 text-sm"
+            : undefined
+        }
       />
 
       <FieldError />

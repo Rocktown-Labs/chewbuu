@@ -1,7 +1,7 @@
 import { expo } from "@better-auth/expo";
 import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
-import { createDb, ensureSchemaMigrated } from "@chewbuu/db";
+import { createDb } from "@chewbuu/db";
 import * as schema from "@chewbuu/db/schema/auth";
 import { env } from "@chewbuu/env/server";
 import { betterAuth } from "better-auth";
@@ -43,7 +43,6 @@ const buildStripePlans = () => [
 ];
 
 export const createAuth = () => {
-  void ensureSchemaMigrated();
   const db = createDb();
   const adminEmails = parseAdminEmails(env.BETTER_AUTH_ADMIN_EMAILS);
   const stripeEnabled = Boolean(
@@ -128,6 +127,10 @@ export const createAuth = () => {
     ],
     rateLimit: {
       customRules: {
+        // Session reads are safe to retry and do not need brute-force protection.
+        // Keeping them out of the database-backed limiter avoids a Neon write on
+        // every browser session check.
+        "/get-session": false,
         "/sign-in/email": {
           max: 10,
           window: 60,
@@ -144,6 +147,9 @@ export const createAuth = () => {
     },
     secret: env.BETTER_AUTH_SECRET,
     session: {
+      // GET /get-session must remain read-only so session hydration cannot
+      // refresh or write the database on every page load.
+      deferSessionRefresh: true,
       cookieCache: {
         enabled: true,
         maxAge: 5 * 60,

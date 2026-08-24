@@ -42,11 +42,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Expanded the landing hero background grid from six mirrored images to twelve distinct date and friends photos.
 - Fixed the header nav shifting on first load by only rendering the user-menu skeleton when a session cookie is present and sizing it to match the avatar button, instead of showing a wide placeholder for every visitor.
 - Fixed AWS-hosted document SSR route guards to read Better Auth sessions through the server API with forwarded request headers instead of using the browser auth client during Lambda rendering.
+- Removed the always-on one-minute Neon lifecycle poller. Checked-in dates now schedule a one-shot EventBridge Scheduler invocation, and lifecycle queries are scoped to the scheduled date request.
+- Removed runtime schema DDL from Lambda initialization; schema changes remain controlled by the deployment migration job.
+- Excluded read-only `/get-session` requests from Better Auth's database-backed rate limiter and deferred session refreshes to avoid unnecessary Neon writes while preserving sign-in and sign-up limits.
+- Improved light-mode landing-page hero image contrast and matched the sign-up username input to the form's pill styling.
 
 ### Changed
 
 - Migrated chat room reads and message writes from Hono/Upstash realtime to AWS Blocks while retaining the existing Neon/Drizzle history schema.
-- Kept Vercel for TanStack Start builds and previews, with `VITE_BLOCKS_API_URL` connecting the frontend to the AWS Blocks API.
+- Deploys the TanStack Start frontend and AWS Blocks API together through AWS Blocks Hosting, with `VITE_BLOCKS_API_URL` connecting browser calls to the AWS Blocks API.
 - Updated AWS Blocks PR previews to publish a GitHub deployment URL, keep a single preview comment current, and mark preview deployments inactive when the PR closes.
 
 ## [0.7.0] - 2026-07-20

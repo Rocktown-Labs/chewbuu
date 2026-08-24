@@ -134,7 +134,7 @@ const HomeComponent = () => {
       {/* HERO SECTION (Netflix style grid layout) */}
       <section className="relative min-h-[92svh] flex flex-col items-center justify-center text-center px-4 py-20 border-b-8 border-border bg-muted/20 overflow-hidden">
         {/* Faded Background Grid Grid */}
-        <div className="absolute inset-0 opacity-25 dark:opacity-30 pointer-events-none grid grid-cols-3 md:grid-cols-6 gap-3 p-4 select-none">
+        <div className="absolute inset-0 opacity-35 dark:opacity-30 pointer-events-none grid grid-cols-3 md:grid-cols-6 gap-3 p-4 select-none">
           {HERO_IMAGES.map((image, i) => (
             <div
               key={i}
@@ -143,12 +143,12 @@ const HomeComponent = () => {
               <img
                 src={image}
                 alt=""
-                className="w-full h-full object-cover grayscale"
+                className="w-full h-full object-cover grayscale brightness-75 contrast-125 dark:brightness-100 dark:contrast-100"
               />
             </div>
           ))}
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/90 to-background/50 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/90 to-background/20 pointer-events-none dark:to-background/50" />
 
         {/* Hero Content */}
         <div className="relative z-10 max-w-4xl space-y-6 flex flex-col items-center mt-6">

@@ -22,6 +22,7 @@ import { z } from "zod";
 import { getDatabaseUrl, getDb, jsonb } from "./database";
 import type { BlocksDatabase } from "./database";
 import { nextDateLifecycleStatus } from "./date-lifecycle";
+import { scheduleDateLifecycle } from "./date-lifecycle-scheduler";
 import {
   adjustReliabilityScore,
   calculateMatchScore,
@@ -580,16 +581,22 @@ const ensureAcceptedFriendship = async (
     .execute();
 };
 
-const runDateLifecycleInternal = async (at?: string) => {
+const runDateLifecycleInternal = async (
+  at?: string,
+  dateRequestId?: string
+) => {
   const now = at ? new Date(at) : new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Lifecycle time is invalid");
   const db = await getDb();
-  const requests = await db
+  let requestQuery = db
     .selectFrom("date_request")
-    .selectAll()
+    .select(["actual_end_at", "id", "scheduled_at", "status", "user_id"])
     .where("status", "in", ["checked_in", "review_due"])
-    .where("scheduled_at", "<=", now)
-    .execute();
+    .where("scheduled_at", "<=", now);
+  if (dateRequestId) {
+    requestQuery = requestQuery.where("id", "=", dateRequestId);
+  }
+  const requests = await requestQuery.execute();
   let processed = 0;
   for (const request of requests) {
     const pendingReviews = await db
@@ -671,8 +678,10 @@ const runDateLifecycleInternal = async (at?: string) => {
   return { processed };
 };
 
-export const runDateLifecycle = async (at?: string) =>
-  observeScheduledJob("runDateLifecycle", () => runDateLifecycleInternal(at));
+export const runDateLifecycle = async (at?: string, dateRequestId?: string) =>
+  observeScheduledJob("runDateLifecycle", () =>
+    runDateLifecycleInternal(at, dateRequestId)
+  );
 
 const loadProfile = async (userId: string, sessionUser: SessionUser) => {
   const db = await getDb();
@@ -2513,7 +2522,7 @@ const checkIn = async (
   input: unknown
 ): Promise<CheckInResponse> => {
   const body = checkInSchema.parse(input);
-  await getOwnedRequest(body.dateRequestId, sessionUser.id);
+  const request = await getOwnedRequest(body.dateRequestId, sessionUser.id);
   const db = await getDb();
   await db
     .updateTable("date_request")
@@ -2525,6 +2534,10 @@ const checkIn = async (
     .where("id", "=", body.dateRequestId)
     .where("user_id", "=", sessionUser.id)
     .execute();
+  await scheduleDateLifecycle({
+    dateRequestId: body.dateRequestId,
+    scheduledAt: new Date(request.scheduled_at),
+  });
   return {
     dateRequestId: body.dateRequestId,
     message: "Check-in confirmed! Enjoy your date.",

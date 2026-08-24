@@ -10,8 +10,7 @@ import * as cdk from "aws-cdk-lib";
 import { Mixins, RemovalPolicies } from "aws-cdk-lib";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
-import * as events from "aws-cdk-lib/aws-events";
-import * as targets from "aws-cdk-lib/aws-events-targets";
+import * as iam from "aws-cdk-lib/aws-iam";
 
 const directory = import.meta.dirname;
 const app = new cdk.App();
@@ -39,6 +38,30 @@ export const blocksStack = await BlocksStack.create(app, stackName, {
     region: awsRegion,
   },
 });
+
+const dateLifecycleSchedulerRole = new iam.Role(
+  blocksStack,
+  "DateLifecycleSchedulerRole",
+  {
+    assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com"),
+  }
+);
+blocksStack.handler.grantInvoke(dateLifecycleSchedulerRole);
+blocksStack.handler.addToRolePolicy(
+  new iam.PolicyStatement({
+    actions: ["scheduler:CreateSchedule", "scheduler:UpdateSchedule"],
+    resources: ["*"],
+  })
+);
+dateLifecycleSchedulerRole.grantPassRole(blocksStack.handler.grantPrincipal);
+blocksStack.handler.addEnvironment(
+  "DATE_LIFECYCLE_FUNCTION_ARN",
+  blocksStack.handler.functionArn
+);
+blocksStack.handler.addEnvironment(
+  "DATE_LIFECYCLE_SCHEDULER_ROLE_ARN",
+  dateLifecycleSchedulerRole.roleArn
+);
 
 // Env vars consumed by the Blocks API handler (packages/aws-blocks/src/
 // index.blocks.ts), the Better Auth runtime bundled into the SSR Lambda
@@ -151,16 +174,6 @@ blocksStack.handler.addToRolePolicy(
     resources: ["*"],
   })
 );
-
-const dateLifecycleSchedule = new events.Rule(
-  blocksStack,
-  "DateLifecycleSchedule",
-  {
-    schedule: events.Schedule.rate(cdk.Duration.minutes(1)),
-    targets: [new targets.LambdaFunction(blocksStack.handler)],
-  }
-);
-void dateLifecycleSchedule;
 
 const blocksApiOutput = new cdk.CfnOutput(blocksStack, "BlocksApiUrl", {
   value: blocksStack.apiUrl,
