@@ -1,8 +1,14 @@
 import { env } from "@chewbuu/env/server";
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 
 import * as schema from "./schema";
+
+const pool = new Pool({
+  allowExitOnIdle: true,
+  connectionString: env.DATABASE_URL,
+  max: 5,
+});
 
 let migrationChecked = false;
 
@@ -16,10 +22,13 @@ export async function ensureSchemaMigrated() {
   }
   migrationChecked = true;
   try {
-    const sql = neon(env.DATABASE_URL);
-    await sql`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "display_username" text;`;
-    await sql`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "username" text;`;
-    await sql`
+    await pool.query(
+      'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "display_username" text;'
+    );
+    await pool.query(
+      'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "username" text;'
+    );
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS "passkey" (
         "backed_up" boolean DEFAULT false NOT NULL,
         "counter" integer NOT NULL,
@@ -32,8 +41,10 @@ export async function ensureSchemaMigrated() {
         "transports" text,
         "user_id" text NOT NULL
       );
-    `;
-    await sql`ALTER TABLE "passkey" ADD COLUMN IF NOT EXISTS "aaguid" text;`;
+    `);
+    await pool.query(
+      'ALTER TABLE "passkey" ADD COLUMN IF NOT EXISTS "aaguid" text;'
+    );
   } catch (error) {
     console.error("Schema migration check error:", error);
   }
@@ -41,8 +52,7 @@ export async function ensureSchemaMigrated() {
 
 export function createDb() {
   void ensureSchemaMigrated();
-  const sql = neon(env.DATABASE_URL);
-  return drizzle(sql, { schema });
+  return drizzle(pool, { schema });
 }
 
 export const db = createDb();
