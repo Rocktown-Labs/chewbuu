@@ -20,13 +20,14 @@
   },
   "dependencies": {
     "@chewbuu/env": "workspace:*",
-    "@neondatabase/serverless": "^1.1.0",
     "dotenv": "catalog:",
     "drizzle-orm": "^0.45.2",
+    "pg": "^8.22.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@chewbuu/config": "workspace:*",
+    "@types/pg": "^8.15.5",
     "drizzle-kit": "^0.31.10",
     "typescript": "^6"
   }

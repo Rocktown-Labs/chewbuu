@@ -150,9 +150,11 @@ jobs:
 
       - name: Apply database migrations
         if: github.ref == 'refs/heads/main'
-        run: bun --cwd packages/db db:migrate:raw
+        run: |
+          bun --cwd packages/db db:migrate
+          bun --cwd packages/db db:migrate:raw
         env:
-          DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}
+          DATABASE_URL: ${{ secrets.BLOCKS_MIGRATION_DB_URL }}
 
       - name: Remove stale CloudFormation change set
         continue-on-error: true

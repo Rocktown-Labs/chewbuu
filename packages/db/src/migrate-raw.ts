@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { Client } from "@neondatabase/serverless";
+import { Client } from "pg";
 
 const migrationsDir = path.join(import.meta.dirname, "../src/migrations");
 
@@ -10,7 +10,7 @@ if (!url) {
   throw new Error("DATABASE_URL is required to run raw migrations");
 }
 
-const client = new Client(url);
+const client = new Client({ connectionString: url });
 await client.connect();
 try {
   await client.query(`
