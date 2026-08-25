@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed AWS production authentication 500s caused by shell-quoted PlanetScale database URLs, and set the production Better Auth origin explicitly to `https://chewbuu.com`.
+- Removed the Vercel image CDN flag from recap photos now that production hosting runs on AWS.
 - Fixed the Better Auth username input in the signup form so it matches the rounded pill styling of the other auth fields.
 - Fixed React SSR dual-module bundling in `apps/web/vite.config.ts` by removing React from `ssr.noExternal`.
 - Switched the AWS Blocks `Hosting` construct to `framework: "nitro"` with `buildOutputDir: ".output"` so the TanStack Start SSR bundle (`.output/server` + `.output/public`) deploys as a Lambda instead of being treated as a static SPA.

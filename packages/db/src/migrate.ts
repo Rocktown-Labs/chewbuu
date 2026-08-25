@@ -3,6 +3,8 @@ import path from "node:path";
 
 import { Client } from "pg";
 
+import { normalizeConnectionString } from "./connection-string";
+
 type PgError = Error & {
   code?: string;
   column?: string;
@@ -18,8 +20,9 @@ const migrationsDirectory = path.resolve(
   "../../aws-blocks/migrations"
 );
 const baselineFile = "000_baseline.sql";
-const migrationUrl =
-  process.env.BLOCKS_MIGRATION_DB_URL ?? process.env.DATABASE_URL;
+const migrationUrl = normalizeConnectionString(
+  process.env.BLOCKS_MIGRATION_DB_URL ?? process.env.DATABASE_URL
+);
 
 if (!migrationUrl) {
   throw new Error(
