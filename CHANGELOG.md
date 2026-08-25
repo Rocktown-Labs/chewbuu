@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Added separate admin actions and a redirect route for the API and web SSR CloudWatch dashboards.
 - Documented the redacted production provider/API-key checklist and feature impact in `docs/production-environment.md`.
 - Removed Drizzle ORM, schema generation, and database studio tooling; Better Auth now uses its built-in PostgreSQL/Kysely adapter.
 - Migrated chat room reads and message writes from Hono/Upstash realtime to AWS Blocks while consolidating the database runtime and migration history on PlanetScale/Kysely.
