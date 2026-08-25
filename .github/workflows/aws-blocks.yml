@@ -148,13 +148,11 @@ jobs:
           fi
           echo "CLOUDFRONT_CERTIFICATE_ARN=$certificate_arn" >> "$GITHUB_ENV"
 
-      - name: Apply database migrations
+      - name: Apply PlanetScale database migrations
         if: github.ref == 'refs/heads/main'
-        run: |
-          bun --cwd packages/db db:migrate
-          bun --cwd packages/db db:migrate:raw
+        run: bun run db:migrate
         env:
-          DATABASE_URL: ${{ secrets.BLOCKS_MIGRATION_DB_URL }}
+          BLOCKS_MIGRATION_DB_URL: ${{ secrets.BLOCKS_MIGRATION_DB_URL }}
 
       - name: Remove stale CloudFormation change set
         continue-on-error: true
@@ -197,7 +195,6 @@ jobs:
           STRIPE_SUGAR_PRICE_ID: ${{ secrets.STRIPE_SUGAR_PRICE_ID }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           VITE_SERVER_URL: "/"
-          VITE_NEON_AUTH_URL: ${{ secrets.VITE_NEON_AUTH_URL || vars.VITE_NEON_AUTH_URL }}
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
 
       - name: Show CloudFormation failure events

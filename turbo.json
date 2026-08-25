@@ -27,19 +27,9 @@
       "cache": false,
       "persistent": true
     },
-    "db:push": {
-      "cache": false
-    },
-    "db:generate": {
-      "cache": false
-    },
     "db:migrate": {
       "cache": false,
-      "persistent": true
-    },
-    "db:studio": {
-      "cache": false,
-      "persistent": true
+      "env": ["BLOCKS_MIGRATION_DB_URL", "DATABASE_URL"]
     }
   }
 }

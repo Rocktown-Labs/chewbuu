@@ -4,31 +4,21 @@
   "exports": {
     ".": {
       "default": "./src/index.ts"
-    },
-    "./*": {
-      "default": "./src/*.ts"
     }
   },
   "scripts": {
     "build": "tsc --noEmit",
     "check-types": "tsc --noEmit",
-    "db:push": "drizzle-kit push",
-    "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio",
-    "db:migrate": "drizzle-kit migrate",
-    "db:migrate:raw": "bun src/migrate-raw.ts"
+    "db:migrate": "bun src/migrate.ts"
   },
   "dependencies": {
     "@chewbuu/env": "workspace:*",
-    "dotenv": "catalog:",
-    "drizzle-orm": "^0.45.2",
-    "pg": "^8.22.0",
-    "zod": "catalog:"
+    "kysely": "^0.28.12",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@chewbuu/config": "workspace:*",
     "@types/pg": "^8.15.5",
-    "drizzle-kit": "^0.31.10",
     "typescript": "^6"
   }
 }

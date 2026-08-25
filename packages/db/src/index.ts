@@ -1,58 +1,37 @@
 import { env } from "@chewbuu/env/server";
-import { drizzle } from "drizzle-orm/node-postgres";
+import { Kysely, PostgresDialect, type ColumnType } from "kysely";
 import { Pool } from "pg";
 
-import * as schema from "./schema";
+type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 
-const pool = new Pool({
+export interface AuthUserTable {
+  daily_date_limit: number;
+  display_username: string | null;
+  email: string;
+  has_completed_onboarding: boolean;
+  has_intro_video: boolean;
+  has_profile_photo: boolean;
+  id: string;
+  membership_tier: string;
+  name: string;
+  role: string | null;
+  stripe_customer_id: string | null;
+  updated_at: Timestamp;
+  username: string | null;
+}
+
+export interface Database {
+  user: AuthUserTable;
+}
+
+export const pool = new Pool({
   allowExitOnIdle: true,
   connectionString: env.DATABASE_URL,
   max: 5,
 });
 
-let migrationChecked = false;
+export const db = new Kysely<Database>({
+  dialect: new PostgresDialect({ pool }),
+});
 
-export async function ensureSchemaMigrated() {
-  if (
-    migrationChecked ||
-    process.env.NODE_ENV === "test" ||
-    env.DATABASE_URL.includes("mock")
-  ) {
-    return;
-  }
-  migrationChecked = true;
-  try {
-    await pool.query(
-      'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "display_username" text;'
-    );
-    await pool.query(
-      'ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "username" text;'
-    );
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS "passkey" (
-        "backed_up" boolean DEFAULT false NOT NULL,
-        "counter" integer NOT NULL,
-        "created_at" timestamp DEFAULT now() NOT NULL,
-        "credential_id" text NOT NULL,
-        "device_type" text NOT NULL,
-        "id" text PRIMARY KEY NOT NULL,
-        "name" text,
-        "public_key" text NOT NULL,
-        "transports" text,
-        "user_id" text NOT NULL
-      );
-    `);
-    await pool.query(
-      'ALTER TABLE "passkey" ADD COLUMN IF NOT EXISTS "aaguid" text;'
-    );
-  } catch (error) {
-    console.error("Schema migration check error:", error);
-  }
-}
-
-export function createDb() {
-  void ensureSchemaMigrated();
-  return drizzle(pool, { schema });
-}
-
-export const db = createDb();
+export const createDb = (): Kysely<Database> => db;

@@ -48,7 +48,6 @@
     "better-auth": "catalog:",
     "date-fns": "^4.4.0",
     "dotenv": "catalog:",
-    "drizzle-orm": "^0.45.2",
     "evlog": "catalog:",
     "import-in-the-middle": "^3.3.3",
     "lucide-react": "catalog:",
