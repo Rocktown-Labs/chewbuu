@@ -32,6 +32,7 @@ export type {
   ReviewResponse,
   SendChatMessageInput,
   SendChatMessageResponse,
+  SyncPricingPlansResponse,
   UploadDateMediaInput,
 } from "./types";
 

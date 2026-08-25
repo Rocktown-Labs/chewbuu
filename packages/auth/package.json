@@ -9,7 +9,9 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "test": "vitest run"
+  },
   "dependencies": {
     "@better-auth/expo": "catalog:",
     "@better-auth/passkey": "1.6.23",
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "@chewbuu/config": "workspace:*",
-    "typescript": "^6"
+    "typescript": "^6",
+    "vitest": "^4.1.10"
   }
 }

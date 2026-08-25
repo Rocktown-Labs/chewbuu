@@ -20,7 +20,30 @@ export interface AuthUserTable {
   username: string | null;
 }
 
+export interface MembershipPlanTable {
+  active: boolean;
+  annual_price_cents: number;
+  annual_stripe_price_id: string | null;
+  created_at: Timestamp;
+  cta: string;
+  description: string;
+  features: ColumnType<
+    string[],
+    string[] | string | undefined,
+    string[] | string
+  >;
+  id: string;
+  monthly_price_cents: number;
+  name: string;
+  sort_order: number;
+  stats: ColumnType<string[], string[] | string | undefined, string[] | string>;
+  stripe_price_id: string | null;
+  tier: string;
+  updated_at: Timestamp;
+}
+
 export interface Database {
+  membership_plan: MembershipPlanTable;
   user: AuthUserTable;
 }
 

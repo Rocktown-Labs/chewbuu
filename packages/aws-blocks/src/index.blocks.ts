@@ -8,7 +8,13 @@ import { Logger, type LogLevel } from "@aws-blocks/bb-logger";
 import { Metrics, type MetricDatum } from "@aws-blocks/bb-metrics";
 import type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middleware";
 import { Tracer } from "@aws-blocks/bb-tracer";
-import { ApiNamespace, Realtime, Scope } from "@aws-blocks/blocks";
+import {
+  ApiNamespace,
+  AsyncJob,
+  CronJob,
+  Realtime,
+  Scope,
+} from "@aws-blocks/blocks";
 import { RawRoute } from "@aws-blocks/core";
 import {
   ChimeSDKMeetingsClient,
@@ -18,6 +24,7 @@ import {
 } from "@aws-sdk/client-chime-sdk-meetings";
 import { convertToModelMessages, generateText } from "ai";
 import type { Kysely, Transaction } from "kysely";
+import Stripe from "stripe";
 import { z } from "zod";
 
 import { getDatabaseUrl, getDb, jsonb } from "./database";
@@ -58,6 +65,7 @@ import type {
   MediaUploadInput,
   NotificationChannelClient,
   NotificationsResponse,
+  SyncPricingPlansResponse,
 } from "./types";
 
 type BlocksDbExecutor = Kysely<BlocksDatabase> | Transaction<BlocksDatabase>;
@@ -699,6 +707,64 @@ const runDateLifecycleInternal = async (at?: string) => {
 
 export const runDateLifecycle = async (at?: string) =>
   observeScheduledJob("runDateLifecycle", () => runDateLifecycleInternal(at));
+
+export const dateLifecycleCron = new CronJob(scope, "date-lifecycle-cron", {
+  description:
+    "Recurring dating lifecycle state transitions and review settlement",
+  handler: async () => {
+    await runDateLifecycle();
+  },
+  schedule: "rate(1 minute)",
+});
+
+export const notificationDeliveryJob = new AsyncJob(
+  scope,
+  "notification-delivery",
+  {
+    handler: async (payload: {
+      body: string;
+      dedupeKey: string;
+      entityId?: string;
+      entityType?: string;
+      kind: string;
+      title: string;
+      userId: string;
+    }) => {
+      await createNotification(payload);
+    },
+    schema: z.object({
+      body: z.string(),
+      dedupeKey: z.string(),
+      entityId: z.string().optional(),
+      entityType: z.string().optional(),
+      kind: z.string(),
+      title: z.string(),
+      userId: z.string(),
+    }),
+  }
+);
+
+export const mediaProcessingJob = new AsyncJob(scope, "media-processing", {
+  handler: async (
+    payload: {
+      mediaId: string;
+      slot?: string;
+      userId: string;
+    },
+    ctx
+  ) => {
+    logger.info("processing media background job", {
+      jobId: ctx.jobId,
+      mediaId: payload.mediaId,
+      userId: payload.userId,
+    });
+  },
+  schema: z.object({
+    mediaId: z.string(),
+    slot: z.string().optional(),
+    userId: z.string(),
+  }),
+});
 
 const loadProfile = async (userId: string, sessionUser: SessionUser) => {
   const db = await getDb();
@@ -2534,6 +2600,140 @@ const updatePricingPlans = async (sessionUser: SessionUser, input: unknown) => {
   return getPricingPlans();
 };
 
+const syncPricingPlans = async (
+  sessionUser: SessionUser
+): Promise<SyncPricingPlansResponse> => {
+  requireAdmin(sessionUser);
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey) {
+    const current = await getPricingPlans();
+    return {
+      message: "Stripe is not configured: STRIPE_SECRET_KEY is missing.",
+      plans: current.plans,
+      stripeConfigured: false,
+    };
+  }
+
+  const stripe = new Stripe(stripeKey);
+  const db = await getDb();
+  let currentPlans = await db
+    .selectFrom("membership_plan")
+    .selectAll()
+    .where("active", "=", true)
+    .orderBy("sort_order", "asc")
+    .execute();
+
+  if (!currentPlans.length) {
+    await seedPricingPlans();
+    currentPlans = await db
+      .selectFrom("membership_plan")
+      .selectAll()
+      .where("active", "=", true)
+      .orderBy("sort_order", "asc")
+      .execute();
+  }
+
+  const stripeProducts = await stripe.products.list({
+    active: true,
+    limit: 100,
+  });
+
+  for (const plan of currentPlans) {
+    if (plan.tier === "social" || plan.monthly_price_cents === 0) {
+      continue;
+    }
+
+    let product = stripeProducts.data.find(
+      (p) =>
+        p.metadata?.tier === plan.tier ||
+        p.name.toLowerCase() === plan.name.toLowerCase() ||
+        p.name.toLowerCase() === `chewbuu ${plan.name.toLowerCase()}`
+    );
+
+    if (!product) {
+      product = await stripe.products.create({
+        description: plan.description,
+        metadata: {
+          app: "chewbuu",
+          tier: plan.tier,
+        },
+        name: `Chewbuu ${plan.name}`,
+      });
+    }
+
+    const existingPrices = await stripe.prices.list({
+      active: true,
+      limit: 100,
+      product: product.id,
+    });
+
+    let monthlyPrice = existingPrices.data.find(
+      (p) =>
+        p.recurring?.interval === "month" &&
+        p.unit_amount === plan.monthly_price_cents &&
+        p.currency.toLowerCase() === "usd"
+    );
+
+    if (!monthlyPrice) {
+      monthlyPrice = await stripe.prices.create({
+        currency: "usd",
+        metadata: {
+          app: "chewbuu",
+          interval: "month",
+          tier: plan.tier,
+        },
+        product: product.id,
+        recurring: { interval: "month" },
+        unit_amount: plan.monthly_price_cents,
+      });
+    }
+
+    let annualPrice = existingPrices.data.find(
+      (p) =>
+        p.recurring?.interval === "year" &&
+        p.unit_amount === plan.annual_price_cents &&
+        p.currency.toLowerCase() === "usd"
+    );
+
+    if (!annualPrice && plan.annual_price_cents > 0) {
+      annualPrice = await stripe.prices.create({
+        currency: "usd",
+        metadata: {
+          app: "chewbuu",
+          interval: "year",
+          tier: plan.tier,
+        },
+        product: product.id,
+        recurring: { interval: "year" },
+        unit_amount: plan.annual_price_cents,
+      });
+    }
+
+    await db
+      .updateTable("membership_plan")
+      .set({
+        annual_stripe_price_id: annualPrice?.id ?? null,
+        stripe_price_id: monthlyPrice.id,
+        updated_at: new Date(),
+      })
+      .where("id", "=", plan.id)
+      .execute();
+  }
+
+  const updatedPlans = await db
+    .selectFrom("membership_plan")
+    .selectAll()
+    .where("active", "=", true)
+    .orderBy("sort_order", "asc")
+    .execute();
+
+  return {
+    message: "Stripe catalog synchronized successfully.",
+    plans: updatedPlans.map(mapPlan),
+    stripeConfigured: true,
+  };
+};
+
 const checkIn = async (
   sessionUser: SessionUser,
   input: unknown
@@ -3310,6 +3510,13 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
       const sessionUser = await requireSession(context.request.headers);
       requireAdmin(sessionUser);
       return seedPricingPlans();
+    });
+  },
+
+  async syncPricingPlans() {
+    return observeOperation("syncPricingPlans", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return syncPricingPlans(sessionUser);
     });
   },
 

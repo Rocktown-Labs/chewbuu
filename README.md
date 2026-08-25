@@ -76,6 +76,26 @@ The database variables are:
 
 For local work, `DATABASE_URL` can point to a local PostgreSQL instance. For a PlanetScale branch, keep the pooled and direct URLs separate and use the direct URL only for migrations.
 
+## Authentication & OAuth configuration
+
+Better Auth handles authentication via PostgreSQL adapter. When configuring Google Cloud OAuth credentials for domain `chewbuu.com`, register the following:
+
+**Authorized JavaScript origins:**
+
+- `https://chewbuu.com`
+- `https://www.chewbuu.com`
+- `http://localhost:3000`
+- `http://localhost:3001`
+- `http://localhost:5173`
+
+**Authorized redirect URIs:**
+
+- `https://chewbuu.com/api/auth/callback/google`
+- `https://www.chewbuu.com/api/auth/callback/google`
+- `http://localhost:3000/api/auth/callback/google`
+- `http://localhost:3001/api/auth/callback/google`
+- `http://localhost:5173/api/auth/callback/google`
+
 ## Database and migrations
 
 Kysely is the only application database ORM. Better Auth uses its built-in Kysely/PostgreSQL adapter, and AWS Blocks uses its typed Kysely adapter. Drizzle is not part of the runtime or migration toolchain.

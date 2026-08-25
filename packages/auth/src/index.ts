@@ -16,28 +16,69 @@ import {
   parseAdminEmails,
 } from "./membership";
 
-const buildStripePlans = () => [
-  {
-    annualDiscountPriceId: env.STRIPE_MINGLE_ANNUAL_PRICE_ID,
-    limits: {
-      canCoverDutchDates: MEMBERSHIP_TIERS.mingle.canCoverDutchDates,
-      dailyDateLimit: MEMBERSHIP_TIERS.mingle.dailyDateLimit,
-      partyLimit: MEMBERSHIP_TIERS.mingle.partyLimit,
-    },
-    name: MEMBERSHIP_TIERS.mingle.name,
-    priceId: env.STRIPE_MINGLE_PRICE_ID,
-  },
-  {
-    annualDiscountPriceId: env.STRIPE_SUGAR_ANNUAL_PRICE_ID,
-    limits: {
-      canCoverDutchDates: MEMBERSHIP_TIERS.sugar.canCoverDutchDates,
-      dailyDateLimit: MEMBERSHIP_TIERS.sugar.dailyDateLimit,
-      partyLimit: MEMBERSHIP_TIERS.sugar.partyLimit,
-    },
-    name: MEMBERSHIP_TIERS.sugar.name,
-    priceId: env.STRIPE_SUGAR_PRICE_ID,
-  },
-];
+export const buildStripePlans = async (db?: ReturnType<typeof createDb>) => {
+  const executor = db ?? createDb();
+  try {
+    const plans = await executor
+      .selectFrom("membership_plan")
+      .selectAll()
+      .where("active", "=", true)
+      .execute();
+
+    const planByTier = new Map(plans.map((plan) => [plan.tier, plan]));
+    const minglePlan = planByTier.get("mingle");
+    const sugarPlan = planByTier.get("sugar");
+
+    return [
+      {
+        annualDiscountPriceId:
+          minglePlan?.annual_stripe_price_id ||
+          env.STRIPE_MINGLE_ANNUAL_PRICE_ID,
+        limits: {
+          canCoverDutchDates: MEMBERSHIP_TIERS.mingle.canCoverDutchDates,
+          dailyDateLimit: MEMBERSHIP_TIERS.mingle.dailyDateLimit,
+          partyLimit: MEMBERSHIP_TIERS.mingle.partyLimit,
+        },
+        name: MEMBERSHIP_TIERS.mingle.name,
+        priceId: minglePlan?.stripe_price_id || env.STRIPE_MINGLE_PRICE_ID,
+      },
+      {
+        annualDiscountPriceId:
+          sugarPlan?.annual_stripe_price_id || env.STRIPE_SUGAR_ANNUAL_PRICE_ID,
+        limits: {
+          canCoverDutchDates: MEMBERSHIP_TIERS.sugar.canCoverDutchDates,
+          dailyDateLimit: MEMBERSHIP_TIERS.sugar.dailyDateLimit,
+          partyLimit: MEMBERSHIP_TIERS.sugar.partyLimit,
+        },
+        name: MEMBERSHIP_TIERS.sugar.name,
+        priceId: sugarPlan?.stripe_price_id || env.STRIPE_SUGAR_PRICE_ID,
+      },
+    ];
+  } catch {
+    return [
+      {
+        annualDiscountPriceId: env.STRIPE_MINGLE_ANNUAL_PRICE_ID,
+        limits: {
+          canCoverDutchDates: MEMBERSHIP_TIERS.mingle.canCoverDutchDates,
+          dailyDateLimit: MEMBERSHIP_TIERS.mingle.dailyDateLimit,
+          partyLimit: MEMBERSHIP_TIERS.mingle.partyLimit,
+        },
+        name: MEMBERSHIP_TIERS.mingle.name,
+        priceId: env.STRIPE_MINGLE_PRICE_ID,
+      },
+      {
+        annualDiscountPriceId: env.STRIPE_SUGAR_ANNUAL_PRICE_ID,
+        limits: {
+          canCoverDutchDates: MEMBERSHIP_TIERS.sugar.canCoverDutchDates,
+          dailyDateLimit: MEMBERSHIP_TIERS.sugar.dailyDateLimit,
+          partyLimit: MEMBERSHIP_TIERS.sugar.partyLimit,
+        },
+        name: MEMBERSHIP_TIERS.sugar.name,
+        priceId: env.STRIPE_SUGAR_PRICE_ID,
+      },
+    ];
+  }
+};
 
 export const createAuth = () => {
   const db = createDb();
@@ -183,7 +224,7 @@ export const createAuth = () => {
               stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET as string,
               subscription: {
                 enabled: true,
-                plans: buildStripePlans,
+                plans: () => buildStripePlans(db),
               },
               schema: {
                 subscription: {

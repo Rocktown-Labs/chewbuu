@@ -136,6 +136,7 @@ export interface AwsBlocksApi {
   }>;
   getPricingPlans: () => Promise<{ plans: MembershipPlan[] }>;
   seedPricingPlans: () => Promise<{ plans: MembershipPlan[] }>;
+  syncPricingPlans: () => Promise<SyncPricingPlansResponse>;
   updatePricingPlans: (input: {
     plans: MembershipPlan[];
   }) => Promise<{ plans: MembershipPlan[] }>;
@@ -460,4 +461,10 @@ export interface ChimeMeetingResponse {
     mediaPlacement: Record<string, string>;
     meetingId: string;
   };
+}
+
+export interface SyncPricingPlansResponse {
+  message: string;
+  plans: MembershipPlan[];
+  stripeConfigured: boolean;
 }
