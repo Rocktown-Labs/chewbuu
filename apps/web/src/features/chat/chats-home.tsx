@@ -27,6 +27,7 @@ import { toast } from "sonner";
 
 import { chatApi, toChatMessage, toChatThread } from "@/lib/chat-api";
 import type { ApiChatMessage, ApiChatRoom } from "@/lib/chat-api";
+import { insertRealtimeMessageToDb, syncRoomsToDb } from "@/lib/db";
 import { useChatRealtime } from "@/lib/realtime-client";
 
 import {
@@ -182,6 +183,7 @@ export function DashboardChats({
       setThreads(
         initial.rooms.map((room) => toChatThread(room, initial.currentUserId))
       );
+      syncRoomsToDb(initial.rooms, initial.currentUserId);
       setSelectedId((current) => current ?? initial.rooms[0]?.id ?? null);
     } catch (error) {
       if (!mountedRef.current) {
@@ -209,6 +211,11 @@ export function DashboardChats({
     ({ data }: { channel: string; data: ApiChatMessage }) => {
       if (!currentUserId) return;
       appendMessage(data.roomId, toChatMessage(data, currentUserId));
+      insertRealtimeMessageToDb(
+        data,
+        currentUserId,
+        selected?.id === data.roomId
+      );
       if (selected?.id === data.roomId) {
         setThreads((current) =>
           current.map((thread) =>

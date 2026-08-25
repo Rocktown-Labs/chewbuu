@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import type { DatingProfilePayload } from "@/lib/dating-api";
+import { onboardingDraftCollection, upsertOnboardingDraft } from "@/lib/db";
 
 interface OnboardingState {
   step: number;
@@ -16,10 +17,47 @@ export const useOnboardingStore = create<OnboardingState>()(
     (set) => ({
       step: 0,
       profile: {},
-      setStep: (step) => set({ step }),
+      setStep: (step) => {
+        set({ step });
+        upsertOnboardingDraft({
+          id: "current",
+          step,
+        });
+      },
       setProfile: (profile) =>
-        set((state) => ({ profile: { ...state.profile, ...profile } })),
-      clear: () => set({ step: 0, profile: {} }),
+        set((state) => {
+          const merged = { ...state.profile, ...profile };
+          upsertOnboardingDraft({
+            id: "current",
+            step: state.step,
+            name: merged.name ?? "",
+            birthday: merged.birthday ?? "",
+            gender: merged.sex ?? "",
+            area: merged.area ?? "",
+            headline: merged.favoriteThings?.[0] ?? "",
+            bio: merged.bio ?? "",
+            occupation: merged.occupation ?? "",
+            intent: merged.lookingFor?.[0] ?? "dating",
+            interests: merged.interests ?? [],
+            photos:
+              merged.media
+                ?.filter(
+                  (m) => m.kind === "profile_photo" || m.kind === "photo"
+                )
+                .map((m) => m.url) ?? [],
+            videos:
+              merged.media
+                ?.filter((m) => m.kind === "intro_video")
+                .map((m) => m.url) ?? [],
+          });
+          return { profile: merged };
+        }),
+      clear: () => {
+        set({ step: 0, profile: {} });
+        if (onboardingDraftCollection.get("current")) {
+          onboardingDraftCollection.delete("current");
+        }
+      },
     }),
     {
       name: "chewbuu-onboarding-store-v2",

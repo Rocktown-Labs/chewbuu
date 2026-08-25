@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added reactive client-side database layer with `@tanstack/react-db`, `@tanstack/db`, and `@tanstack/query-db-collection` covering realtime Chat & Messaging collections (`chatRooms`, `chatMessages`, `chatReadStates`), Discovery & Matches (`matches`, `matchDecisions`), Date Spots (`dateSpots`, `savedSpots`), Date Lifecycle (`dateBookings`, `dateRequests`), Notifications (`notifications`), and Onboarding Drafts (`onboardingDrafts`).
+
 - Added Web Push Notification infrastructure in AWS Blocks with `push-subscriptions` DistributedTable, VAPID key signing, and instant push delivery on dating match, chat, and lifecycle events.
 - Added a Progressive Web App (PWA) manifest (`manifest.json`) and Service Worker (`sw.js`) supporting standalone mode, interactive notification CTAs ("View Now" & "Dismiss"), and custom haptic vibration patterns (`vibrate: [200, 100, 200]`).
 - Added mobile haptic feedback utility (`triggerHaptic`) with preset patterns (`success`, `warning`, `error`, `light`, `medium`, `heavy`) and graceful browser fallback.
