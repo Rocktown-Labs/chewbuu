@@ -25,6 +25,7 @@ import {
 import { convertToModelMessages, generateText } from "ai";
 import type { Kysely, Transaction } from "kysely";
 import Stripe from "stripe";
+import webpush from "web-push";
 import { z } from "zod";
 
 import { getDatabaseUrl, getDb, jsonb } from "./database";
@@ -360,6 +361,27 @@ const roomProjection = new DistributedTable(scope, "room-list", {
   schema: roomProjectionSchema,
 });
 
+const pushSubscriptionSchema = z.object({
+  auth: z.string(),
+  createdAt: z.number(),
+  endpoint: z.string(),
+  p256dh: z.string(),
+  updatedAt: z.number(),
+  userId: z.string(),
+});
+
+export const pushSubscriptionTable = new DistributedTable(
+  scope,
+  "push-subscriptions",
+  {
+    indexes: {
+      byUserId: { partitionKey: "userId", sortKey: "updatedAt" },
+    },
+    key: { partitionKey: "userId", sortKey: "endpoint" },
+    schema: pushSubscriptionSchema,
+  }
+);
+
 const roomListCache = new KVStore(scope, "room-list-cache", {
   schema: z.object({ expiresAt: z.number(), roomIds: z.array(z.string()) }),
 });
@@ -532,7 +554,138 @@ const createNotification = async (input: {
   } catch {
     // PostgreSQL remains the durable source of truth when realtime is offline.
   }
+  try {
+    await sendPushNotification({
+      body: input.body,
+      data: {
+        entityId: input.entityId,
+        entityType: input.entityType,
+        kind: input.kind,
+      },
+      title: input.title,
+      url: "/me?tab=notifications",
+      userId: input.userId,
+    });
+  } catch {
+    // Web push is best-effort dispatch
+  }
   return { notification, unreadCount };
+};
+
+const savePushSubscription = async (
+  sessionUser: SessionUser,
+  input: { auth: string; endpoint: string; p256dh: string }
+) => {
+  const now = Date.now();
+  await pushSubscriptionTable.put({
+    auth: input.auth,
+    createdAt: now,
+    endpoint: input.endpoint,
+    p256dh: input.p256dh,
+    updatedAt: now,
+    userId: sessionUser.id,
+  });
+  return { ok: true as const };
+};
+
+const getVapidPublicKey = async () => {
+  return {
+    vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? null,
+  };
+};
+
+const sendPushNotification = async (input: {
+  badge?: string;
+  body: string;
+  data?: Record<string, unknown>;
+  icon?: string;
+  tag?: string;
+  title: string;
+  url?: string;
+  userId?: string;
+}) => {
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+  const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@chewbuu.com";
+
+  if (!vapidPublicKey || !vapidPrivateKey) {
+    logger.info("VAPID keys not configured, skipping web push dispatch", {
+      userId: input.userId,
+    });
+    return { deliveredCount: 0, failedCount: 0, skipped: true };
+  }
+
+  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+
+  if (!input.userId) {
+    return { deliveredCount: 0, failedCount: 0, skipped: true };
+  }
+
+  const subscriptions = await Array.fromAsync(
+    pushSubscriptionTable.query({
+      index: "byUserId",
+      where: { userId: { equals: input.userId } },
+    })
+  );
+
+  if (!subscriptions.length) {
+    return { deliveredCount: 0, failedCount: 0, skipped: true };
+  }
+
+  const payload = JSON.stringify({
+    badge: input.badge || "/brand/chewbuu-logo-500-trans.png",
+    body: input.body,
+    data: {
+      url: input.url || "/me",
+      ...input.data,
+    },
+    icon: input.icon || "/brand/chewbuu-logo-500.png",
+    tag: input.tag || "chewbuu-notification",
+    title: input.title,
+    url: input.url || "/me",
+  });
+
+  let deliveredCount = 0;
+  let failedCount = 0;
+
+  await Promise.all(
+    subscriptions.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: {
+              auth: sub.auth,
+              p256dh: sub.p256dh,
+            },
+          },
+          payload
+        );
+        deliveredCount += 1;
+      } catch (error: any) {
+        failedCount += 1;
+        logger.warn("Failed to send web push notification", {
+          endpoint: sub.endpoint,
+          error: error instanceof Error ? error.message : String(error),
+          statusCode: error?.statusCode,
+          userId: input.userId,
+        });
+
+        if (error?.statusCode === 404 || error?.statusCode === 410) {
+          try {
+            await pushSubscriptionTable.delete({
+              endpoint: sub.endpoint,
+              userId: sub.userId,
+            });
+          } catch {
+            // ignore deletion errors
+          }
+        }
+      }
+    })
+  );
+
+  return { deliveredCount, failedCount };
 };
 
 const getNotifications = async (
@@ -3627,5 +3780,44 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   async getRecaps() {
     await requireSession(context.request.headers);
     return getRecaps();
+  },
+
+  async savePushSubscription(input: {
+    auth: string;
+    endpoint: string;
+    p256dh: string;
+  }) {
+    return observeOperation("savePushSubscription", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const body = z
+        .object({
+          auth: z.string().min(1),
+          endpoint: z.string().min(1),
+          p256dh: z.string().min(1),
+        })
+        .parse(input);
+      return savePushSubscription(sessionUser, body);
+    });
+  },
+
+  async getVapidPublicKey() {
+    return getVapidPublicKey();
+  },
+
+  async sendPushNotification(input: {
+    badge?: string;
+    body: string;
+    data?: Record<string, unknown>;
+    icon?: string;
+    tag?: string;
+    title: string;
+    url?: string;
+    userId?: string;
+  }) {
+    return observeOperation("sendPushNotification", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      requireAdmin(sessionUser);
+      return sendPushNotification(input);
+    });
   },
 }));

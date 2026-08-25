@@ -26,6 +26,7 @@ describe("AWS Blocks API surface", () => {
       "getRecaps",
       "getReviewPrompt",
       "getRooms",
+      "getVapidPublicKey",
       "markChatRead",
       "markNotificationsRead",
       "publishRecap",
@@ -35,8 +36,10 @@ describe("AWS Blocks API surface", () => {
       "runDateLifecycle",
       "saveProfile",
       "saveProfileDraft",
+      "savePushSubscription",
       "seedPricingPlans",
       "sendMessage",
+      "sendPushNotification",
       "startDate",
       "submitReview",
       "subscribeNotifications",
@@ -46,7 +49,7 @@ describe("AWS Blocks API surface", () => {
       "uploadDateMedia",
     ];
 
-    expect(methodNames).toHaveLength(39);
+    expect(methodNames).toHaveLength(42);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {

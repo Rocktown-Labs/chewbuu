@@ -105,6 +105,10 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         rel: "icon",
         type: "image/png",
       },
+      {
+        href: "/manifest.json",
+        rel: "manifest",
+      },
     ],
     meta: [
       {
@@ -113,6 +117,10 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       {
         content: "width=device-width, initial-scale=1",
         name: "viewport",
+      },
+      {
+        content: "#7c3aed",
+        name: "theme-color",
       },
       {
         title: SITE_TITLE,
