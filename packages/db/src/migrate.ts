@@ -30,6 +30,11 @@ if (!migrationUrl) {
 const toSessionUrl = (connectionString: string): string => {
   const url = new URL(connectionString);
   url.port = "5432";
+  // PlanetScale's CLI uses `sslrootcert=system` to mean the OS trust store.
+  // node-postgres interprets that value as a literal file path instead.
+  if (url.searchParams.get("sslrootcert")?.toLowerCase() === "system") {
+    url.searchParams.delete("sslrootcert");
+  }
   return url.toString();
 };
 
