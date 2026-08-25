@@ -845,16 +845,16 @@ export function OnboardingForm() {
         media,
       });
       toast.dismiss("finish-later");
-      toast.success("Progress saved.", { duration: 3000 });
+      toast.success("Progress saved. Return anytime to finish setup.", {
+        duration: 3000,
+      });
     } catch (error) {
       toast.dismiss("finish-later");
       toast.error(
         error instanceof Error ? error.message : "Could not save progress.",
         { duration: 4000 }
       );
-      return;
     }
-    await leaveOnboarding("/me");
   };
 
   if (underageBirthday) {

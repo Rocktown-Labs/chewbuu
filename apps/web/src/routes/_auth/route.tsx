@@ -13,30 +13,28 @@ export const Route = createFileRoute("/_auth")({
     }
     const { user } = session.data;
     const needsOnboarding = !user.hasCompletedOnboarding;
-    const canViewIncompleteProfile =
-      location.pathname === "/me" || location.pathname === "/me/profile";
 
-    if (
-      needsOnboarding &&
-      location.pathname !== "/onboarding" &&
-      !canViewIncompleteProfile
-    ) {
-      throw redirect({
-        to: "/onboarding",
-      });
-    }
-
-    if (!needsOnboarding && !canViewIncompleteProfile) {
-      const profileResult = await blocksApi.getProfile();
-      const { profile } = profileResult;
-      const hasLocation = Boolean(
-        profile?.area && profile.latitude && profile.longitude
-      );
-      if (!hasLocation) {
+    if (needsOnboarding) {
+      if (location.pathname !== "/onboarding") {
         throw redirect({
-          to: "/me/profile",
-          search: { tab: "profile" },
+          to: "/onboarding",
         });
+      }
+    } else {
+      const isProfileRoute =
+        location.pathname === "/me" || location.pathname === "/me/profile";
+      if (!isProfileRoute && location.pathname !== "/onboarding") {
+        const profileResult = await blocksApi.getProfile();
+        const { profile } = profileResult;
+        const hasLocation = Boolean(
+          profile?.area && profile.latitude && profile.longitude
+        );
+        if (!hasLocation) {
+          throw redirect({
+            to: "/me/profile",
+            search: { tab: "profile" },
+          });
+        }
       }
     }
 

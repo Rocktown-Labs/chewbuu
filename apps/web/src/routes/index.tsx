@@ -376,7 +376,9 @@ function IndexComponent() {
 
   useEffect(() => {
     if (session?.data?.user) {
-      void navigate({ to: "/me" });
+      void navigate({
+        to: session.data.user.hasCompletedOnboarding ? "/me" : "/onboarding",
+      });
     }
   }, [session, navigate]);
 
@@ -396,7 +398,7 @@ export const Route = createFileRoute("/")({
 
     if (session.data?.user) {
       throw redirect({
-        to: "/me",
+        to: session.data.user.hasCompletedOnboarding ? "/me" : "/onboarding",
       });
     }
     return { session };
