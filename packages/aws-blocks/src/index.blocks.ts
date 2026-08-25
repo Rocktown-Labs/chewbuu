@@ -9,6 +9,7 @@ import { Metrics, type MetricDatum } from "@aws-blocks/bb-metrics";
 import type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middleware";
 import { Tracer } from "@aws-blocks/bb-tracer";
 import { ApiNamespace, Realtime, Scope } from "@aws-blocks/blocks";
+import { RawRoute } from "@aws-blocks/core";
 import {
   ChimeSDKMeetingsClient,
   CreateAttendeeCommand,
@@ -103,6 +104,31 @@ const dashboard = new Dashboard(scope, "dashboard", {
   tracer,
 });
 void dashboard;
+
+const webSsrDashboardRedirect = new RawRoute(
+  scope,
+  "web-ssr-dashboard-redirect",
+  {
+    method: "GET",
+    path: "/admin/observability/aws-blocks-web",
+    handler: async (ctx) => {
+      const url = process.env.WEB_SSR_DASHBOARD_URL;
+      if (!url) {
+        ctx.response.status = 503;
+        ctx.response.headers.set("Content-Type", "application/json");
+        ctx.response.send({
+          message: "The web SSR dashboard is only available after deployment.",
+        });
+        return;
+      }
+
+      ctx.response.status = 302;
+      ctx.response.headers.set("Location", url);
+      ctx.response.send("");
+    },
+  }
+);
+void webSsrDashboardRedirect;
 
 const errorFields = (error: unknown) =>
   error instanceof Error

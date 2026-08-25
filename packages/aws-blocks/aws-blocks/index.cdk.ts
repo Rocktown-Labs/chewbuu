@@ -265,5 +265,20 @@ if (webHosting) {
       }
     );
     void ssrDashboard;
+
+    const webSsrDashboardUrl = `https://${awsRegion}.console.aws.amazon.com/cloudwatch/home?region=${awsRegion}#dashboards/dashboard/chewbuu-${deploymentStage}-web-ssr`;
+    blocksStack.handler.addEnvironment(
+      "WEB_SSR_DASHBOARD_URL",
+      webSsrDashboardUrl
+    );
+    const webSsrDashboardOutput = new cdk.CfnOutput(
+      blocksStack,
+      "WebSsrDashboardUrl",
+      {
+        description: "CloudWatch Dashboard URL for the web SSR Lambda",
+        value: webSsrDashboardUrl,
+      }
+    );
+    void webSsrDashboardOutput;
   }
 }

@@ -152,16 +152,29 @@ const RouteComponent = () => {
               recent backend errors, and X-Ray trace entry points.
             </p>
           </div>
-          <Button
-            className="rounded-full"
-            onClick={() => {
-              window.location.assign("/admin/observability/aws-blocks");
-            }}
-            type="button"
-          >
-            <Activity data-icon="inline-start" />
-            Open dashboard
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              className="rounded-full"
+              onClick={() => {
+                window.location.assign("/admin/observability/aws-blocks");
+              }}
+              type="button"
+            >
+              <Activity data-icon="inline-start" />
+              Open API dashboard
+            </Button>
+            <Button
+              className="rounded-full"
+              onClick={() => {
+                window.location.assign("/admin/observability/aws-blocks-web");
+              }}
+              type="button"
+              variant="outline"
+            >
+              <Activity data-icon="inline-start" />
+              Open web/auth dashboard
+            </Button>
+          </div>
         </div>
       </section>
 
