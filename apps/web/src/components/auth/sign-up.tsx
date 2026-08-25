@@ -73,7 +73,6 @@ export function SignUp({
     emailAndPassword,
     localization,
     plugins,
-    redirectTo,
     socialProviders,
     viewPaths,
     navigate,
@@ -100,7 +99,7 @@ export function SignUp({
             to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`,
           });
         } else {
-          navigate({ to: redirectTo });
+          navigate({ to: "/onboarding" });
         }
       },
     }
