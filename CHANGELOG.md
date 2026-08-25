@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added an admin route (`/admin`) featuring tabbed navigation for Better Auth user administration (role updates, banning, unbanning, impersonation, user deletion), Stripe catalog synchronization, and operational observability tools.
+- Added an idempotent `syncPricingPlans` API method in AWS Blocks that automatically discovers or creates Stripe products and monthly/annual recurring prices for Mingle and Sugar membership tiers, persisting their IDs into PostgreSQL.
+- Added dynamic subscription plan resolution in `@chewbuu/auth` querying active Stripe price IDs from the `membership_plan` table with fallbacks to environment variables.
+- Added AWS Blocks `CronJob` (`date-lifecycle-cron`) scheduled at `rate(1 minute)` and `AsyncJob`s (`notification-delivery`, `media-processing`) for background job orchestration.
+- Documented Google OAuth Authorized JavaScript origins and redirect URIs in `README.md`.
 - Added PlanetScale Postgres support with pooled runtime connectivity, direct migration connections, and a transactional SQL migration runner with baseline detection.
 - Added SEO metadata for the Chewbuu landing page with canonical tags, FAQ/Organization/WebSite JSON-LD, robots.txt, sitemap.xml, and the branded homepage screenshot as the OG/Twitter image.
 - Added a React Email workspace package with branded auth and lifecycle templates, plus Resend-backed Better Auth verification and password reset emails.

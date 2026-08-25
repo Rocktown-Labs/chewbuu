@@ -38,6 +38,10 @@ lerna-debug.log*
 
 # Turbo
 .turbo
+
+# Session logs
+pi-session-*.html
+*.html.tmp
 .nx
 
 # Better-T-Stack

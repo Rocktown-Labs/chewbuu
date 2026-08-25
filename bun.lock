@@ -161,6 +161,7 @@
       "devDependencies": {
         "@chewbuu/config": "workspace:*",
         "typescript": "^6",
+        "vitest": "^4.1.10",
       },
     },
     "packages/aws-blocks": {
@@ -184,6 +185,7 @@
         "@chewbuu/db": "workspace:*",
         "ai": "catalog:",
         "kysely": "^0.28.12",
+        "stripe": "^22.3.1",
         "zod": "catalog:",
       },
       "devDependencies": {

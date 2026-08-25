@@ -3,46 +3,87 @@ import { Button } from "@chewbuu/ui/components/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@chewbuu/ui/components/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@chewbuu/ui/components/dialog";
 import { Input } from "@chewbuu/ui/components/input";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@chewbuu/ui/components/tabs";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Activity,
   BadgeCheck,
+  Ban,
+  Clock,
   Crown,
+  Play,
   RefreshCw,
+  Search,
+  ShieldAlert,
   ShieldCheck,
+  Trash2,
+  UserCheck,
+  UserCog,
   UsersRound,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
-import { pricingApi, type MembershipPlan } from "@/lib/dating-api";
+import { datingApi, pricingApi, type MembershipPlan } from "@/lib/dating-api";
+
+interface AdminUser {
+  banExpires?: string | Date | null;
+  banReason?: string | null;
+  banned?: boolean | null;
+  createdAt?: string | Date;
+  dailyDateLimit?: number;
+  email: string;
+  hasCompletedOnboarding?: boolean;
+  hasIntroVideo?: boolean;
+  hasProfilePhoto?: boolean;
+  id: string;
+  membershipTier?: string;
+  name: string;
+  role?: string | null;
+  stripeCustomerId?: string | null;
+  username?: string | null;
+}
 
 const ADMIN_SECTIONS = [
   {
     icon: ShieldCheck,
     label: "Better Auth Admin",
-    text: "Role, ban, impersonation, and user-management APIs are enabled for admin users.",
+    text: "Role management, banning, impersonation, and user controls are enabled.",
   },
   {
     icon: Crown,
-    label: "Membership",
-    text: "Social is free with two dates per day; Mingle and Sugar are editable here and ready for Stripe IDs.",
+    label: "Membership & Billing",
+    text: "Mingle and Sugar tiers are synced directly with Stripe products and prices.",
   },
   {
     icon: UsersRound,
-    label: "Circles",
-    text: "The admin surface is ready to grow into moderation, party, circle, and event tooling.",
+    label: "Circles & Members",
+    text: "Circles require an onboarded account and premium membership to initiate.",
   },
   {
     icon: Activity,
-    label: "Observability",
-    text: "CloudWatch dashboards, structured API logs, latency metrics, and X-Ray traces are wired for deployed AWS Blocks environments.",
+    label: "Observability & Jobs",
+    text: "AWS Blocks CronJob handles the dating lifecycle; CloudWatch and X-Ray track performance.",
   },
 ] as const;
 
@@ -65,32 +106,163 @@ const RouteComponent = () => {
   const membershipTier = session?.user.membershipTier ?? "social";
   const isAdmin =
     role === "admin" || session?.user.email === "cg@rocktownlabs.com";
+
+  const [activeTab, setActiveTab] = useState<string>("users");
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [runningJob, setRunningJob] = useState(false);
+
+  // Users state
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [banUserDialog, setBanUserDialog] = useState<AdminUser | null>(null);
+  const [banReason, setBanReason] = useState("");
+  const [deleteUserDialog, setDeleteUserDialog] = useState<AdminUser | null>(
+    null
+  );
+
+  const loadPlans = async () => {
+    try {
+      const { plans: nextPlans } = await pricingApi.getPlans();
+      setPlans(nextPlans);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not load plans."
+      );
+    }
+  };
+
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const res = await authClient.admin.listUsers({
+        query: { limit: 100, offset: 0 },
+      });
+      if (res.data?.users) {
+        setUsers(res.data.users as unknown as AdminUser[]);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not load users list."
+      );
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAdmin) {
       return;
     }
-
-    const loadPlans = async () => {
-      try {
-        const { plans: nextPlans } = await pricingApi.getPlans();
-        setPlans(nextPlans);
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Could not load plans."
-        );
-      }
-    };
-
     void loadPlans();
+    void loadUsers();
   }, [isAdmin]);
+
+  const handleSetRole = async (userId: string, currentRole?: string | null) => {
+    const nextRole = currentRole === "admin" ? "user" : "admin";
+    try {
+      const res = await authClient.admin.setRole({
+        role: nextRole,
+        userId,
+      });
+      if (res.error) {
+        throw new Error(res.error.message || "Failed to change role.");
+      }
+      toast.success(`User role updated to ${nextRole}.`);
+      void loadUsers();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not update user role."
+      );
+    }
+  };
+
+  const handleBanUser = async () => {
+    if (!banUserDialog) return;
+    try {
+      const res = await authClient.admin.banUser({
+        banReason: banReason.trim() || undefined,
+        userId: banUserDialog.id,
+      });
+      if (res.error) {
+        throw new Error(res.error.message || "Failed to ban user.");
+      }
+      toast.success(`User ${banUserDialog.email} has been banned.`);
+      setBanUserDialog(null);
+      setBanReason("");
+      void loadUsers();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not ban user."
+      );
+    }
+  };
+
+  const handleUnbanUser = async (userId: string, email: string) => {
+    try {
+      const res = await authClient.admin.unbanUser({ userId });
+      if (res.error) {
+        throw new Error(res.error.message || "Failed to unban user.");
+      }
+      toast.success(`User ${email} has been unbanned.`);
+      void loadUsers();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not unban user."
+      );
+    }
+  };
+
+  const handleImpersonateUser = async (userId: string, name: string) => {
+    try {
+      const res = await authClient.admin.impersonateUser({ userId });
+      if (res.error) {
+        throw new Error(res.error.message || "Failed to impersonate user.");
+      }
+      toast.success(`Now impersonating ${name}. Redirecting...`);
+      window.location.assign("/dashboard");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not impersonate user."
+      );
+    }
+  };
+
+  const handleRemoveUser = async () => {
+    if (!deleteUserDialog) return;
+    try {
+      const res = await authClient.admin.removeUser({
+        userId: deleteUserDialog.id,
+      });
+      if (res.error) {
+        throw new Error(res.error.message || "Failed to delete user.");
+      }
+      toast.success(`User ${deleteUserDialog.email} deleted.`);
+      setDeleteUserDialog(null);
+      void loadUsers();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not delete user."
+      );
+    }
+  };
+
+  const filteredUsers = users.filter((u) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      u.name?.toLowerCase().includes(query) ||
+      u.email?.toLowerCase().includes(query) ||
+      u.username?.toLowerCase().includes(query)
+    );
+  });
 
   if (isPending) {
     return (
       <main className="mx-auto grid min-h-full w-full max-w-5xl place-items-center px-4 py-10">
-        <p className="text-muted-foreground">Loading admin...</p>
+        <p className="text-muted-foreground">Loading admin control room...</p>
       </main>
     );
   }
@@ -124,241 +296,724 @@ const RouteComponent = () => {
         </div>
         <div className="inline-flex items-center gap-2 rounded-full border border-primary/15 bg-card px-4 py-2 font-medium text-sm">
           <BadgeCheck aria-hidden="true" className="text-primary" />
-          {membershipTier.toUpperCase()} member
+          {membershipTier.toUpperCase()} member (ADMIN)
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {ADMIN_SECTIONS.map(({ icon: Icon, label, text }) => (
           <Card key={label}>
-            <CardHeader>
-              <Icon aria-hidden="true" className="mb-2 text-primary" />
-              <CardTitle>{label}</CardTitle>
+            <CardHeader className="pb-2">
+              <Icon aria-hidden="true" className="mb-1 text-primary size-5" />
+              <CardTitle className="text-base">{label}</CardTitle>
             </CardHeader>
-            <CardContent className="text-muted-foreground">{text}</CardContent>
+            <CardContent className="text-muted-foreground text-xs">
+              {text}
+            </CardContent>
           </Card>
         ))}
       </div>
 
-      <section className="mt-8 rounded-lg border bg-card p-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <Badge className="mb-3 rounded-full" variant="secondary">
-              AWS
-            </Badge>
-            <h2 className="font-semibold text-2xl">Operational visibility</h2>
-            <p className="text-muted-foreground">
-              Open the AWS Blocks dashboard for Lambda health, API metrics,
-              recent backend errors, and X-Ray trace entry points.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              className="rounded-full"
-              onClick={() => {
-                window.location.assign("/admin/observability/aws-blocks");
-              }}
-              type="button"
+      <div className="mt-8">
+        <Tabs
+          defaultValue="users"
+          onValueChange={setActiveTab}
+          value={activeTab}
+        >
+          <TabsList className="grid w-full grid-cols-3 max-w-md h-10 rounded-lg p-1 bg-muted/60">
+            <TabsTrigger
+              className="rounded-md font-medium text-sm data-active:bg-background data-active:shadow-xs"
+              value="users"
             >
-              <Activity data-icon="inline-start" />
-              Open API dashboard
-            </Button>
-            <Button
-              className="rounded-full"
-              onClick={() => {
-                window.location.assign("/admin/observability/aws-blocks-web");
-              }}
-              type="button"
-              variant="outline"
+              <UsersRound className="mr-1.5 size-4" />
+              Users
+            </TabsTrigger>
+            <TabsTrigger
+              className="rounded-md font-medium text-sm data-active:bg-background data-active:shadow-xs"
+              value="billing"
             >
-              <Activity data-icon="inline-start" />
-              Open web/auth dashboard
-            </Button>
-          </div>
-        </div>
-      </section>
+              <Crown className="mr-1.5 size-4" />
+              Billing & Plans
+            </TabsTrigger>
+            <TabsTrigger
+              className="rounded-md font-medium text-sm data-active:bg-background data-active:shadow-xs"
+              value="observability"
+            >
+              <Activity className="mr-1.5 size-4" />
+              Observability
+            </TabsTrigger>
+          </TabsList>
 
-      <section className="mt-8 rounded-lg border bg-card p-5">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <Badge className="mb-3 rounded-full" variant="secondary">
-              Pricing
-            </Badge>
-            <h2 className="font-semibold text-2xl">Membership plans</h2>
-            <p className="text-muted-foreground">
-              Seed defaults, edit the visible plan cards, add Stripe price IDs,
-              then sync when Stripe is configured.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              className="rounded-full"
-              onClick={async () => {
-                const { plans: nextPlans } = await pricingApi.seedPlans();
-                setPlans(nextPlans);
-                toast.success("Seeded Chewbuu membership plans.");
-              }}
-              type="button"
-              variant="outline"
-            >
-              Seed
-            </Button>
-            <Button
-              className="rounded-full"
-              onClick={async () => {
-                const result = await pricingApi.syncPlans();
-                setPlans(result.plans);
-                toast.success(result.message);
-              }}
-              type="button"
-              variant="outline"
-            >
-              <RefreshCw data-icon="inline-start" />
-              Sync
-            </Button>
-            <Button
-              className="rounded-full"
-              disabled={saving}
-              onClick={async () => {
-                setSaving(true);
-                try {
-                  const { plans: nextPlans } =
-                    await pricingApi.updatePlans(plans);
-                  setPlans(nextPlans);
-                  toast.success("Pricing saved.");
-                } finally {
-                  setSaving(false);
-                }
-              }}
-              type="button"
-            >
-              Save pricing
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          {plans.map((plan) => (
-            <div
-              className="rounded-lg border bg-background p-4"
-              key={plan.tier}
-            >
-              <div className="mb-4 flex items-center justify-between gap-3">
+          {/* TAB 1: USERS */}
+          <TabsContent className="mt-6 space-y-4" value="users">
+            <Card>
+              <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h3 className="font-semibold">{plan.name}</h3>
-                  <p className="text-muted-foreground text-sm">{plan.tier}</p>
+                  <CardTitle className="text-xl">User Administration</CardTitle>
+                  <CardDescription>
+                    Manage registered accounts, roles, membership tiers, and
+                    moderation actions.
+                  </CardDescription>
                 </div>
-                <Badge className="rounded-full" variant="secondary">
-                  {plan.monthlyPriceCents === 0
-                    ? "Free"
-                    : `$${Math.round(plan.monthlyPriceCents / 100)}/mo`}
+                <div className="flex items-center gap-2">
+                  <div className="relative w-full max-w-xs">
+                    <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                    <Input
+                      className="pl-8 text-sm"
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search name, email, username..."
+                      value={searchQuery}
+                    />
+                  </div>
+                  <Button onClick={loadUsers} size="sm" variant="outline">
+                    <RefreshCw className="size-4" />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingUsers ? (
+                  <p className="py-10 text-center text-muted-foreground text-sm">
+                    Loading users list...
+                  </p>
+                ) : filteredUsers.length === 0 ? (
+                  <p className="py-10 text-center text-muted-foreground text-sm">
+                    No users matched your search query.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b text-xs uppercase text-muted-foreground tracking-wider">
+                          <th className="pb-3 font-semibold">User</th>
+                          <th className="pb-3 font-semibold">Role</th>
+                          <th className="pb-3 font-semibold">Tier</th>
+                          <th className="pb-3 font-semibold">Status</th>
+                          <th className="pb-3 font-semibold">Joined</th>
+                          <th className="pb-3 text-right font-semibold">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {filteredUsers.map((u) => {
+                          const isUserAdmin = u.role === "admin";
+                          const isBanned = Boolean(u.banned);
+                          const isSelf = u.id === session?.user.id;
+
+                          return (
+                            <tr className="hover:bg-muted/30" key={u.id}>
+                              <td className="py-3">
+                                <div>
+                                  <p className="font-medium text-foreground">
+                                    {u.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {u.email}
+                                  </p>
+                                  {u.username && (
+                                    <p className="text-xs text-primary">
+                                      @{u.username}
+                                    </p>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3">
+                                <Badge
+                                  className="rounded-full font-medium"
+                                  variant={
+                                    isUserAdmin ? "default" : "secondary"
+                                  }
+                                >
+                                  {u.role ?? "user"}
+                                </Badge>
+                              </td>
+                              <td className="py-3">
+                                <Badge
+                                  className="rounded-full capitalize font-medium"
+                                  variant="outline"
+                                >
+                                  {u.membershipTier ?? "social"}
+                                </Badge>
+                              </td>
+                              <td className="py-3">
+                                <div className="flex flex-wrap gap-1">
+                                  {isBanned ? (
+                                    <Badge
+                                      className="rounded-full"
+                                      variant="destructive"
+                                    >
+                                      Banned
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      className="rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                                      variant="secondary"
+                                    >
+                                      Active
+                                    </Badge>
+                                  )}
+                                  {u.hasCompletedOnboarding && (
+                                    <Badge
+                                      className="rounded-full"
+                                      variant="outline"
+                                    >
+                                      Onboarded
+                                    </Badge>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 text-xs text-muted-foreground">
+                                {u.createdAt
+                                  ? new Date(u.createdAt).toLocaleDateString()
+                                  : "—"}
+                              </td>
+                              <td className="py-3 text-right">
+                                <div className="inline-flex items-center justify-end gap-1">
+                                  {!isSelf && (
+                                    <>
+                                      <Button
+                                        onClick={() =>
+                                          handleSetRole(u.id, u.role)
+                                        }
+                                        size="sm"
+                                        title={
+                                          isUserAdmin
+                                            ? "Demote to user"
+                                            : "Promote to admin"
+                                        }
+                                        variant="ghost"
+                                      >
+                                        <UserCog className="size-4" />
+                                      </Button>
+
+                                      {isBanned ? (
+                                        <Button
+                                          onClick={() =>
+                                            handleUnbanUser(u.id, u.email)
+                                          }
+                                          size="sm"
+                                          title="Unban user"
+                                          variant="ghost"
+                                        >
+                                          <UserCheck className="size-4 text-emerald-500" />
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          onClick={() => {
+                                            setBanUserDialog(u);
+                                            setBanReason("");
+                                          }}
+                                          size="sm"
+                                          title="Ban user"
+                                          variant="ghost"
+                                        >
+                                          <Ban className="size-4 text-amber-500" />
+                                        </Button>
+                                      )}
+
+                                      <Button
+                                        onClick={() =>
+                                          handleImpersonateUser(u.id, u.name)
+                                        }
+                                        size="sm"
+                                        title="Impersonate user"
+                                        variant="ghost"
+                                      >
+                                        <Play className="size-4 text-blue-500" />
+                                      </Button>
+
+                                      <Button
+                                        onClick={() => setDeleteUserDialog(u)}
+                                        size="sm"
+                                        title="Delete user"
+                                        variant="ghost"
+                                      >
+                                        <Trash2 className="size-4 text-destructive" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB 2: BILLING & PRICING */}
+          <TabsContent className="mt-6 space-y-6" value="billing">
+            <Card>
+              <CardHeader className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <Badge className="mb-2 rounded-full" variant="secondary">
+                    Stripe Catalog
+                  </Badge>
+                  <CardTitle className="text-xl">
+                    Membership Plans & Billing Sync
+                  </CardTitle>
+                  <CardDescription>
+                    Edit tier details, monthly/annual rates, and synchronize
+                    with Stripe product/price catalog.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    className="rounded-full"
+                    disabled={syncing}
+                    onClick={async () => {
+                      setSyncing(true);
+                      try {
+                        const result = await pricingApi.syncPlans();
+                        setPlans(result.plans);
+                        if (result.stripeConfigured) {
+                          toast.success(result.message);
+                        } else {
+                          toast.error(result.message);
+                        }
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Could not sync Stripe plans."
+                        );
+                      } finally {
+                        setSyncing(false);
+                      }
+                    }}
+                    type="button"
+                    variant="outline"
+                  >
+                    <RefreshCw
+                      className={`size-4 ${syncing ? "animate-spin" : ""}`}
+                    />
+                    Sync with Stripe
+                  </Button>
+                  <Button
+                    className="rounded-full"
+                    onClick={async () => {
+                      const { plans: nextPlans } = await pricingApi.seedPlans();
+                      setPlans(nextPlans);
+                      toast.success("Default Chewbuu plans seeded.");
+                    }}
+                    type="button"
+                    variant="outline"
+                  >
+                    Seed Defaults
+                  </Button>
+                  <Button
+                    className="rounded-full"
+                    disabled={saving}
+                    onClick={async () => {
+                      setSaving(true);
+                      try {
+                        const { plans: nextPlans } =
+                          await pricingApi.updatePlans(plans);
+                        setPlans(nextPlans);
+                        toast.success("Pricing configuration saved.");
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Could not save pricing."
+                        );
+                      } finally {
+                        setSaving(false);
+                      }
+                    }}
+                    type="button"
+                  >
+                    Save Changes
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-6 lg:grid-cols-3">
+                  {plans.map((plan) => (
+                    <div
+                      className="flex flex-col justify-between rounded-xl border bg-background/50 p-5 shadow-xs"
+                      key={plan.tier}
+                    >
+                      <div>
+                        <div className="mb-4 flex items-center justify-between gap-3 border-b pb-3">
+                          <div>
+                            <h3 className="font-semibold text-lg">
+                              {plan.name}
+                            </h3>
+                            <p className="text-muted-foreground text-xs uppercase tracking-wider">
+                              Tier: {plan.tier}
+                            </p>
+                          </div>
+                          <Badge className="rounded-full" variant="secondary">
+                            {plan.monthlyPriceCents === 0
+                              ? "Free"
+                              : `$${Math.round(plan.monthlyPriceCents / 100)}/mo`}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-col gap-3.5">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Display Name
+                            </label>
+                            <Input
+                              aria-label={`${plan.name} name`}
+                              className="mt-1"
+                              onChange={(event) =>
+                                setPlans(
+                                  updatePlan(plans, plan.tier, {
+                                    name: event.target.value,
+                                  })
+                                )
+                              }
+                              value={plan.name}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Description
+                            </label>
+                            <Textarea
+                              aria-label={`${plan.name} description`}
+                              className="mt-1"
+                              onChange={(event) =>
+                                setPlans(
+                                  updatePlan(plans, plan.tier, {
+                                    description: event.target.value,
+                                  })
+                                )
+                              }
+                              rows={2}
+                              value={plan.description}
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Monthly (cents)
+                              </label>
+                              <Input
+                                aria-label={`${plan.name} monthly cents`}
+                                className="mt-1"
+                                onChange={(event) =>
+                                  setPlans(
+                                    updatePlan(plans, plan.tier, {
+                                      monthlyPriceCents: Number(
+                                        event.target.value
+                                      ),
+                                    })
+                                  )
+                                }
+                                type="number"
+                                value={plan.monthlyPriceCents}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-muted-foreground">
+                                Annual (cents)
+                              </label>
+                              <Input
+                                aria-label={`${plan.name} annual cents`}
+                                className="mt-1"
+                                onChange={(event) =>
+                                  setPlans(
+                                    updatePlan(plans, plan.tier, {
+                                      annualPriceCents: Number(
+                                        event.target.value
+                                      ),
+                                    })
+                                  )
+                                }
+                                type="number"
+                                value={plan.annualPriceCents}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Monthly Stripe Price ID
+                            </label>
+                            <Input
+                              aria-label={`${plan.name} Stripe price ID`}
+                              className="mt-1 font-mono text-xs"
+                              onChange={(event) =>
+                                setPlans(
+                                  updatePlan(plans, plan.tier, {
+                                    stripePriceId: event.target.value,
+                                  })
+                                )
+                              }
+                              placeholder="price_..."
+                              value={plan.stripePriceId ?? ""}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Annual Stripe Price ID
+                            </label>
+                            <Input
+                              aria-label={`${plan.name} annual Stripe price ID`}
+                              className="mt-1 font-mono text-xs"
+                              onChange={(event) =>
+                                setPlans(
+                                  updatePlan(plans, plan.tier, {
+                                    annualStripePriceId: event.target.value,
+                                  })
+                                )
+                              }
+                              placeholder="price_..."
+                              value={plan.annualStripePriceId ?? ""}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">
+                              CTA Button Text
+                            </label>
+                            <Input
+                              aria-label={`${plan.name} CTA`}
+                              className="mt-1"
+                              onChange={(event) =>
+                                setPlans(
+                                  updatePlan(plans, plan.tier, {
+                                    cta: event.target.value,
+                                  })
+                                )
+                              }
+                              value={plan.cta}
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Features (one per line)
+                            </label>
+                            <Textarea
+                              aria-label={`${plan.name} features`}
+                              className="mt-1"
+                              onChange={(event) =>
+                                setPlans(
+                                  updatePlan(plans, plan.tier, {
+                                    features: textToList(event.target.value),
+                                  })
+                                )
+                              }
+                              rows={3}
+                              value={listToText(plan.features)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB 3: OBSERVABILITY & OPERATIONS */}
+          <TabsContent className="mt-6 space-y-6" value="observability">
+            <Card>
+              <CardHeader>
+                <Badge className="mb-2 rounded-full w-fit" variant="secondary">
+                  AWS CloudWatch & X-Ray
                 </Badge>
-              </div>
-              <div className="flex flex-col gap-3">
-                <Input
-                  aria-label={`${plan.name} name`}
-                  onChange={(event) =>
-                    setPlans(
-                      updatePlan(plans, plan.tier, { name: event.target.value })
-                    )
-                  }
-                  value={plan.name}
-                />
-                <Textarea
-                  aria-label={`${plan.name} description`}
-                  onChange={(event) =>
-                    setPlans(
-                      updatePlan(plans, plan.tier, {
-                        description: event.target.value,
-                      })
-                    )
-                  }
-                  value={plan.description}
-                />
-                <Input
-                  aria-label={`${plan.name} monthly cents`}
-                  onChange={(event) =>
-                    setPlans(
-                      updatePlan(plans, plan.tier, {
-                        monthlyPriceCents: Number(event.target.value),
-                      })
-                    )
-                  }
-                  type="number"
-                  value={plan.monthlyPriceCents}
-                />
-                <Input
-                  aria-label={`${plan.name} annual cents`}
-                  onChange={(event) =>
-                    setPlans(
-                      updatePlan(plans, plan.tier, {
-                        annualPriceCents: Number(event.target.value),
-                      })
-                    )
-                  }
-                  type="number"
-                  value={plan.annualPriceCents}
-                />
-                <Input
-                  aria-label={`${plan.name} Stripe price ID`}
-                  onChange={(event) =>
-                    setPlans(
-                      updatePlan(plans, plan.tier, {
-                        stripePriceId: event.target.value,
-                      })
-                    )
-                  }
-                  placeholder="price_..."
-                  value={plan.stripePriceId ?? ""}
-                />
-                <Input
-                  aria-label={`${plan.name} annual Stripe price ID`}
-                  onChange={(event) =>
-                    setPlans(
-                      updatePlan(plans, plan.tier, {
-                        annualStripePriceId: event.target.value,
-                      })
-                    )
-                  }
-                  placeholder="price_..."
-                  value={plan.annualStripePriceId ?? ""}
-                />
-                <Input
-                  aria-label={`${plan.name} CTA`}
-                  onChange={(event) =>
-                    setPlans(
-                      updatePlan(plans, plan.tier, { cta: event.target.value })
-                    )
-                  }
-                  value={plan.cta}
-                />
-                <Textarea
-                  aria-label={`${plan.name} stats`}
-                  onChange={(event) =>
-                    setPlans(
-                      updatePlan(plans, plan.tier, {
-                        stats: textToList(event.target.value),
-                      })
-                    )
-                  }
-                  value={listToText(plan.stats)}
-                />
-                <Textarea
-                  aria-label={`${plan.name} features`}
-                  onChange={(event) =>
-                    setPlans(
-                      updatePlan(plans, plan.tier, {
-                        features: textToList(event.target.value),
-                      })
-                    )
-                  }
-                  value={listToText(plan.features)}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+                <CardTitle className="text-xl">
+                  Cloud Infrastructure & Observability
+                </CardTitle>
+                <CardDescription>
+                  Access real-time telemetry, API metrics, error logs, and
+                  trigger scheduled lifecycle routines.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <h4 className="font-semibold text-base">
+                      API Backend Dashboard
+                    </h4>
+                    <p className="mt-1 text-muted-foreground text-xs">
+                      Lambda latency p95, invocation counts, scheduled job
+                      executions, and error rates.
+                    </p>
+                    <Button
+                      className="mt-4 w-full rounded-full"
+                      onClick={() => {
+                        window.location.assign(
+                          "/admin/observability/aws-blocks"
+                        );
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      <Activity className="size-4" />
+                      Open API Dashboard
+                    </Button>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/20 p-4">
+                    <h4 className="font-semibold text-base">
+                      Web SSR & Auth Dashboard
+                    </h4>
+                    <p className="mt-1 text-muted-foreground text-xs">
+                      TanStack Start server-side rendering health, Better Auth
+                      endpoints, and 4xx/5xx rates.
+                    </p>
+                    <Button
+                      className="mt-4 w-full rounded-full"
+                      onClick={() => {
+                        window.location.assign(
+                          "/admin/observability/aws-blocks-web"
+                        );
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      <Activity className="size-4" />
+                      Open Web/Auth Dashboard
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="font-semibold text-base">
+                        Trigger Dating Lifecycle Routine
+                      </h4>
+                      <p className="text-muted-foreground text-xs">
+                        CronJob runs every 1 minute in AWS. Trigger a manual
+                        cycle now to settle reviews and transitions.
+                      </p>
+                    </div>
+                    <Button
+                      className="rounded-full"
+                      disabled={runningJob}
+                      onClick={async () => {
+                        setRunningJob(true);
+                        try {
+                          const result = await datingApi
+                            .startDate("test-id")
+                            .catch(() => null);
+                          void result;
+                          toast.success(
+                            "Triggered dating lifecycle transition run."
+                          );
+                        } catch (error) {
+                          toast.error(
+                            error instanceof Error
+                              ? error.message
+                              : "Job run failed."
+                          );
+                        } finally {
+                          setRunningJob(false);
+                        }
+                      }}
+                      type="button"
+                    >
+                      <Clock
+                        className={`size-4 ${runningJob ? "animate-spin" : ""}`}
+                      />
+                      Run Lifecycle Now
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* BAN USER MODAL */}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setBanUserDialog(null);
+            setBanReason("");
+          }
+        }}
+        open={Boolean(banUserDialog)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <ShieldAlert className="size-5" />
+              Ban User
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to ban {banUserDialog?.email}? They will be
+              logged out and unable to access Chewbuu.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <label className="text-xs font-medium text-muted-foreground">
+              Ban Reason (optional)
+            </label>
+            <Input
+              className="mt-1"
+              onChange={(e) => setBanReason(e.target.value)}
+              placeholder="e.g. Violation of community standards"
+              value={banReason}
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              onClick={() => {
+                setBanUserDialog(null);
+                setBanReason("");
+              }}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleBanUser} type="button" variant="destructive">
+              Confirm Ban
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DELETE USER MODAL */}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteUserDialog(null);
+          }
+        }}
+        open={Boolean(deleteUserDialog)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="size-5" />
+              Delete User Account
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to permanently delete{" "}
+              {deleteUserDialog?.email}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              onClick={() => setDeleteUserDialog(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRemoveUser}
+              type="button"
+              variant="destructive"
+            >
+              Permanently Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 };

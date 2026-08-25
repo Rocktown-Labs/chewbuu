@@ -327,14 +327,12 @@ export const pricingApi = {
     blocksApi.getPricingPlans() as Promise<{ plans: MembershipPlan[] }>,
   seedPlans: () =>
     blocksApi.seedPricingPlans() as Promise<{ plans: MembershipPlan[] }>,
-  syncPlans: async () => {
-    const result = await blocksApi.getPricingPlans();
-    return {
-      ...result,
-      message: "Pricing plans loaded. Stripe sync is not available in Blocks.",
-      stripeConfigured: false,
-    };
-  },
+  syncPlans: () =>
+    blocksApi.syncPricingPlans() as Promise<{
+      message: string;
+      plans: MembershipPlan[];
+      stripeConfigured: boolean;
+    }>,
   updatePlans: (plans: MembershipPlan[]) =>
     blocksApi.updatePricingPlans({ plans } as Parameters<
       typeof blocksApi.updatePricingPlans
