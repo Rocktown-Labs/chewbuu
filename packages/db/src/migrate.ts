@@ -162,12 +162,12 @@ const initializeTracking = async (
       );
     }
     if (presentFoundationTables === legacyFoundationTables.length) {
-      await markApplied(client, "0001_messy_vengeance.sql");
+      await markApplied(client, "001_messy_vengeance.sql");
     }
   }
 
   if (await hasColumn(client, "passkey", "aaguid")) {
-    await markApplied(client, "0002_passkey_aaguid.sql");
+    await markApplied(client, "002_passkey_aaguid.sql");
   }
 
   if (await hasTable(client, "schema_migrations")) {
