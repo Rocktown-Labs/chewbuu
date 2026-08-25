@@ -56,6 +56,9 @@ export interface AdditionalFieldProps {
   isPending?: boolean;
 }
 
+const usernameInputClassName =
+  "rounded-full h-10 px-4 text-sm bg-background border border-border";
+
 /** Convert a `defaultValue` into a `Date` for the calendar. */
 function toDate(value: unknown): Date | undefined {
   if (value instanceof Date) {
@@ -335,13 +338,15 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
   const nativeStep = maxFractionDigits
     ? 1 / 10 ** maxFractionDigits
     : undefined;
+  const inputClassName =
+    name === "username" ? usernameInputClassName : undefined;
 
   if (hasPrefix || hasSuffix) {
     return (
       <Field>
         <Label htmlFor={name}>{field.label}</Label>
 
-        <InputGroup>
+        <InputGroup className={inputClassName}>
           {hasPrefix && (
             <InputGroupAddon align="inline-start">
               {field.prefix}
@@ -397,6 +402,7 @@ function InputField({ name, field, isPending }: AdditionalFieldProps) {
         type={nativeInputType}
         inputMode={nativeInputMode}
         step={nativeStep}
+        className={inputClassName}
         defaultValue={
           field.defaultValue == null ? undefined : String(field.defaultValue)
         }

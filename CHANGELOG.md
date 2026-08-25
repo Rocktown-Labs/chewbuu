@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed the Better Auth username input in the signup form so it matches the rounded pill styling of the other auth fields.
 - Fixed React SSR dual-module bundling in `apps/web/vite.config.ts` by removing React from `ssr.noExternal`.
 - Switched the AWS Blocks `Hosting` construct to `framework: "nitro"` with `buildOutputDir: ".output"` so the TanStack Start SSR bundle (`.output/server` + `.output/public`) deploys as a Lambda instead of being treated as a static SPA.
 - Wired `DATABASE_URL` and `BETTER_AUTH_SECRET` (plus `BETTER_AUTH_URL`/`CORS_ORIGIN`/`VITE_BLOCKS_API_URL` pass-through) into the SSR Lambda via `Hosting.ssrFunction.addEnvironment`, fixing the Lambda 502 caused by `@t3-oss/env-core` rejecting missing env vars at module load.
