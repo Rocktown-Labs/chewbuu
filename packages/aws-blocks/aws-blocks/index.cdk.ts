@@ -224,6 +224,35 @@ if (webHosting) {
               logGroupNames: [`/aws/lambda/${ssrFunction.functionName}`],
               queryLines: [
                 "fields @timestamp, @message",
+                'filter @message like /"method":/',
+                "sort @timestamp desc",
+                "limit 50",
+              ],
+              title: "Recent web requests",
+              width: 24,
+            }),
+          ],
+          [
+            new cloudwatch.LogQueryWidget({
+              height: 8,
+              logGroupNames: [`/aws/lambda/${ssrFunction.functionName}`],
+              queryLines: [
+                "fields @timestamp, @message",
+                'filter @message like /"path":"\\/api\\/auth/',
+                'filter @message like /"status":[45][0-9][0-9]/',
+                "sort @timestamp desc",
+                "limit 50",
+              ],
+              title: "Recent auth failures",
+              width: 24,
+            }),
+          ],
+          [
+            new cloudwatch.LogQueryWidget({
+              height: 8,
+              logGroupNames: [`/aws/lambda/${ssrFunction.functionName}`],
+              queryLines: [
+                "fields @timestamp, @message",
                 "filter @message like /ERROR|Error|Service Temporarily Unavailable|500/",
                 "sort @timestamp desc",
                 "limit 50",

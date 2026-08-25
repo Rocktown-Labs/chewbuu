@@ -20,6 +20,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed Better Auth core and plugin field mappings against the snake_case PlanetScale schema, resolving password-reset 500s caused by the verification table's `created_at` column.
+- Fixed forgot-password email input styling and added CloudWatch SSR request/auth-failure widgets for diagnosing web auth errors.
 - Repaired the Better Auth database rate-limit table and mapped its model to the existing snake_case PlanetScale schema, preventing auth 500s after the connection fix.
 - Fixed AWS production authentication 500s caused by shell-quoted PlanetScale database URLs, and set the production Better Auth origin explicitly to `https://chewbuu.com`.
 - Removed the Vercel image CDN flag from recap photos now that production hosting runs on AWS.
@@ -49,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Documented the redacted production provider/API-key checklist and feature impact in `docs/production-environment.md`.
 - Removed Drizzle ORM, schema generation, and database studio tooling; Better Auth now uses its built-in PostgreSQL/Kysely adapter.
 - Migrated chat room reads and message writes from Hono/Upstash realtime to AWS Blocks while consolidating the database runtime and migration history on PlanetScale/Kysely.
 - Kept Vercel for TanStack Start builds and previews, with `VITE_BLOCKS_API_URL` connecting the frontend to the AWS Blocks API.

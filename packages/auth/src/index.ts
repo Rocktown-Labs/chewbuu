@@ -52,6 +52,9 @@ export const createAuth = () => {
         sameSite: "none",
         secure: true,
       },
+      ipAddress: {
+        ipAddressHeaders: ["x-forwarded-for"],
+      },
     },
     baseURL: {
       allowedHosts: [
@@ -72,6 +75,28 @@ export const createAuth = () => {
       db,
       transaction: true,
       type: "postgres",
+    },
+    account: {
+      fields: {
+        accessToken: "access_token",
+        accessTokenExpiresAt: "access_token_expires_at",
+        accountId: "account_id",
+        createdAt: "created_at",
+        idToken: "id_token",
+        password: "password",
+        providerId: "provider_id",
+        refreshToken: "refresh_token",
+        refreshTokenExpiresAt: "refresh_token_expires_at",
+        updatedAt: "updated_at",
+        userId: "user_id",
+      },
+    },
+    verification: {
+      fields: {
+        createdAt: "created_at",
+        expiresAt: "expires_at",
+        updatedAt: "updated_at",
+      },
     },
     databaseHooks: {
       user: {
@@ -104,11 +129,51 @@ export const createAuth = () => {
     },
     plugins: [
       expo(),
-      username(),
-      passkey(),
+      username({
+        schema: {
+          user: {
+            fields: {
+              displayUsername: "display_username",
+              username: "username",
+            },
+          },
+        },
+      }),
+      passkey({
+        schema: {
+          passkey: {
+            fields: {
+              aaguid: "aaguid",
+              backedUp: "backed_up",
+              counter: "counter",
+              createdAt: "created_at",
+              credentialID: "credential_id",
+              deviceType: "device_type",
+              publicKey: "public_key",
+              transports: "transports",
+              userId: "user_id",
+            },
+          },
+        },
+      }),
       admin({
         adminRoles: ["admin"],
         defaultRole: "user",
+        schema: {
+          session: {
+            fields: {
+              impersonatedBy: "impersonated_by",
+            },
+          },
+          user: {
+            fields: {
+              banExpires: "ban_expires",
+              banReason: "ban_reason",
+              banned: "banned",
+              role: "role",
+            },
+          },
+        },
       }),
       ...(stripeEnabled
         ? [
@@ -119,6 +184,33 @@ export const createAuth = () => {
               subscription: {
                 enabled: true,
                 plans: buildStripePlans,
+              },
+              schema: {
+                subscription: {
+                  fields: {
+                    billingInterval: "billing_interval",
+                    cancelAt: "cancel_at",
+                    cancelAtPeriodEnd: "cancel_at_period_end",
+                    canceledAt: "canceled_at",
+                    endedAt: "ended_at",
+                    periodEnd: "period_end",
+                    periodStart: "period_start",
+                    plan: "plan",
+                    referenceId: "reference_id",
+                    seats: "seats",
+                    status: "status",
+                    stripeCustomerId: "stripe_customer_id",
+                    stripeScheduleId: "stripe_schedule_id",
+                    stripeSubscriptionId: "stripe_subscription_id",
+                    trialEnd: "trial_end",
+                    trialStart: "trial_start",
+                  },
+                },
+                user: {
+                  fields: {
+                    stripeCustomerId: "stripe_customer_id",
+                  },
+                },
               },
             }),
           ]
@@ -150,6 +242,16 @@ export const createAuth = () => {
         enabled: true,
         maxAge: 5 * 60,
       },
+      fields: {
+        createdAt: "created_at",
+        expiresAt: "expires_at",
+        impersonatedBy: "impersonated_by",
+        ipAddress: "ip_address",
+        token: "token",
+        updatedAt: "updated_at",
+        userAgent: "user_agent",
+        userId: "user_id",
+      },
       expiresIn: 7 * 24 * 60 * 60,
       storeSessionInDatabase: true,
       updateAge: 24 * 60 * 60,
@@ -171,38 +273,49 @@ export const createAuth = () => {
       "https://*.cloudfront.net",
     ],
     user: {
+      fields: {
+        createdAt: "created_at",
+        emailVerified: "email_verified",
+        updatedAt: "updated_at",
+      },
       additionalFields: {
         dailyDateLimit: {
           defaultValue: DEFAULT_MEMBERSHIP_TIER.dailyDateLimit,
+          fieldName: "daily_date_limit",
           input: false,
           required: false,
           type: "number",
         },
         hasCompletedOnboarding: {
           defaultValue: false,
+          fieldName: "has_completed_onboarding",
           input: false,
           required: false,
           type: "boolean",
         },
         hasIntroVideo: {
           defaultValue: false,
+          fieldName: "has_intro_video",
           input: false,
           required: false,
           type: "boolean",
         },
         hasProfilePhoto: {
           defaultValue: false,
+          fieldName: "has_profile_photo",
           input: false,
           required: false,
           type: "boolean",
         },
         membershipTier: {
           defaultValue: DEFAULT_MEMBERSHIP_TIER.id,
+          fieldName: "membership_tier",
           input: false,
           required: false,
           type: "string",
         },
         stripeCustomerId: {
+          fieldName: "stripe_customer_id",
           input: false,
           required: false,
           type: "string",
