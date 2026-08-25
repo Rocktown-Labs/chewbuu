@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Repaired the Better Auth database rate-limit table and mapped its model to the existing snake_case PlanetScale schema, preventing auth 500s after the connection fix.
 - Fixed AWS production authentication 500s caused by shell-quoted PlanetScale database URLs, and set the production Better Auth origin explicitly to `https://chewbuu.com`.
 - Removed the Vercel image CDN flag from recap photos now that production hosting runs on AWS.
 - Fixed the Better Auth username input in the signup form so it matches the rounded pill styling of the other auth fields.
