@@ -119,6 +119,7 @@ import {
   type DatingSummary,
   type PendingReview,
 } from "@/lib/dating-api";
+import { syncDatingSummaryToDb, syncPlacesToDb } from "@/lib/db";
 import {
   getLocationWeatherFromCityName,
   getLocationWeatherFromCoords,
@@ -1054,6 +1055,7 @@ export function MePage({
             datingApi.getPendingReviews(),
           ]);
         setSummary(nextSummary);
+        syncDatingSummaryToDb(nextSummary);
         setProfile(nextProfile.profile);
         setPendingReviews(nextPendingReviews.reviews);
       } catch (error) {
@@ -1507,6 +1509,7 @@ export function MePage({
         );
         const places = Array.from(placeById.values());
         setSpots(places);
+        syncPlacesToDb(places, spotsCategory);
       } catch (error) {
         toast.error(
           error instanceof Error
