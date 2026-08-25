@@ -136,7 +136,11 @@ export const createAuth = () => {
         },
       },
       enabled: true,
+      fields: {
+        lastRequest: "last_request",
+      },
       max: 100,
+      modelName: "rate_limit",
       storage: "database",
       window: 60,
     },
