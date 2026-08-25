@@ -102,6 +102,7 @@ export function ForgotPassword({ className }: ForgotPasswordProps) {
                 placeholder={localization.auth.emailPlaceholder}
                 required
                 disabled={isPending}
+                className="h-10 rounded-full border border-border bg-background px-4 text-sm"
                 onChange={() => {
                   setFieldErrors((prev) => ({
                     ...prev,

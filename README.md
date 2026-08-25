@@ -134,7 +134,7 @@ bun run aws:deploy
 
 Use `bun run aws:sandbox` for an AWS Blocks sandbox deployment. Do not bypass the deployment wrapper with a raw `cdk deploy`, because the wrapper prepares the Blocks project context and hosting artifacts.
 
-More backend-specific details are in [`packages/aws-blocks/README.md`](packages/aws-blocks/README.md).
+More backend-specific details are in [`packages/aws-blocks/README.md`](packages/aws-blocks/README.md). The redacted provider-key checklist is in [`docs/production-environment.md`](docs/production-environment.md).
 
 ## Vercel frontend deployment
 
