@@ -174,6 +174,26 @@ export interface AwsBlocksApi {
     recap: RecapResponse;
   }>;
   getRecaps: () => Promise<{ recaps: RecapResponse[] }>;
+  savePushSubscription: (input: {
+    auth: string;
+    endpoint: string;
+    p256dh: string;
+  }) => Promise<{ ok: true }>;
+  getVapidPublicKey: () => Promise<{ vapidPublicKey: string | null }>;
+  sendPushNotification: (input: {
+    badge?: string;
+    body: string;
+    data?: Record<string, unknown>;
+    icon?: string;
+    tag?: string;
+    title: string;
+    url?: string;
+    userId?: string;
+  }) => Promise<{
+    deliveredCount: number;
+    failedCount: number;
+    skipped?: boolean;
+  }>;
 }
 
 export type NotificationChannelClient = RealtimeChannelClient<ApiNotification>;

@@ -70,6 +70,9 @@ export const env = createEnv({
     SENTRY_AUTH_TOKEN: z.string().optional(),
     SENTRY_DSN: z.string().optional(),
     REDIS_URL: z.string().optional(),
+    VAPID_PRIVATE_KEY: z.string().optional(),
+    VAPID_PUBLIC_KEY: z.string().optional(),
+    VAPID_SUBJECT: z.string().default("mailto:admin@chewbuu.com"),
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

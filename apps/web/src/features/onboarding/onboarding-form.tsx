@@ -35,8 +35,10 @@ import {
 } from "@tanstack/react-form";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import {
+  Bell,
   Camera,
   Check,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Heart,
@@ -44,9 +46,11 @@ import {
   ImagePlus,
   Mail,
   MapPin,
+  Mic,
   Phone,
   Plus,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   Trash2,
   Upload,
@@ -66,12 +70,18 @@ import {
   type MembershipPlan,
   type PlaceSuggestWhat,
 } from "@/lib/dating-api";
+import { triggerHaptic } from "@/lib/haptics";
+import {
+  getPushPermissionState,
+  subscribeUserToPush,
+} from "@/lib/push-notifications";
 import { useUsernameChecker } from "@/lib/use-username-checker";
 
 import { useOnboardingStore } from "./onboarding-store";
 
 const steps = [
   "Basics",
+  "Permissions",
   "Media",
   "Preferences",
   "Interests",
@@ -715,7 +725,7 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 1) {
+    if (step === 2) {
       const { media } = values;
       if (!media.some((item) => item.kind === "profile_photo" && item.url)) {
         toast.error("Profile photo is required. Capture one live.");
@@ -727,7 +737,7 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 2) {
+    if (step === 3) {
       const age = getAge(values.birthday);
       const maxAllowedAge =
         age !== null && age < 21 ? UNDER_21_MATCH_MAX_AGE : MAXIMUM_MATCH_AGE;
@@ -772,7 +782,7 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 3) {
+    if (step === 4) {
       const details = values.interestDetails || {};
       const age = getAge(values.birthday);
       const categories =
@@ -789,7 +799,7 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 4) {
+    if (step === 5) {
       if (!values.politics) {
         toast.error("Politics is required. You can choose Prefer Not to Say.");
         return;
@@ -804,7 +814,7 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 5) {
+    if (step === 6) {
       const contacts = values.trustedContacts || [];
       if (contacts.length === 0) {
         toast.error("At least one safety contact is required.");
@@ -926,12 +936,13 @@ export function OnboardingForm() {
         >
           <section className="min-h-[420px] rounded-3xl border bg-card p-6 shadow-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 md:p-8">
             {step === 0 && <BasicsStep form={form} />}
-            {step === 1 && <MediaStep form={form} />}
-            {step === 2 && <PreferencesStep form={form} />}
-            {step === 3 && <InterestsStep form={form} />}
-            {step === 4 && <ValuesStep form={form} />}
-            {step === 5 && <FriendsStep form={form} />}
-            {step === 6 && (
+            {step === 1 && <PermissionsStep form={form} />}
+            {step === 2 && <MediaStep form={form} />}
+            {step === 3 && <PreferencesStep form={form} />}
+            {step === 4 && <InterestsStep form={form} />}
+            {step === 5 && <ValuesStep form={form} />}
+            {step === 6 && <FriendsStep form={form} />}
+            {step === 7 && (
               <PremiumStep
                 plans={plans}
                 form={form}
@@ -1372,6 +1383,392 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
         );
       }}
     </form.Subscribe>
+  );
+}
+
+function PermissionsStep({ form }: { form: OnboardingFormApi }) {
+  const [cameraState, setCameraState] = useState<
+    "granted" | "prompt" | "denied"
+  >("prompt");
+  const [micState, setMicState] = useState<"granted" | "prompt" | "denied">(
+    "prompt"
+  );
+  const [pushState, setPushState] = useState<"granted" | "prompt" | "denied">(
+    "prompt"
+  );
+  const [locationState, setLocationState] = useState<
+    "granted" | "prompt" | "denied"
+  >("prompt");
+  const [isRequestingAll, setIsRequestingAll] = useState(false);
+  const [hapticTested, setHapticTested] = useState(false);
+
+  useEffect(() => {
+    const notifPermission = getPushPermissionState();
+    if (notifPermission === "granted") {
+      setPushState("granted");
+    } else if (notifPermission === "denied") {
+      setPushState("denied");
+    }
+
+    if (form.state.values.latitude && form.state.values.longitude) {
+      setLocationState("granted");
+    }
+  }, [form.state.values.latitude, form.state.values.longitude]);
+
+  const requestCamera = async () => {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast.error("Camera access is not supported in this browser.");
+        return false;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      for (const track of stream.getTracks()) {
+        track.stop();
+      }
+      setCameraState("granted");
+      triggerHaptic("light");
+      toast.success("Camera access granted!");
+      return true;
+    } catch {
+      setCameraState("denied");
+      toast.error("Camera access was denied.");
+      return false;
+    }
+  };
+
+  const requestMicrophone = async () => {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast.error("Microphone access is not supported in this browser.");
+        return false;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      for (const track of stream.getTracks()) {
+        track.stop();
+      }
+      setMicState("granted");
+      triggerHaptic("light");
+      toast.success("Microphone access granted!");
+      return true;
+    } catch {
+      setMicState("denied");
+      toast.error("Microphone access was denied.");
+      return false;
+    }
+  };
+
+  const requestPush = async () => {
+    try {
+      const res = await subscribeUserToPush();
+      if (res.ok) {
+        setPushState("granted");
+        toast.success("Push notifications enabled!");
+        return true;
+      }
+      setPushState("denied");
+      toast.error(res.error || "Failed to enable push notifications.");
+      return false;
+    } catch {
+      setPushState("denied");
+      toast.error("Notification permission denied.");
+      return false;
+    }
+  };
+
+  const requestLocation = async () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported in this browser.");
+      return false;
+    }
+    // eslint-disable-next-line promise/avoid-new
+    return new Promise<boolean>((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          form.setFieldValue("latitude", String(position.coords.latitude));
+          form.setFieldValue("longitude", String(position.coords.longitude));
+          setLocationState("granted");
+          triggerHaptic("light");
+          toast.success("Location access granted!");
+          resolve(true);
+        },
+        () => {
+          setLocationState("denied");
+          toast.error("Location permission was denied.");
+          resolve(false);
+        },
+        { timeout: 10_000 }
+      );
+    });
+  };
+
+  const handleEnableAll = async () => {
+    setIsRequestingAll(true);
+    toast.info("Requesting device permissions...");
+    await requestCamera();
+    await requestMicrophone();
+    await requestPush();
+    await requestLocation();
+    triggerHaptic("success");
+    setIsRequestingAll(false);
+  };
+
+  const handleTestHaptics = () => {
+    const success = triggerHaptic("success");
+    setHapticTested(true);
+    if (success) {
+      toast.success("Haptic vibration triggered! 📳");
+    } else {
+      toast.info(
+        "Haptic feedback simulated (vibration not supported on this browser)."
+      );
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <Badge
+            className="bg-primary/10 text-primary border-primary/20"
+            variant="outline"
+          >
+            Step 2 of {steps.length}
+          </Badge>
+          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+            Device Permissions & Alerts
+          </span>
+        </div>
+        <h2 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+          Enable Device Access & Alerts
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Chewbuu uses camera and microphone for live video dates and selfie
+          verification, location for nearby restaurant matching, and
+          notifications for instant match updates.
+        </p>
+      </div>
+
+      <div className="flex justify-end">
+        <Button
+          className="rounded-full font-semibold gap-1.5"
+          disabled={isRequestingAll}
+          onClick={handleEnableAll}
+          type="button"
+          variant="secondary"
+        >
+          <Sparkles className="size-4" />
+          {isRequestingAll
+            ? "Requesting Permissions..."
+            : "Enable All Permissions"}
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Camera */}
+        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-5 shadow-xs transition-colors hover:border-primary/40">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Camera className="size-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Camera Access</h3>
+                <p className="text-xs text-muted-foreground">
+                  Photo verification, live selfies, and video date rooms.
+                </p>
+              </div>
+            </div>
+            {cameraState === "granted" ? (
+              <Badge
+                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                variant="outline"
+              >
+                <CheckCircle2 className="size-3 mr-1" />
+                Granted
+              </Badge>
+            ) : cameraState === "denied" ? (
+              <Badge variant="destructive">Denied</Badge>
+            ) : (
+              <Badge variant="outline">Ready</Badge>
+            )}
+          </div>
+          <div className="mt-4 pt-3 border-t">
+            <Button
+              className="w-full rounded-xl"
+              disabled={cameraState === "granted"}
+              onClick={requestCamera}
+              type="button"
+              variant={cameraState === "granted" ? "outline" : "default"}
+            >
+              {cameraState === "granted" ? "Camera Enabled" : "Allow Camera"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Microphone */}
+        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-5 shadow-xs transition-colors hover:border-primary/40">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Mic className="size-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">
+                  Microphone Access
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Audio streaming during 1:1 and group video dates.
+                </p>
+              </div>
+            </div>
+            {micState === "granted" ? (
+              <Badge
+                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                variant="outline"
+              >
+                <CheckCircle2 className="size-3 mr-1" />
+                Granted
+              </Badge>
+            ) : micState === "denied" ? (
+              <Badge variant="destructive">Denied</Badge>
+            ) : (
+              <Badge variant="outline">Ready</Badge>
+            )}
+          </div>
+          <div className="mt-4 pt-3 border-t">
+            <Button
+              className="w-full rounded-xl"
+              disabled={micState === "granted"}
+              onClick={requestMicrophone}
+              type="button"
+              variant={micState === "granted" ? "outline" : "default"}
+            >
+              {micState === "granted"
+                ? "Microphone Enabled"
+                : "Allow Microphone"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Push Notifications */}
+        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-5 shadow-xs transition-colors hover:border-primary/40">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Bell className="size-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">
+                  Push Notifications & Alerts
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Instant updates for match requests, date invites, and chat
+                  replies.
+                </p>
+              </div>
+            </div>
+            {pushState === "granted" ? (
+              <Badge
+                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                variant="outline"
+              >
+                <CheckCircle2 className="size-3 mr-1" />
+                Granted
+              </Badge>
+            ) : pushState === "denied" ? (
+              <Badge variant="destructive">Denied</Badge>
+            ) : (
+              <Badge variant="outline">Ready</Badge>
+            )}
+          </div>
+          <div className="mt-4 pt-3 border-t">
+            <Button
+              className="w-full rounded-xl"
+              disabled={pushState === "granted"}
+              onClick={requestPush}
+              type="button"
+              variant={pushState === "granted" ? "outline" : "default"}
+            >
+              {pushState === "granted"
+                ? "Alerts Enabled"
+                : "Enable Push Alerts"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Location */}
+        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-5 shadow-xs transition-colors hover:border-primary/40">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <MapPin className="size-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">
+                  Location Access
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Nearby restaurant suggestions and local match distance.
+                </p>
+              </div>
+            </div>
+            {locationState === "granted" ? (
+              <Badge
+                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                variant="outline"
+              >
+                <CheckCircle2 className="size-3 mr-1" />
+                Granted
+              </Badge>
+            ) : locationState === "denied" ? (
+              <Badge variant="destructive">Denied</Badge>
+            ) : (
+              <Badge variant="outline">Ready</Badge>
+            )}
+          </div>
+          <div className="mt-4 pt-3 border-t">
+            <Button
+              className="w-full rounded-xl"
+              disabled={locationState === "granted"}
+              onClick={requestLocation}
+              type="button"
+              variant={locationState === "granted" ? "outline" : "default"}
+            >
+              {locationState === "granted"
+                ? "Location Shared"
+                : "Share Location"}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tactile Haptics Test */}
+      <div className="flex items-center justify-between rounded-2xl border border-dashed bg-muted/30 p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-background text-foreground">
+            <Smartphone className="size-4" />
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-foreground">
+              Mobile Haptic Feedback
+            </h4>
+            <p className="text-xs text-muted-foreground">
+              Experience tactile vibration patterns for match confirmations and
+              alerts.
+            </p>
+          </div>
+        </div>
+        <Button
+          className="rounded-full text-xs font-semibold"
+          onClick={handleTestHaptics}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          {hapticTested ? "Vibrate Again 📳" : "Test Haptics"}
+        </Button>
+      </div>
+    </div>
   );
 }
 

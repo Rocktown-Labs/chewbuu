@@ -12,6 +12,7 @@ export const env = createEnv({
   client: {
     VITE_BLOCKS_API_URL: z.url().optional(),
     VITE_SERVER_URL: serverUrlSchema,
+    VITE_VAPID_PUBLIC_KEY: z.string().optional(),
   },
   clientPrefix: "VITE_",
   emptyStringAsUndefined: true,

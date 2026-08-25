@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added Web Push Notification infrastructure in AWS Blocks with `push-subscriptions` DistributedTable, VAPID key signing, and instant push delivery on dating match, chat, and lifecycle events.
+- Added a Progressive Web App (PWA) manifest (`manifest.json`) and Service Worker (`sw.js`) supporting standalone mode, interactive notification CTAs ("View Now" & "Dismiss"), and custom haptic vibration patterns (`vibrate: [200, 100, 200]`).
+- Added mobile haptic feedback utility (`triggerHaptic`) with preset patterns (`success`, `warning`, `error`, `light`, `medium`, `heavy`) and graceful browser fallback.
+- Added a dedicated "Device Permissions & Alerts" step to the onboarding flow with interactive permission requests for Camera, Microphone, Push Notifications, and Location, plus tactile haptics testing.
 - Added an admin route (`/admin`) featuring tabbed navigation for Better Auth user administration (role updates, banning, unbanning, impersonation, user deletion), Stripe catalog synchronization, and operational observability tools.
 - Added an idempotent `syncPricingPlans` API method in AWS Blocks that automatically discovers or creates Stripe products and monthly/annual recurring prices for Mingle and Sugar membership tiers, persisting their IDs into PostgreSQL.
 - Added dynamic subscription plan resolution in `@chewbuu/auth` querying active Stripe price IDs from the `membership_plan` table with fallbacks to environment variables.

@@ -106,6 +106,32 @@ describe("OnboardingForm", () => {
     expect(screen.getByText("Relationship Status")).toBeVisible();
   });
 
+  it("can navigate to the permissions step and view device access cards", async () => {
+    const user = userEvent.setup();
+
+    render(<OnboardingForm />);
+
+    await screen.findByRole("heading", {
+      name: /tell chewbuu who is going out/i,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Permissions" }));
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /enable device access & alerts/i,
+      })
+    ).toBeVisible();
+    expect(screen.getByText("Camera Access")).toBeVisible();
+    expect(screen.getByText("Microphone Access")).toBeVisible();
+    expect(screen.getByText("Push Notifications & Alerts")).toBeVisible();
+    expect(screen.getByText("Location Access")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /enable all permissions/i })
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: /test haptics/i })).toBeVisible();
+  });
+
   it("can move to the media step with live capture and record actions", async () => {
     const user = userEvent.setup();
 

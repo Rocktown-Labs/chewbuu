@@ -1,0 +1,26 @@
+{
+  "name": "Chewbuu",
+  "short_name": "Chewbuu",
+  "description": "Chewbuu — The Foodie & Date Social App",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/brand/chewbuu-logo-500.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/chewbuu-logo-500-trans.png",
+      "sizes": "500x500",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["social", "lifestyle", "food"]
+}
