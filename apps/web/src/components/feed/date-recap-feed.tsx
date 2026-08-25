@@ -126,7 +126,6 @@ export function DateRecapFeed({
                       <div className="relative overflow-hidden rounded-2xl bg-muted aspect-video w-full">
                         <Image
                           alt={item.caption || "Date recap photo"}
-                          cdn="vercel"
                           className="h-full w-full object-cover"
                           height={450}
                           layout="constrained"

@@ -6,6 +6,7 @@ import {
 } from "@aws-blocks/bb-data";
 import { Scope } from "@aws-blocks/blocks";
 import { getStackName } from "@aws-blocks/blocks/scripts";
+import { normalizeConnectionString } from "@chewbuu/db/connection-string";
 import type { ColumnType, Kysely } from "kysely";
 
 import { DATABASE_CA_CERT } from "../generated/database.ca";
@@ -351,12 +352,23 @@ const databaseUrl = AppSetting.fromExisting(scope, "database-url", {
   secret: true,
 });
 
-export const getDatabaseUrl = async () =>
-  process.env.DATABASE_URL ?? (await databaseUrl.get());
+export const getDatabaseUrl = async (): Promise<string> => {
+  const value =
+    normalizeConnectionString(process.env.DATABASE_URL) ??
+    normalizeConnectionString(await databaseUrl.get());
+  if (!value) {
+    throw new Error("Database URL is not configured.");
+  }
+  return value;
+};
+
+const configuredDatabaseUrl = normalizeConnectionString(
+  process.env.DATABASE_URL
+);
 
 const database = new Database(scope, "postgres", {
   connection: fromExisting({
-    connectionString: process.env.DATABASE_URL ?? {
+    connectionString: configuredDatabaseUrl ?? {
       get: getDatabaseUrl,
     },
     ssl:
