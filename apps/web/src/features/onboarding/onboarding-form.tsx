@@ -921,23 +921,33 @@ export function OnboardingForm() {
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-        <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible pb-2 lg:pb-0">
-          {steps.map((label, index) => (
-            <button
-              className={`flex min-w-36 items-center justify-between rounded-full border px-5 py-3 text-left text-sm font-semibold transition-all duration-200 ${
-                index === step
-                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-border-hover"
-              }`}
-              key={label}
-              onClick={() => updateStep(index)}
-              type="button"
-            >
-              <span>{label}</span>
-              {index < step && <Check aria-hidden="true" className="size-4" />}
-            </button>
-          ))}
+      <div className="grid gap-6 lg:grid-cols-[auto_1fr] items-start">
+        <nav
+          className="flex flex-wrap gap-2 lg:flex-col lg:w-44 lg:shrink-0 pb-1 lg:pb-0"
+          aria-label="Onboarding Steps"
+        >
+          {steps.map((label, index) => {
+            const isCurrent = index === step;
+            const isCompleted = index < step;
+
+            return (
+              <button
+                className={cn(
+                  "w-fit rounded-full border px-4 py-2 text-xs sm:text-sm font-semibold transition-all duration-200 cursor-pointer text-left",
+                  isCurrent
+                    ? "border-primary bg-primary text-primary-foreground shadow-xs ring-2 ring-primary/20"
+                    : isCompleted
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15"
+                      : "border-border/80 bg-card/60 text-muted-foreground hover:text-foreground hover:border-border-hover"
+                )}
+                key={label}
+                onClick={() => updateStep(index)}
+                type="button"
+              >
+                <span>{label}</span>
+              </button>
+            );
+          })}
         </nav>
 
         <form
