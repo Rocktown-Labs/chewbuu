@@ -26,7 +26,18 @@ export function NavigationBlocker({
   title = "Unsaved Progress",
 }: NavigationBlockerProps) {
   const blocker = useBlocker({
-    shouldBlockFn: () => shouldBlock,
+    shouldBlockFn: ({ current, next }) => {
+      if (!shouldBlock) return false;
+      // Never block in-page navigations (hash changes, search params, step transitions)
+      if (
+        current?.pathname &&
+        next?.pathname &&
+        current.pathname === next.pathname
+      ) {
+        return false;
+      }
+      return true;
+    },
     withResolver: true,
   });
 

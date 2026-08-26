@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Compacted onboarding step navigation pills to dynamic fit-to-text widths across mobile and desktop, removing empty spacing and checkmark icons while styling completed steps with a clean green accent.
 - Redesigned onboarding Basics step into a 2-column mobile layout with 3 expandable accordion sections (Contact & Handle, Personal Details & Location, Identity & Bio) and embedded navigation.
 - Redesigned onboarding Permissions step into a 2-column mobile card grid with client-side mobile haptics capability detection.
 - Redesigned onboarding Media step into 3 expandable accordion sections (Profile Photo live capture, Intro Video live recording, Additional Photos gallery).
@@ -38,6 +39,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Filtered out username from initial sign-up form so handle validation against the bloom filter happens exclusively in the onboarding flow.
 
 ### Fixed
+
+- Fixed `NavigationBlocker` erroneously triggering the "Unsaved Onboarding Progress" modal when navigating backward or switching between onboarding steps by ignoring intra-route/same-pathname transitions.
 
 - Fixed React hydration error #418 during onboarding by initializing SSR step to 0 and mounting persisted/hash state client-side.
 - Fixed date spot search (`suggestPlaces`) failing during onboarding by accepting request coordinates/area before a profile row exists in PostgreSQL and adding rich fallback places when Google Places API is unconfigured.
