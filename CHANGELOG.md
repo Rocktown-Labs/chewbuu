@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed onboarding 'Save for later' draft saving failing with Zod validation errors on partial or empty profiles by decoupling draft validation (`profileDraftInputSchema`) from full profile submission requirements (`profileInputSchema`).
+
 - Fixed mandatory onboarding bypass by strictly redirecting non-onboarded users to `/onboarding` from all protected `/_auth` routes, index `/`, and sign-up completion.
 - Fixed Better Auth core and plugin field mappings against the snake_case PlanetScale schema, resolving password-reset 500s caused by the verification table's `created_at` column.
 - Fixed forgot-password email input styling and added CloudWatch SSR request/auth-failure widgets for diagnosing web auth errors.
