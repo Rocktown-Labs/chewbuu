@@ -78,6 +78,7 @@ import {
   createVenueOrder,
   createVenueReferral,
   followVenue,
+  getVenueLocations,
   getVenueWorkspace,
   requestVenueClaim,
   requestVenueReservation,
@@ -93,6 +94,9 @@ const scope = new Scope("chewbuu-api");
 const venueEmailClient = new EmailClient(scope, "venue-email", {
   fromAddress: process.env.VENUE_EMAIL_FROM ?? "noreply@chewbuu.com",
 });
+const venueAppUrl = (
+  process.env.VENUE_APP_URL ?? "https://chewbuu.com"
+).replace(/\/$/, "");
 const LOG_LEVELS = new Set<LogLevel>(["debug", "error", "info", "warn"]);
 const deploymentStage =
   process.env.CHEWBUU_STAGE ??
@@ -1046,7 +1050,7 @@ const publishVenueEvent = async (event: {
         }),
         venueEmailJob.submit({
           body: `${event.title}\n\n${event.detail}`,
-          html: `<h2>${escapeHtml(event.title)}</h2><p>${escapeHtml(event.detail)}</p><p>Open Chewbuu Sync to handle it.</p>`,
+          html: `<h2>${escapeHtml(event.title)}</h2><p>${escapeHtml(event.detail)}</p><p><a href="${venueAppUrl}/venues/${encodeURIComponent(event.locationId)}">Open Chewbuu Sync to handle it</a>.</p>`,
           subject: event.title,
           to: email,
         }),
@@ -1079,7 +1083,7 @@ const notifyVenueGuest = async (
     }),
     venueEmailJob.submit({
       body: `${event.title}\n\n${event.detail}`,
-      html: `<h2>${escapeHtml(event.title)}</h2><p>${escapeHtml(event.detail)}</p><p>We’ll keep you posted in Chewbuu.</p>`,
+      html: `<h2>${escapeHtml(event.title)}</h2><p>${escapeHtml(event.detail)}</p><p><a href="${venueAppUrl}/me">We’ll keep you posted in Chewbuu.</a></p>`,
       subject: event.title,
       to: guest.email,
     }),
@@ -3552,7 +3556,12 @@ const createCircle = async (sessionUser: SessionUser, name: string) => {
   await db.transaction().execute(async (tx) => {
     await tx
       .insertInto("circle")
-      .values({ id: circleId, name: cleanName, owner_user_id: sessionUser.id })
+      .values({
+        id: circleId,
+        kind: "safety",
+        name: cleanName,
+        owner_user_id: sessionUser.id,
+      })
       .execute();
     await tx
       .insertInto("circle_member")
@@ -4150,6 +4159,13 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         sessionUser.id,
         z.string().min(1).parse(locationId)
       );
+    });
+  },
+
+  async getVenueLocations() {
+    return observeOperation("getVenueLocations", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getVenueLocations(sessionUser.id, isConfiguredAdmin(sessionUser));
     });
   },
 
