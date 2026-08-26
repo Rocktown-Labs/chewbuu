@@ -4,6 +4,8 @@ import {
 } from "@tanstack/react-db";
 import { z } from "zod";
 
+import type { FavoritePlace } from "@/lib/dating-api";
+
 export const onboardingDraftSchema = z.object({
   // "current" or userId
   id: z.string(),
@@ -23,6 +25,11 @@ export const onboardingDraftSchema = z.object({
   latitude: z.number().nullable().default(null),
   longitude: z.number().nullable().default(null),
   interests: z.array(z.string()).default([]),
+  favoriteThings: z.array(z.string()).default([]),
+  interestDetails: z.record(z.string(), z.array(z.string())).default({}),
+  favoritePlaces: z
+    .record(z.string(), z.array(z.custom<FavoritePlace>()))
+    .default({}),
   photos: z.array(z.string()).default([]),
   videos: z.array(z.string()).default([]),
   notificationsEnabled: z.boolean().default(false),
@@ -76,6 +83,9 @@ export function upsertOnboardingDraft(
       latitude: null,
       longitude: null,
       interests: [],
+      favoriteThings: [],
+      interestDetails: {},
+      favoritePlaces: {},
       photos: [],
       videos: [],
       notificationsEnabled: false,

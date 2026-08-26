@@ -104,8 +104,7 @@ const RouteComponent = () => {
   const { data: session, isPending } = authClient.useSession();
   const role = session?.user.role;
   const membershipTier = session?.user.membershipTier ?? "social";
-  const isAdmin =
-    role === "admin" || session?.user.email === "cg@rocktownlabs.com";
+  const isAdmin = role === "admin";
 
   const [activeTab, setActiveTab] = useState<string>("users");
   const [plans, setPlans] = useState<MembershipPlan[]>([]);

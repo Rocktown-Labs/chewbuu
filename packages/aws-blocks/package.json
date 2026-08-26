@@ -22,6 +22,7 @@
     "@aws-blocks/bb-dashboard": "^0.1.2",
     "@aws-blocks/bb-data": "^0.2.2",
     "@aws-blocks/bb-distributed-table": "^0.1.3",
+    "@aws-blocks/bb-email-client": "0.1.3",
     "@aws-blocks/bb-file-bucket": "^0.1.2",
     "@aws-blocks/bb-kv-store": "^0.1.4",
     "@aws-blocks/bb-logger": "^0.1.3",

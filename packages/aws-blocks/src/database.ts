@@ -107,6 +107,7 @@ export interface ProfileTable {
   dating_modes: JsonColumn<string[]>;
   distance_miles: number;
   favorite_things: JsonColumn<string[]>;
+  favorite_places: JsonColumn<Record<string, unknown>>;
   height: string | null;
   id: string;
   interest_details: JsonColumn<Record<string, string[]>>;
@@ -314,6 +315,187 @@ export interface NotificationTable {
   user_id: string;
 }
 
+export interface VenueOrganizationTable {
+  created_at: Timestamp;
+  created_by_user_id: string;
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  updated_at: Timestamp;
+}
+
+export interface VenueLocationTable {
+  address: string | null;
+  claimed_at: Timestamp | null;
+  created_at: Timestamp;
+  discovery_place_id: string | null;
+  id: string;
+  menu_url: string | null;
+  name: string;
+  organization_id: string;
+  phone: string | null;
+  status: string;
+  submitted_by_user_id: string | null;
+  stripe_account_id: string | null;
+  updated_at: Timestamp;
+  verified_at: Timestamp | null;
+  website_url: string | null;
+}
+
+export interface VenueMemberTable {
+  created_at: Timestamp;
+  id: string;
+  organization_id: string;
+  role: string;
+  status: string;
+  updated_at: Timestamp;
+  user_id: string;
+}
+
+export interface VenueContributionTable {
+  created_at: Timestamp;
+  id: string;
+  kind: string;
+  location_id: string;
+  media_urls: JsonColumn<string[]>;
+  payload: JsonColumn<Record<string, unknown>>;
+  reviewed_at: Timestamp | null;
+  reviewed_by_user_id: string | null;
+  status: string;
+  submitted_by_user_id: string;
+  updated_at: Timestamp;
+}
+
+export interface VenueMenuTable {
+  created_at: Timestamp;
+  extracted_data: JsonColumn<Record<string, unknown>>;
+  id: string;
+  location_id: string;
+  published_at: Timestamp | null;
+  reviewed_at: Timestamp | null;
+  source_kind: string;
+  source_url: string | null;
+  status: string;
+  submitted_by_user_id: string | null;
+  updated_at: Timestamp;
+}
+
+export interface VenueMediaTable {
+  created_at: Timestamp;
+  id: string;
+  kind: string;
+  location_id: string;
+  source: string;
+  status: string;
+  uploaded_by_user_id: string;
+  url: string;
+}
+
+export interface VenueFollowTable {
+  created_at: Timestamp;
+  id: string;
+  location_id: string;
+  user_id: string;
+}
+
+export interface VenueReferralTable {
+  created_at: Timestamp;
+  id: string;
+  location_id: string;
+  paid_at: Timestamp | null;
+  referrer_user_id: string;
+  reward_amount_cents: number;
+  reward_payout_id: string | null;
+  status: string;
+  updated_at: Timestamp;
+}
+
+export interface VenueShiftTable {
+  created_at: Timestamp;
+  end_at: Timestamp;
+  id: string;
+  location_id: string;
+  role: string;
+  start_at: Timestamp;
+  status: string;
+  updated_at: Timestamp;
+  user_id: string;
+}
+
+export interface VenueShiftSwapTable {
+  created_at: Timestamp;
+  id: string;
+  manager_note: string | null;
+  replacement_user_id: string | null;
+  requester_user_id: string;
+  shift_id: string;
+  status: string;
+  updated_at: Timestamp;
+}
+
+export interface VenueReservationTable {
+  assigned_staff_user_id: string | null;
+  created_at: Timestamp;
+  guest_user_id: string;
+  id: string;
+  location_id: string;
+  notes: string | null;
+  party_size: number;
+  requested_at: Timestamp;
+  status: string;
+  table_label: string | null;
+  updated_at: Timestamp;
+}
+
+export interface VenueDiningSessionTable {
+  ended_at: Timestamp | null;
+  id: string;
+  location_id: string;
+  reservation_id: string | null;
+  started_at: Timestamp;
+  table_label: string | null;
+  user_id: string;
+}
+
+export interface VenueOrderTable {
+  assigned_staff_user_id: string | null;
+  created_at: Timestamp;
+  currency: string;
+  dining_session_id: string | null;
+  id: string;
+  location_id: string;
+  payment_status: string;
+  reservation_id: string | null;
+  status: string;
+  stripe_payment_intent_id: string | null;
+  subtotal_cents: number;
+  tip_cents: number;
+  total_cents: number;
+  updated_at: Timestamp;
+  user_id: string;
+}
+
+export interface VenueOrderItemTable {
+  created_at: Timestamp;
+  id: string;
+  name: string;
+  notes: string | null;
+  order_id: string;
+  quantity: number;
+  unit_price_cents: number;
+}
+
+export interface VenueTipAllocationTable {
+  amount_cents: number;
+  beneficiary_kind: string;
+  beneficiary_user_id: string | null;
+  created_at: Timestamp;
+  id: string;
+  order_id: string;
+  status: string;
+}
+
 export interface BlocksDatabase {
   circle: CircleTable;
   circle_member: CircleMemberTable;
@@ -338,6 +520,21 @@ export interface BlocksDatabase {
   referral: ReferralTable;
   trusted_contact: TrustedContactTable;
   user: UserTable;
+  venue_contribution: VenueContributionTable;
+  venue_dining_session: VenueDiningSessionTable;
+  venue_follow: VenueFollowTable;
+  venue_location: VenueLocationTable;
+  venue_media: VenueMediaTable;
+  venue_member: VenueMemberTable;
+  venue_menu: VenueMenuTable;
+  venue_order: VenueOrderTable;
+  venue_order_item: VenueOrderItemTable;
+  venue_organization: VenueOrganizationTable;
+  venue_referral: VenueReferralTable;
+  venue_reservation: VenueReservationTable;
+  venue_shift: VenueShiftTable;
+  venue_shift_swap: VenueShiftSwapTable;
+  venue_tip_allocation: VenueTipAllocationTable;
 }
 
 const scope = new Scope("chewbuu");

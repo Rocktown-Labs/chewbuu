@@ -118,6 +118,13 @@ export const createAuth = () => {
       type: "postgres",
     },
     account: {
+      accountLinking: {
+        allowDifferentEmails: true,
+        // A verified Google identity can link to an email/password account
+        // before the local verification email has been opened.
+        requireLocalEmailVerified: false,
+        enabled: true,
+      },
       fields: {
         accessToken: "access_token",
         accessTokenExpiresAt: "access_token_expires_at",

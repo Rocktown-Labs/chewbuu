@@ -34,12 +34,13 @@ export const env = createEnv({
   emptyStringAsUndefined: true,
   runtimeEnv,
   server: {
-    BETTER_AUTH_ADMIN_EMAILS: z.string().default("cg@rocktownlabs.com"),
+    BETTER_AUTH_ADMIN_EMAILS: z.string().default("camstewart7@gmail.com"),
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
     BLOB_READ_WRITE_TOKEN: z.string().optional(),
     CORS_ORIGIN: z.url(),
     DATABASE_URL: z.string().min(1),
+    FIRECRAWL_API_KEY: z.string().optional(),
     GOOGLE_PLACES_API_KEY: z.string().optional(),
     KV_REST_API_READ_ONLY_TOKEN: z.string().optional(),
     KV_REST_API_TOKEN: z.string().optional(),
@@ -73,6 +74,7 @@ export const env = createEnv({
     VAPID_PRIVATE_KEY: z.string().optional(),
     VAPID_PUBLIC_KEY: z.string().optional(),
     VAPID_SUBJECT: z.string().default("mailto:admin@chewbuu.com"),
+    VENUE_EMAIL_FROM: z.string().email().default("noreply@chewbuu.com"),
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

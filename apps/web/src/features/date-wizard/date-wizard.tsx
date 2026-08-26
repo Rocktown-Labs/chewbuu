@@ -58,8 +58,13 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { NavigationBlocker } from "@/components/navigation-blocker";
-import { datingApi } from "@/lib/dating-api";
-import type { DateMatch, DatePlace, DateWhat } from "@/lib/dating-api";
+import { datingApi, venueApi } from "@/lib/dating-api";
+import type {
+  DateMatch,
+  DatePlace,
+  DateWhat,
+  VenueMenuPreview,
+} from "@/lib/dating-api";
 
 const steps = ["Plan", "Places", "Matches"] as const;
 
@@ -1018,6 +1023,12 @@ function PlacesStep({
     null
   );
   const [anchor, setAnchor] = useState<DatePlace | null>(null);
+  const [menuPreviews, setMenuPreviews] = useState<
+    Record<string, VenueMenuPreview | null>
+  >({});
+  const [loadingMenuPlaceId, setLoadingMenuPlaceId] = useState<string | null>(
+    null
+  );
 
   const categories = (form.state.values.what as DateWhat[]).filter(
     (item): item is WizardWhat => ["eat", "drink", "play"].includes(item)
@@ -1120,6 +1131,34 @@ function PlacesStep({
     }
   };
 
+  const previewMenu = async (place: DatePlace) => {
+    if (!place.websiteUri) {
+      toast.info("This spot has not shared a menu link yet.");
+      return;
+    }
+    setLoadingMenuPlaceId(place.placeId);
+    try {
+      const result = await venueApi.previewMenu(place.websiteUri);
+      setMenuPreviews((current) => ({
+        ...current,
+        [place.placeId]: result.preview,
+      }));
+      if (!result.preview) {
+        toast.info(
+          result.reason === "firecrawl_not_configured"
+            ? "Menu previews are being connected."
+            : "We could not find a readable menu yet."
+        );
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not preview this menu."
+      );
+    } finally {
+      setLoadingMenuPlaceId(null);
+    }
+  };
+
   // Keep the submitted filters in sync with the chosen chips.
   useEffect(() => {
     form.setFieldValue("filters", Object.values(activeFilters).filter(Boolean));
@@ -1164,6 +1203,46 @@ function PlacesStep({
                   ))}
                 </div>
               )}
+              {selectedPlaces.some((place: any) => place.websiteUri) ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Make the date feel real
+                  </p>
+                  {selectedPlaces
+                    .filter((place: any) => place.websiteUri)
+                    .map((place: DatePlace) => (
+                      <div
+                        className="rounded-xl border p-3"
+                        key={place.placeId}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">{place.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Preview what is on the menu before you commit.
+                            </p>
+                          </div>
+                          <Button
+                            disabled={loadingMenuPlaceId === place.placeId}
+                            onClick={() => void previewMenu(place)}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            {loadingMenuPlaceId === place.placeId
+                              ? "Finding…"
+                              : "Peek at menu"}
+                          </Button>
+                        </div>
+                        {menuPreviews[place.placeId] ? (
+                          <MenuPreviewCard
+                            preview={menuPreviews[place.placeId]}
+                          />
+                        ) : null}
+                      </div>
+                    ))}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -1298,6 +1377,30 @@ function PlacesStep({
         </div>
       )}
     </form.Subscribe>
+  );
+}
+
+function MenuPreviewCard({ preview }: { preview: VenueMenuPreview | null }) {
+  if (!preview) return null;
+
+  return (
+    <div className="mt-3 rounded-lg bg-muted/40 p-3">
+      <p className="text-xs text-muted-foreground">
+        {preview.title ?? "Menu preview"} · Found online, not verified by the
+        venue
+      </p>
+      <ul className="mt-2 space-y-1 text-xs">
+        {preview.items.slice(0, 5).map((item) => (
+          <li
+            className="flex justify-between gap-2"
+            key={`${item.section ?? "menu"}-${item.name}`}
+          >
+            <span>{item.name}</span>
+            {item.price ? <span>{item.price}</span> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

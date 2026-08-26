@@ -178,6 +178,12 @@ const HomeComponent = () => {
               Sign In
             </Link>
           </div>
+          <Link
+            className="text-sm font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            to="/venue-portal"
+          >
+            Own or help onboard a venue →
+          </Link>
         </div>
       </section>
 

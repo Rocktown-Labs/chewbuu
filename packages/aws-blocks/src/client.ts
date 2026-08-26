@@ -34,6 +34,18 @@ export type {
   SendChatMessageResponse,
   SyncPricingPlansResponse,
   UploadDateMediaInput,
+  VenueMediaKind,
+  VenueMediaUploadInput,
+  VenueLocation,
+  VenueLocationStatus,
+  VenueMenuPreview,
+  VenueMenuPreviewItem,
+  VenueMenuStatus,
+  VenueReferral,
+  VenueReservation,
+  VenueDiningSession,
+  VenueEvent,
+  VenueOrder,
 } from "./types";
 
 export type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middleware";

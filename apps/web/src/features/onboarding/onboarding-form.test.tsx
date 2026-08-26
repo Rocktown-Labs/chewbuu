@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   routerInvalidate: vi.fn(),
   saveProfile: vi.fn(),
   saveProfileDraft: vi.fn(),
+  suggestPlaces: vi.fn(),
   session: {
     data: {
       user: {
@@ -53,6 +54,7 @@ vi.mock("@/lib/dating-api", () => ({
     getProfile: mocks.getProfile,
     saveProfile: mocks.saveProfile,
     saveProfileDraft: mocks.saveProfileDraft,
+    suggestPlaces: mocks.suggestPlaces,
   },
   getServerUrl: (url: string) => url,
   pricingApi: {
@@ -62,6 +64,7 @@ vi.mock("@/lib/dating-api", () => ({
 
 vi.mock("@/lib/auth-client", () => ({
   authClient: {
+    getSession: mocks.getProfile,
     stripe: {
       upgrade: vi.fn(),
     },
@@ -89,10 +92,13 @@ describe("OnboardingForm", () => {
     useOnboardingStore.getState().clear();
     mocks.getProfile.mockResolvedValue(null);
     mocks.getPlans.mockResolvedValue({ plans: [] });
+    mocks.getProfile.mockResolvedValue({ profile: null });
     mocks.navigate.mockReset();
     mocks.routerInvalidate.mockReset();
     mocks.saveProfile.mockReset();
     mocks.saveProfileDraft.mockReset();
+    mocks.suggestPlaces.mockReset();
+    mocks.suggestPlaces.mockResolvedValue({ places: [] });
   });
 
   it("renders the redesigned basics step with profile validation sections", async () => {
@@ -182,6 +188,64 @@ describe("OnboardingForm", () => {
     ).toBeVisible();
     expect(screen.getByRole("button", { name: /add friend/i })).toBeVisible();
     expect(screen.getByText(/referral credit/i)).toBeVisible();
+  });
+
+  it("saves progress and returns to the app from Save for later", async () => {
+    const user = userEvent.setup();
+    mocks.saveProfileDraft.mockResolvedValue({
+      profile: null,
+      readiness: { canDate: false, onboarded: false, pendingReviews: 0 },
+    });
+
+    render(<OnboardingForm />);
+    await screen.findByRole("heading", {
+      name: /tell chewbuu who is going out/i,
+    });
+    await user.click(screen.getByRole("button", { name: /save for later/i }));
+
+    expect(mocks.saveProfileDraft).toHaveBeenCalledTimes(1);
+    expect(mocks.routerInvalidate).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      replace: true,
+      to: "/me",
+    });
+  });
+
+  it("treats interests as persistent category steps and saves favorite places", async () => {
+    const user = userEvent.setup();
+    mocks.suggestPlaces.mockResolvedValue({
+      places: [
+        {
+          address: "Main Street",
+          name: "Texas Roadhouse",
+          placeId: "texas-roadhouse",
+          types: ["restaurant"],
+        },
+      ],
+    });
+
+    render(<OnboardingForm />);
+    await screen.findByRole("heading", {
+      name: /tell chewbuu who is going out/i,
+    });
+    await user.click(screen.getByRole("button", { name: "Interests" }));
+    expect(screen.getByText(/interest step 1 of 6/i)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Tacos" }));
+    await user.click(
+      screen.getByRole("button", { name: /search selected eat signals/i })
+    );
+    const place = await screen.findByRole("button", {
+      name: /texas roadhouse/i,
+    });
+    await user.click(place);
+    await user.click(screen.getByRole("button", { name: /next category/i }));
+    await user.click(screen.getByRole("button", { name: "Eat (1)" }));
+
+    expect(screen.getByText("Texas Roadhouse")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /remove texas roadhouse/i })
+    ).toBeVisible();
   });
 
   it("shows an 18 and older stop screen after basics for underage users", async () => {

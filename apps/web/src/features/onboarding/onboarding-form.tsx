@@ -57,6 +57,7 @@ import {
   Trash2,
   Upload,
   Video,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -69,6 +70,7 @@ import {
   type DatePlace,
   type DatingMedia,
   type DatingProfilePayload,
+  type FavoritePlace,
   type MembershipPlan,
   type PlaceSuggestWhat,
 } from "@/lib/dating-api";
@@ -79,7 +81,14 @@ import {
 } from "@/lib/push-notifications";
 import { useUsernameChecker } from "@/lib/use-username-checker";
 
+import {
+  createMediaFile,
+  createMediaCaptureSession,
+  hasAudioTrack,
+  type MediaCaptureSession,
+} from "./media-capture";
 import { useOnboardingStore } from "./onboarding-store";
+import { WatchAutocomplete, type WatchSearchResult } from "./watch-search";
 
 const steps = [
   "Basics",
@@ -178,6 +187,9 @@ const UNDER_21_MATCH_MAX_AGE = 22;
 const ADULT_MATCH_MIN_AGE = 23;
 const MAXIMUM_MATCH_AGE = 99;
 
+const WATCH_MEDIA_KEY = "Watch_media";
+const WATCH_TOPIC_KEY = "Watch_topics";
+
 const interestCategories = [
   {
     label: "Eat",
@@ -235,6 +247,8 @@ const interestCategories = [
     label: "Watch",
     prompt: "What genres, shows, and movies are your favorites?",
     suggestions: [
+      "Movies",
+      "TV shows",
       "Comedy",
       "Drama",
       "Thriller",
@@ -243,6 +257,8 @@ const interestCategories = [
       "Horror",
       "Documentary",
       "Anime",
+      "Wrestling",
+      "Theater",
     ],
   },
   {
@@ -257,10 +273,61 @@ const interestCategories = [
       "Family",
       "Art",
       "Tech",
+      "Politics",
       "Philosophy",
     ],
   },
 ] as const;
+
+const getCategorySignalValues = (
+  details: Record<string, string[]>,
+  category: string
+) =>
+  Object.entries(details)
+    .filter(
+      ([key, values]) =>
+        values.length > 0 &&
+        (key === category || key.startsWith(`${category}_`)) &&
+        !key.endsWith("_places") &&
+        key !== WATCH_MEDIA_KEY
+    )
+    .flatMap(([, values]) => values);
+
+const getInterestSummary = (details: Record<string, string[]>) => ({
+  favoriteThings: Array.from(
+    new Set(
+      interestCategories.flatMap((category) =>
+        getCategorySignalValues(details, category.label)
+      )
+    )
+  ),
+  interests: interestCategories
+    .filter(
+      (category) => getCategorySignalValues(details, category.label).length
+    )
+    .map((category) => category.label),
+});
+
+const isWatchSearchResult = (value: unknown): value is WatchSearchResult => {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === "number" &&
+    (candidate.kind === "show" || candidate.kind === "person") &&
+    typeof candidate.name === "string" &&
+    typeof candidate.sourceUrl === "string"
+  );
+};
+
+const parseWatchSearchResults = (values: string[] | undefined) =>
+  (values ?? []).flatMap((value) => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return isWatchSearchResult(parsed) ? [parsed] : [];
+    } catch {
+      return [];
+    }
+  });
 
 const defaultValues = {
   name: "",
@@ -279,6 +346,7 @@ const defaultValues = {
   friendInvites: [] as DatingProfilePayload["friendInvites"],
   height: "",
   interestDetails: {} as Record<string, string[]>,
+  favoritePlaces: {} as Record<string, FavoritePlace[]>,
   interestedIn: [] as string[],
   interests: [] as string[],
   kids: "",
@@ -609,6 +677,7 @@ export function OnboardingForm() {
         form.setFieldValue("datingModes", merged.datingModes || []);
         form.setFieldValue("interests", merged.interests || []);
         form.setFieldValue("interestDetails", merged.interestDetails || {});
+        form.setFieldValue("favoritePlaces", merged.favoritePlaces || {});
         form.setFieldValue("favoriteThings", merged.favoriteThings || []);
         form.setFieldValue("politics", merged.politics || "");
         form.setFieldValue("religion", merged.religion || "");
@@ -804,7 +873,7 @@ export function OnboardingForm() {
           ? ["Eat", "Play", "Move", "Watch", "Talk"]
           : ["Eat", "Drink", "Play", "Move", "Watch", "Talk"];
       for (const cat of categories) {
-        if (!details[cat] || details[cat].length === 0) {
+        if (getCategorySignalValues(details, cat).length === 0) {
           toast.error(
             `Please select or add at least one interest for "${cat}".`
           );
@@ -862,6 +931,7 @@ export function OnboardingForm() {
       toast.success("Progress saved. Return anytime to finish setup.", {
         duration: 3000,
       });
+      await leaveOnboarding("/me");
     } catch (error) {
       toast.dismiss("finish-later");
       toast.error(
@@ -987,39 +1057,26 @@ export function OnboardingForm() {
               Back
             </Button>
             <div className="flex flex-wrap items-center gap-3">
-              <Button
-                className="rounded-full px-5 h-10 font-semibold"
-                onClick={handleFinishLater}
-                type="button"
-                variant="ghost"
-              >
-                Save for later
-              </Button>
               {step < steps.length - 1 ? (
-                <Button
-                  className="rounded-full px-6 h-10 font-semibold"
-                  onClick={goNext}
-                  type="button"
-                >
-                  Next
-                  <ChevronRight className="size-4 ml-1 inline" />
-                </Button>
-              ) : (
-                <form.Subscribe
-                  selector={(state) => [state.canSubmit, state.isSubmitting]}
-                >
-                  {([canSubmit, isSubmitting]) => (
-                    <Button
-                      className="rounded-full px-6 h-10 font-semibold"
-                      disabled={!canSubmit || isSubmitting}
-                      type="submit"
-                    >
-                      <Sparkles className="size-4 mr-1.5 inline" />
-                      Finish onboarding
-                    </Button>
-                  )}
-                </form.Subscribe>
-              )}
+                <>
+                  <Button
+                    className="rounded-full px-5 h-10 font-semibold"
+                    onClick={handleFinishLater}
+                    type="button"
+                    variant="ghost"
+                  >
+                    Save for later
+                  </Button>
+                  <Button
+                    className="rounded-full px-6 h-10 font-semibold"
+                    onClick={goNext}
+                    type="button"
+                  >
+                    Next
+                    <ChevronRight className="size-4 ml-1 inline" />
+                  </Button>
+                </>
+              ) : null}
             </div>
           </div>
         </form>
@@ -2493,15 +2550,17 @@ function InterestsStep({ form }: { form: OnboardingFormApi }) {
       selector={(state) =>
         [
           state.values.interestDetails,
+          state.values.favoritePlaces,
           state.values.area,
           state.values.birthday,
         ] as const
       }
     >
-      {([interestDetails, areaValue, birthdayValue]) => (
+      {([interestDetails, favoritePlaces, areaValue, birthdayValue]) => (
         <InterestsStepContent
           form={form}
           interestDetails={interestDetails || {}}
+          favoritePlaces={favoritePlaces || {}}
           area={areaValue}
           birthday={(birthdayValue as string) || ""}
         />
@@ -2512,6 +2571,7 @@ function InterestsStep({ form }: { form: OnboardingFormApi }) {
 
 interface InterestsStepContentProps {
   birthday: string;
+  favoritePlaces: Record<string, FavoritePlace[]>;
   form: OnboardingFormApi;
   interestDetails: Record<string, string[]>;
   area: string;
@@ -2519,6 +2579,7 @@ interface InterestsStepContentProps {
 
 function InterestsStepContent({
   birthday,
+  favoritePlaces,
   form,
   interestDetails,
   area,
@@ -2542,6 +2603,7 @@ function InterestsStepContent({
     []
   );
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
+  const [isCategoryOpen, setIsCategoryOpen] = useState(true);
   const [placeSearch, setPlaceSearch] = useState("");
 
   const active = useMemo(
@@ -2561,9 +2623,7 @@ function InterestsStepContent({
   }, [activeCategory, availableInterestCategories]);
 
   const selected = interestDetails[active.label] ?? [];
-  const canSuggestPlaces = ["Eat", "Drink", "Play", "Move"].includes(
-    active.label
-  );
+  const canSuggestPlaces = true;
   const placeCacheKey = (query: string) =>
     `${active.label}:${area}:${query.trim().toLowerCase()}`;
   const searchedPlaceSections = searchedPlaceQueries.map((query) => ({
@@ -2572,18 +2632,17 @@ function InterestsStepContent({
   }));
 
   const toggleValue = (value: string) => {
-    const nextValues = selected.includes(value)
-      ? selected.filter((item) => item !== value)
-      : [...selected, value];
+    const normalizedValue = value.trim();
+    if (!normalizedValue) return;
+    const nextValues = selected.includes(normalizedValue)
+      ? selected.filter((item) => item !== normalizedValue)
+      : [...selected, normalizedValue];
     const nextDetails = { ...interestDetails, [active.label]: nextValues };
-    const allValues = Object.values(nextDetails).flat();
+    const summary = getInterestSummary(nextDetails);
 
     form.setFieldValue("interestDetails", nextDetails);
-    form.setFieldValue("favoriteThings", allValues.slice(0, 20));
-    form.setFieldValue(
-      "interests",
-      Object.keys(nextDetails).filter((key) => nextDetails[key]?.length)
-    );
+    form.setFieldValue("favoriteThings", summary.favoriteThings);
+    form.setFieldValue("interests", summary.interests);
   };
 
   const fetchPlacesForQuery = async (query: string) => {
@@ -2593,6 +2652,9 @@ function InterestsStepContent({
     }
 
     const cacheKey = placeCacheKey(trimmedQuery);
+    if (!selected.includes(trimmedQuery)) {
+      toggleValue(trimmedQuery);
+    }
     if (placesByQuery[cacheKey]) {
       setSearchedPlaceQueries([trimmedQuery]);
       return;
@@ -2641,6 +2703,7 @@ function InterestsStepContent({
             filters: [query],
             latitude: (form.state.values.latitude as string) || undefined,
             longitude: (form.state.values.longitude as string) || undefined,
+            searchKind: "place",
             what: [active.label.toLowerCase() as PlaceSuggestWhat],
           });
           return [cacheKey, res.places || []] as const;
@@ -2660,15 +2723,91 @@ function InterestsStepContent({
     }
   };
 
-  const selectedPlacesKey = `${active.label}_places`;
-  const activeFavoritePlaces = interestDetails[selectedPlacesKey] || [];
+  const activeFavoritePlaces = favoritePlaces[active.label] ?? [];
+  const watchMedia = parseWatchSearchResults(interestDetails[WATCH_MEDIA_KEY]);
 
-  const togglePlaceFavorite = (placeName: string) => {
-    const nextPlaces = activeFavoritePlaces.includes(placeName)
-      ? activeFavoritePlaces.filter((p) => p !== placeName)
-      : [...activeFavoritePlaces, placeName];
+  const updateWatchSelection = (result: WatchSearchResult) => {
+    const fieldKey = result.kind === "show" ? "Watch_shows" : "Watch_actors";
+    const currentValues = interestDetails[fieldKey] ?? [];
+    const nextValues = currentValues.includes(result.name)
+      ? currentValues
+      : [...currentValues, result.name];
+    const nextMedia =
+      result.id === 0 ||
+      watchMedia.some(
+        (item) => item.kind === result.kind && item.id === result.id
+      )
+        ? watchMedia
+        : [...watchMedia, result];
+    const nextDetails = {
+      ...interestDetails,
+      Watch: interestDetails.Watch?.includes(result.name)
+        ? interestDetails.Watch
+        : [...(interestDetails.Watch ?? []), result.name],
+      [fieldKey]: nextValues,
+      [WATCH_MEDIA_KEY]: nextMedia.map((item) => JSON.stringify(item)),
+    };
+    const summary = getInterestSummary(nextDetails);
+    form.setFieldValue("interestDetails", nextDetails);
+    form.setFieldValue("favoriteThings", summary.favoriteThings);
+    form.setFieldValue("interests", summary.interests);
+  };
 
-    form.setFieldValue(`interestDetails.${selectedPlacesKey}`, nextPlaces);
+  const removeWatchSelection = (result: WatchSearchResult) => {
+    const fieldKey = result.kind === "show" ? "Watch_shows" : "Watch_actors";
+    const nextDetails = {
+      ...interestDetails,
+      Watch: (interestDetails.Watch ?? []).filter(
+        (value) => value !== result.name
+      ),
+      [fieldKey]: (interestDetails[fieldKey] ?? []).filter(
+        (value) => value !== result.name
+      ),
+      [WATCH_MEDIA_KEY]: watchMedia
+        .filter((item) => !(item.kind === result.kind && item.id === result.id))
+        .map((item) => JSON.stringify(item)),
+    };
+    const summary = getInterestSummary(nextDetails);
+    form.setFieldValue("interestDetails", nextDetails);
+    form.setFieldValue("favoriteThings", summary.favoriteThings);
+    form.setFieldValue("interests", summary.interests);
+  };
+
+  const togglePlaceFavorite = (place: DatePlace) => {
+    const isSelected = activeFavoritePlaces.some(
+      (favoritePlace) => favoritePlace.placeId === place.placeId
+    );
+    const nextPlaces = isSelected
+      ? activeFavoritePlaces.filter(
+          (favoritePlace) => favoritePlace.placeId !== place.placeId
+        )
+      : [
+          ...activeFavoritePlaces,
+          {
+            address: place.address,
+            category: active.label.toLowerCase() as PlaceSuggestWhat,
+            googleMapsUri: place.googleMapsUri,
+            latitude: place.latitude,
+            longitude: place.longitude,
+            name: place.name,
+            placeId: place.placeId,
+            types: place.types,
+          },
+        ];
+
+    form.setFieldValue("favoritePlaces", {
+      ...favoritePlaces,
+      [active.label]: nextPlaces,
+    });
+  };
+
+  const removeFavoritePlace = (placeId: string) => {
+    form.setFieldValue("favoritePlaces", {
+      ...favoritePlaces,
+      [active.label]: activeFavoritePlaces.filter(
+        (place) => place.placeId !== placeId
+      ),
+    });
   };
 
   return (
@@ -2679,261 +2818,453 @@ function InterestsStepContent({
         text="Chewbuu matches you based on your activities and topics. Please select or enter at least one interest for each category below."
       />
 
-      {/* Category Navigation Tabs */}
-      <div className="flex flex-wrap justify-start gap-2 border-b border-border pb-4">
-        {availableInterestCategories.map((category) => {
-          const count = interestDetails[category.label]?.length ?? 0;
-          const isActive = activeCategory === category.label;
-          return (
-            <button
-              key={category.label}
-              onClick={() => {
-                setActiveCategory(category.label);
-                setPlaceSearch("");
-                setSearchedPlaceQueries([]);
-              }}
-              className={`rounded-full px-4 py-2 border text-sm font-semibold transition-all duration-200 ${
-                isActive
-                  ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-border-hover"
-              }`}
-              type="button"
-            >
-              {category.label} {count > 0 && `(${count})`}
-            </button>
-          );
-        })}
+      {/* Interest substeps */}
+      <div className="flex flex-col gap-3 border-b border-border pb-4">
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="font-semibold text-foreground">
+            Interest step{" "}
+            {availableInterestCategories.findIndex(
+              (category) => category.label === active.label
+            ) + 1}{" "}
+            of {availableInterestCategories.length}
+          </span>
+          <span className="text-muted-foreground">
+            {
+              availableInterestCategories.filter(
+                (category) =>
+                  getCategorySignalValues(interestDetails, category.label)
+                    .length > 0
+              ).length
+            }{" "}
+            completed
+          </span>
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {availableInterestCategories.map((category) => {
+            const count = getCategorySignalValues(
+              interestDetails,
+              category.label
+            ).length;
+            const isActive = activeCategory === category.label;
+            return (
+              <button
+                aria-current={isActive ? "step" : undefined}
+                className={cn(
+                  "shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200",
+                  isActive
+                    ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                    : count > 0
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      : "border-border bg-card text-muted-foreground hover:border-border-hover hover:text-foreground"
+                )}
+                key={category.label}
+                onClick={() => {
+                  setActiveCategory(category.label);
+                  setIsCategoryOpen(true);
+                  setPlaceSearch("");
+                  setSearchedPlaceQueries([]);
+                }}
+                type="button"
+              >
+                {category.label} {count > 0 && `(${count})`}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="rounded-2xl border bg-background p-5 shadow-sm flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <h3 className="font-semibold text-lg text-foreground">
-            {active.label}
-          </h3>
-          <p className="text-muted-foreground text-sm">{active.prompt}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {active.suggestions.map((suggestion) => (
+        <button
+          className="flex items-center justify-between gap-3 text-left"
+          onClick={() => setIsCategoryOpen((open) => !open)}
+          type="button"
+        >
+          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+            {isCategoryOpen ? "Editing" : "Review"} {active.label}
+          </span>
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              isCategoryOpen && "rotate-180 text-primary"
+            )}
+          />
+        </button>
+        <div className={cn("flex flex-col gap-4", !isCategoryOpen && "hidden")}>
+          <div className="flex flex-col gap-1">
+            <h3 className="font-semibold text-lg text-foreground">
+              {active.label}
+            </h3>
+            <p className="text-muted-foreground text-sm">{active.prompt}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {active.suggestions.map((suggestion) => (
+              <Button
+                className="rounded-full px-4 py-1.5 text-sm transition-all duration-200"
+                key={suggestion}
+                onClick={() => toggleValue(suggestion)}
+                type="button"
+                variant={selected.includes(suggestion) ? "default" : "outline"}
+              >
+                {suggestion}
+              </Button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              className="rounded-full h-10 px-4 text-sm"
+              aria-label={`Add ${active.label} interest`}
+              onChange={(event) => setCustomInterest(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  if (customInterest.trim()) {
+                    toggleValue(customInterest.trim());
+                    setCustomInterest("");
+                  }
+                }
+              }}
+              placeholder={`Add your own custom ${active.label.toLowerCase()}...`}
+              value={customInterest}
+            />
             <Button
-              className="rounded-full px-4 py-1.5 text-sm transition-all duration-200"
-              key={suggestion}
-              onClick={() => toggleValue(suggestion)}
-              type="button"
-              variant={selected.includes(suggestion) ? "default" : "outline"}
-            >
-              {suggestion}
-            </Button>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <Input
-            className="rounded-full h-10 px-4 text-sm"
-            aria-label={`Add ${active.label} interest`}
-            onChange={(event) => setCustomInterest(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
+              className="rounded-full px-5 h-10 bg-primary text-primary-foreground font-semibold"
+              onClick={() => {
                 if (customInterest.trim()) {
                   toggleValue(customInterest.trim());
                   setCustomInterest("");
                 }
-              }
-            }}
-            placeholder={`Add your own custom ${active.label.toLowerCase()}...`}
-            value={customInterest}
-          />
-          <Button
-            className="rounded-full px-5 h-10 bg-primary text-primary-foreground font-semibold"
-            onClick={() => {
-              if (customInterest.trim()) {
-                toggleValue(customInterest.trim());
-                setCustomInterest("");
-              }
-            }}
-            type="button"
-          >
-            <Plus className="size-4 mr-1 inline" />
-            Add
-          </Button>
-        </div>
+              }}
+              type="button"
+            >
+              <Plus className="size-4 mr-1 inline" />
+              Add
+            </Button>
+          </div>
 
-        {/* Show Local Place Suggestions for Eat, Drink, Play, Move */}
-        {canSuggestPlaces && (
-          <div className="mt-4 border-t border-border pt-4">
-            <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
-              <MapPin className="size-4 text-primary" />
-              Favorite local {active.label.toLowerCase()} spots
-              <span className="font-semibold text-muted-foreground">
-                (Optional)
-              </span>
-            </h4>
-            <p className="mb-3 text-muted-foreground text-xs/relaxed">
-              Pick the signals you like, then find places around {area}. You can
-              also search a specific spot, city, or state when a favorite is a
-              little outside your usual area.
-            </p>
-            {selected.length > 0 ? (
-              <div className="mb-3 flex flex-col gap-2">
-                <div className="flex flex-wrap gap-2">
-                  {selected.map((item) => (
-                    <Badge
-                      className="rounded-full px-2.5 py-1 text-[10px]"
-                      key={item}
-                      variant="secondary"
-                    >
-                      {item}
-                    </Badge>
-                  ))}
+          {/* Collect favorite places for every interest category */}
+          {canSuggestPlaces && (
+            <div className="mt-4 border-t border-border pt-4">
+              <h4 className="font-bold text-sm text-foreground mb-2 flex items-center gap-1.5">
+                <MapPin className="size-4 text-primary" />
+                {active.label === "Watch"
+                  ? "Favorite places to watch and catch shows"
+                  : `Favorite local ${active.label.toLowerCase()} spots`}
+                <span className="font-semibold text-muted-foreground">
+                  (Optional)
+                </span>
+              </h4>
+              <p className="mb-3 text-muted-foreground text-xs/relaxed">
+                {active.label === "Watch"
+                  ? `Search cinemas, theaters, stages, sports bars, and other places you like to watch around ${area}.`
+                  : `Pick the signals you like, then find places around ${area}. You can also search a specific spot, city, or state when a favorite is a little outside your usual area.`}
+              </p>
+              {activeFavoritePlaces.length > 0 ? (
+                <div className="mb-3 flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {activeFavoritePlaces.map((place) => (
+                      <Badge
+                        className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px]"
+                        key={place.placeId}
+                        variant="secondary"
+                      >
+                        {place.name}
+                        <button
+                          aria-label={`Remove ${place.name}`}
+                          className="rounded-full p-0.5 hover:bg-muted"
+                          onClick={() => removeFavoritePlace(place.placeId)}
+                          type="button"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                  {selected.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selected.map((item) => (
+                        <Badge
+                          className="rounded-full px-2.5 py-1 text-[10px]"
+                          key={item}
+                          variant="secondary"
+                        >
+                          {item}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                  <Button
+                    className="w-fit rounded-full"
+                    disabled={isLoadingPlaces}
+                    onClick={() => void fetchPlacesForSelected()}
+                    size="sm"
+                    type="button"
+                  >
+                    Search selected {active.label.toLowerCase()} signals
+                  </Button>
                 </div>
+              ) : selected.length > 0 ? (
+                <div className="mb-3 flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {selected.map((item) => (
+                      <Badge
+                        className="rounded-full px-2.5 py-1 text-[10px]"
+                        key={item}
+                        variant="secondary"
+                      >
+                        {item}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-fit rounded-full"
+                    disabled={isLoadingPlaces}
+                    onClick={() => void fetchPlacesForSelected()}
+                    size="sm"
+                    type="button"
+                  >
+                    Search selected {active.label.toLowerCase()} signals
+                  </Button>
+                </div>
+              ) : (
+                <p className="mb-3 rounded-2xl border border-dashed border-border bg-muted/20 p-3 text-muted-foreground text-xs">
+                  Select a chip above or add your own signal, then search for
+                  local places that match it.
+                </p>
+              )}
+              <div className="flex flex-col gap-2 mb-3 sm:flex-row">
+                <Input
+                  className="h-10 rounded-full border border-border bg-background px-4 text-sm"
+                  onChange={(e) => setPlaceSearch(e.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void fetchPlacesForQuery(placeSearch);
+                    }
+                  }}
+                  placeholder='Search a spot, city, or idea. Try "Purple Onion Cabot AR"...'
+                  value={placeSearch}
+                />
                 <Button
-                  className="w-fit rounded-full"
-                  disabled={isLoadingPlaces}
-                  onClick={() => void fetchPlacesForSelected()}
-                  size="sm"
+                  className="rounded-full"
+                  disabled={isLoadingPlaces || !placeSearch.trim()}
+                  onClick={() => void fetchPlacesForQuery(placeSearch)}
                   type="button"
+                  variant="outline"
                 >
-                  Search selected {active.label.toLowerCase()} signals
+                  Find spots
                 </Button>
               </div>
-            ) : (
-              <p className="mb-3 rounded-2xl border border-dashed border-border bg-muted/20 p-3 text-muted-foreground text-xs">
-                Select a chip above or add your own signal, then search for
-                local places that match it.
-              </p>
-            )}
-            <div className="flex flex-col gap-2 mb-3 sm:flex-row">
-              <Input
-                className="h-10 rounded-full border border-border bg-background px-4 text-sm"
-                onChange={(e) => setPlaceSearch(e.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void fetchPlacesForQuery(placeSearch);
+              {isLoadingPlaces ? (
+                <p className="text-xs text-muted-foreground animate-pulse">
+                  Searching near you...
+                </p>
+              ) : searchedPlaceSections.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  Search selected signals or type a specific place idea to see
+                  local results.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-5">
+                  {searchedPlaceSections.map(({ places, query }) => (
+                    <section className="flex flex-col gap-2" key={query}>
+                      <div className="flex items-center justify-between gap-3">
+                        <h5 className="font-bold text-xs">
+                          Results for {query}
+                        </h5>
+                        <Badge className="rounded-full text-[10px]">
+                          Showing {Math.min(places.length, 6)} of{" "}
+                          {places.length}
+                        </Badge>
+                      </div>
+                      {places.length === 0 ? (
+                        <p className="rounded-xl border border-dashed border-border bg-muted/15 p-3 text-muted-foreground text-xs">
+                          No spots found for {query}. Try a named place, nearby
+                          city, or broader search.
+                        </p>
+                      ) : (
+                        <ScrollArea className="w-full pb-3">
+                          <div className="flex w-max gap-2">
+                            {places.slice(0, 6).map((place) => {
+                              const isFav = activeFavoritePlaces.some(
+                                (favoritePlace) =>
+                                  favoritePlace.placeId === place.placeId
+                              );
+                              return (
+                                <button
+                                  className={`flex h-20 w-64 shrink-0 items-center justify-between rounded-xl border p-3 text-left text-xs transition duration-250 sm:w-72 ${
+                                    isFav
+                                      ? "border-primary bg-primary/5 font-medium text-primary-foreground"
+                                      : "border-border bg-card text-foreground hover:border-border-hover"
+                                  }`}
+                                  key={`${query}-${place.placeId}`}
+                                  onClick={() => togglePlaceFavorite(place)}
+                                  type="button"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="truncate font-bold text-foreground">
+                                      {place.name}
+                                    </p>
+                                    <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
+                                      {place.types.slice(0, 2).join(" · ") ||
+                                        "Local favorite spot"}
+                                    </p>
+                                  </div>
+                                  <Heart
+                                    className={`ml-2 size-4 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                                  />
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <ScrollBar orientation="horizontal" />
+                        </ScrollArea>
+                      )}
+                    </section>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Structured Watch search with a manual fallback */}
+          {active.label === "Watch" && (
+            <div className="mt-4 flex flex-col gap-4 border-t border-border pt-4">
+              <WatchAutocomplete
+                kind="show"
+                label="Favorite Shows & TV"
+                onAdd={updateWatchSelection}
+                onRemove={(name) => {
+                  const result = watchMedia.find(
+                    (item) => item.kind === "show" && item.name === name
+                  );
+                  if (result) removeWatchSelection(result);
+                  else {
+                    const nextDetails = {
+                      ...interestDetails,
+                      Watch: (interestDetails.Watch ?? []).filter(
+                        (value) => value !== name
+                      ),
+                      Watch_shows: (interestDetails.Watch_shows ?? []).filter(
+                        (value) => value !== name
+                      ),
+                    };
+                    const summary = getInterestSummary(nextDetails);
+                    form.setFieldValue("interestDetails", nextDetails);
+                    form.setFieldValue(
+                      "favoriteThings",
+                      summary.favoriteThings
+                    );
+                    form.setFieldValue("interests", summary.interests);
                   }
                 }}
-                placeholder='Search a spot, city, or idea. Try "Purple Onion Cabot AR"...'
-                value={placeSearch}
+                selected={interestDetails.Watch_shows ?? []}
               />
-              <Button
-                className="rounded-full"
-                disabled={isLoadingPlaces || !placeSearch.trim()}
-                onClick={() => void fetchPlacesForQuery(placeSearch)}
-                type="button"
-                variant="outline"
-              >
-                Find spots
-              </Button>
+              <WatchAutocomplete
+                kind="person"
+                label="Favorite Actors & People"
+                onAdd={updateWatchSelection}
+                onRemove={(name) => {
+                  const result = watchMedia.find(
+                    (item) => item.kind === "person" && item.name === name
+                  );
+                  if (result) removeWatchSelection(result);
+                  else {
+                    const nextDetails = {
+                      ...interestDetails,
+                      Watch: (interestDetails.Watch ?? []).filter(
+                        (value) => value !== name
+                      ),
+                      Watch_actors: (interestDetails.Watch_actors ?? []).filter(
+                        (value) => value !== name
+                      ),
+                    };
+                    const summary = getInterestSummary(nextDetails);
+                    form.setFieldValue("interestDetails", nextDetails);
+                    form.setFieldValue(
+                      "favoriteThings",
+                      summary.favoriteThings
+                    );
+                    form.setFieldValue("interests", summary.interests);
+                  }
+                }}
+                selected={interestDetails.Watch_actors ?? []}
+              />
+              <InputList
+                form={form}
+                fieldKey={WATCH_TOPIC_KEY}
+                placeholder="Add a topic (e.g. wrestling, movies, anime)"
+              />
             </div>
-            {isLoadingPlaces ? (
-              <p className="text-xs text-muted-foreground animate-pulse">
-                Searching near you...
-              </p>
-            ) : searchedPlaceSections.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic">
-                Search selected signals or type a specific place idea to see
-                local results.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-5">
-                {searchedPlaceSections.map(({ places, query }) => (
-                  <section className="flex flex-col gap-2" key={query}>
-                    <div className="flex items-center justify-between gap-3">
-                      <h5 className="font-bold text-xs">Results for {query}</h5>
-                      <Badge className="rounded-full text-[10px]">
-                        Showing {Math.min(places.length, 6)} of {places.length}
-                      </Badge>
-                    </div>
-                    {places.length === 0 ? (
-                      <p className="rounded-xl border border-dashed border-border bg-muted/15 p-3 text-muted-foreground text-xs">
-                        No spots found for {query}. Try a named place, nearby
-                        city, or broader search.
-                      </p>
-                    ) : (
-                      <ScrollArea className="w-full pb-3">
-                        <div className="flex w-max gap-2">
-                          {places.slice(0, 6).map((place) => {
-                            const isFav = activeFavoritePlaces.includes(
-                              place.name
-                            );
-                            return (
-                              <button
-                                className={`flex h-20 w-64 shrink-0 items-center justify-between rounded-xl border p-3 text-left text-xs transition duration-250 sm:w-72 ${
-                                  isFav
-                                    ? "border-primary bg-primary/5 font-medium text-primary-foreground"
-                                    : "border-border bg-card text-foreground hover:border-border-hover"
-                                }`}
-                                key={`${query}-${place.placeId}`}
-                                onClick={() => togglePlaceFavorite(place.name)}
-                                type="button"
-                              >
-                                <div className="min-w-0">
-                                  <p className="truncate font-bold text-foreground">
-                                    {place.name}
-                                  </p>
-                                  {place.address ? (
-                                    <p className="mt-0.5 line-clamp-2 text-[10px] text-muted-foreground">
-                                      {place.address}
-                                    </p>
-                                  ) : null}
-                                </div>
-                                <Heart
-                                  className={`ml-2 size-4 shrink-0 ${isFav ? "fill-primary text-primary" : "text-muted-foreground"}`}
-                                />
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <ScrollBar orientation="horizontal" />
-                      </ScrollArea>
-                    )}
-                  </section>
-                ))}
+          )}
+
+          {/* Extra input forms for Talk category */}
+          {active.label === "Talk" && (
+            <div className="mt-4 border-t border-border pt-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-muted-foreground ml-1">
+                  Other Topics or Hobbies
+                </span>
+                <InputList
+                  form={form}
+                  fieldKey="Talk_topics"
+                  placeholder="Add topic (e.g. Hiking, Cooking, Web3)"
+                />
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
+        {!isCategoryOpen ? (
+          <p className="text-xs text-muted-foreground">
+            {selected.length} signals and {activeFavoritePlaces.length} favorite
+            places saved. Open this step to edit them.
+          </p>
+        ) : null}
+      </div>
 
-        {/* Extra input forms for Watch category */}
-        {active.label === "Watch" && (
-          <div className="mt-4 border-t border-border pt-4 flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-muted-foreground ml-1">
-                Favorite Shows & Movies
-              </span>
-              <InputList
-                form={form}
-                fieldKey="Watch_shows"
-                placeholder="Add show or movie (e.g. Breaking Bad)"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-muted-foreground ml-1">
-                Favorite Actors & Actresses
-              </span>
-              <InputList
-                form={form}
-                fieldKey="Watch_actors"
-                placeholder="Add actor/actress (e.g. Pedro Pascal)"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Extra input forms for Talk category */}
-        {active.label === "Talk" && (
-          <div className="mt-4 border-t border-border pt-4 flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-muted-foreground ml-1">
-                Other Topics or Hobbies
-              </span>
-              <InputList
-                form={form}
-                fieldKey="Talk_topics"
-                placeholder="Add topic (e.g. Hiking, Cooking, Web3)"
-              />
-            </div>
-          </div>
-        )}
+      <div className="flex items-center justify-between gap-3">
+        <Button
+          className="rounded-full"
+          disabled={activeCategory === availableInterestCategories[0].label}
+          onClick={() => {
+            const currentIndex = availableInterestCategories.findIndex(
+              (category) => category.label === active.label
+            );
+            const previous = availableInterestCategories[currentIndex - 1];
+            if (previous) {
+              setActiveCategory(previous.label);
+              setIsCategoryOpen(true);
+              setPlaceSearch("");
+              setSearchedPlaceQueries([]);
+            }
+          }}
+          type="button"
+          variant="outline"
+        >
+          <ChevronLeft className="mr-1 size-4" />
+          Previous
+        </Button>
+        <Button
+          className="rounded-full"
+          disabled={
+            activeCategory === availableInterestCategories.at(-1)?.label
+          }
+          onClick={() => {
+            const currentIndex = availableInterestCategories.findIndex(
+              (category) => category.label === active.label
+            );
+            const next = availableInterestCategories[currentIndex + 1];
+            if (next) {
+              setActiveCategory(next.label);
+              setIsCategoryOpen(true);
+              setPlaceSearch("");
+              setSearchedPlaceQueries([]);
+            }
+          }}
+          type="button"
+        >
+          Next category
+          <ChevronRight className="ml-1 size-4" />
+        </Button>
       </div>
     </div>
   );
@@ -2955,10 +3286,14 @@ function InputList({
     if (!val.trim()) return;
     if (currentList.includes(val.trim())) return;
 
-    form.setFieldValue(`interestDetails.${fieldKey}`, [
-      ...currentList,
-      val.trim(),
-    ]);
+    const nextDetails = {
+      ...form.state.values.interestDetails,
+      [fieldKey]: [...currentList, val.trim()],
+    };
+    const summary = getInterestSummary(nextDetails);
+    form.setFieldValue("interestDetails", nextDetails);
+    form.setFieldValue("favoriteThings", summary.favoriteThings);
+    form.setFieldValue("interests", summary.interests);
     setVal("");
   };
 
@@ -2998,10 +3333,16 @@ function InputList({
                 type="button"
                 className="hover:bg-muted p-0.5 rounded-full shrink-0"
                 onClick={() => {
-                  form.setFieldValue(
-                    `interestDetails.${fieldKey}`,
-                    currentList.filter((x: string) => x !== item)
-                  );
+                  const nextDetails = {
+                    ...form.state.values.interestDetails,
+                    [fieldKey]: currentList.filter(
+                      (value: string) => value !== item
+                    ),
+                  };
+                  const summary = getInterestSummary(nextDetails);
+                  form.setFieldValue("interestDetails", nextDetails);
+                  form.setFieldValue("favoriteThings", summary.favoriteThings);
+                  form.setFieldValue("interests", summary.interests);
                 }}
               >
                 <Trash2 className="size-3 text-muted-foreground" />
@@ -3970,9 +4311,12 @@ function LiveCaptureDialog({
 }: LiveCaptureDialogProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaCaptureRef = useRef<MediaCaptureSession | null>(null);
+  const recordingStopRef = useRef<(() => Promise<Blob>) | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [countdown, setCountdown] = useState(mode === "video" ? 60 : 0);
@@ -4114,93 +4458,125 @@ function LiveCaptureDialog({
     }
   };
 
-  const handleStartRecording = () => {
-    if (!streamRef.current) return;
+  const handleStartRecording = async () => {
+    const activeStream = streamRef.current;
+    if (!activeStream || isFinalizing) return;
     setRecordedUrl(null);
     setCapturedFile(null);
-    setIsRecording(true);
+    setError(null);
     setCountdown(60);
 
-    // Pick best format supported by browser with audio codecs
-    let mimeType = "";
-    const types = [
-      "video/mp4;codecs=avc1,mp4a.40.2",
-      "video/mp4",
-      "video/webm;codecs=vp9,opus",
-      "video/webm;codecs=vp8,opus",
-      "video/webm;codecs=h264,opus",
-      "video/webm",
-    ];
-    for (const t of types) {
-      if (MediaRecorder.isTypeSupported(t)) {
-        mimeType = t;
-        break;
-      }
-    }
-    const options = mimeType ? { mimeType } : undefined;
-
-    let mediaRecorder: MediaRecorder;
     try {
-      mediaRecorder = new MediaRecorder(streamRef.current, options);
+      const mediaCapture = await createMediaCaptureSession(activeStream);
+      mediaCaptureRef.current = mediaCapture;
+      recordingStopRef.current = mediaCapture.stop;
+      const monitorCapture = async () => {
+        try {
+          await mediaCapture.errorPromise;
+        } catch (captureError: unknown) {
+          if (recordingStopRef.current === mediaCapture.stop) {
+            setError(
+              captureError instanceof Error
+                ? captureError.message
+                : "Media capture failed."
+            );
+          }
+        }
+      };
+      void monitorCapture();
     } catch {
-      mediaRecorder = new MediaRecorder(streamRef.current);
+      // MediaBunny relies on WebCodecs. Keep MediaRecorder as a compatibility
+      // fallback for browsers that do not expose the required encoders.
+      let mimeType = "";
+      for (const type of [
+        "video/mp4;codecs=avc1,mp4a.40.2",
+        "video/mp4",
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+      ]) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
+        }
+      }
+
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(activeStream, { mimeType })
+        : new MediaRecorder(activeStream);
+      const chunks: Blob[] = [];
+      let resolveStopped: (blob: Blob) => void = () => {};
+      let rejectStopped: (error: unknown) => void = () => {};
+      // MediaRecorder exposes completion through events, so a promise is
+      // required to make finalization awaitable.
+      // eslint-disable-next-line promise/avoid-new
+      const blobPromise = new Promise<Blob>((resolve, reject) => {
+        resolveStopped = resolve;
+        rejectStopped = reject;
+      });
+      mediaRecorder.addEventListener("dataavailable", (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      });
+      mediaRecorder.addEventListener("error", () =>
+        rejectStopped(new Error("Recording failed."))
+      );
+      mediaRecorder.addEventListener("stop", () => {
+        if (chunks.length === 0) {
+          rejectStopped(new Error("No video data was recorded."));
+          return;
+        }
+        resolveStopped(
+          new Blob(chunks, { type: mediaRecorder.mimeType || "video/webm" })
+        );
+      });
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      recordingStopRef.current = async () => {
+        if (mediaRecorder.state === "recording") mediaRecorder.stop();
+        return blobPromise;
+      };
     }
 
-    mediaRecorderRef.current = mediaRecorder;
-    const chunks: Blob[] = [];
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        chunks.push(e.data);
-      }
-    };
-
-    mediaRecorder.onstop = () => {
-      clearTimer();
-      setIsRecording(false);
-      if (chunks.length === 0) {
-        setError("No video data was recorded. Please try again.");
-        return;
-      }
-
-      const recorderMimeType =
-        mediaRecorder.mimeType || mimeType || "video/webm";
-      const uploadType = recorderMimeType.includes("mp4")
-        ? "video/mp4"
-        : "video/webm";
-      const blob = new Blob(chunks, { type: uploadType });
-      const url = URL.createObjectURL(blob);
-      const extension = uploadType.includes("mp4") ? "mp4" : "webm";
-      const file = new File([blob], `intro-video.${extension}`, {
-        type: uploadType,
-      });
-      setRecordedUrl(url);
-      setCapturedFile(file);
-      stopStream();
-    };
-
-    mediaRecorder.start();
-
+    setIsRecording(true);
     timerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          handleStopRecording();
+      setCountdown((previous) => {
+        if (previous <= 1) {
+          void handleStopRecording();
           return 0;
         }
-        return prev - 1;
+        return previous - 1;
       });
     }, 1000);
   };
 
-  const handleStopRecording = () => {
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === "recording"
-    ) {
-      mediaRecorderRef.current.stop();
-    }
-    setIsRecording(false);
+  const handleStopRecording = async () => {
+    const stopRecording = recordingStopRef.current;
+    if (!stopRecording) return;
+    recordingStopRef.current = null;
+    mediaCaptureRef.current = null;
     clearTimer();
+    setIsRecording(false);
+    setIsFinalizing(true);
+    try {
+      const blob = await stopRecording();
+      if (mode === "video" && !(await hasAudioTrack(blob))) {
+        throw new Error(
+          "No microphone audio was captured. Check microphone permissions and try again."
+        );
+      }
+      const url = URL.createObjectURL(blob);
+      setRecordedUrl(url);
+      setCapturedFile(createMediaFile(blob));
+      stopStream();
+    } catch (recordingError) {
+      setError(
+        recordingError instanceof Error
+          ? recordingError.message
+          : "No video data was recorded. Please try again."
+      );
+    } finally {
+      setIsFinalizing(false);
+    }
   };
 
   const handleUseCapturedMedia = () => {
@@ -4342,7 +4718,7 @@ function LiveCaptureDialog({
             </Button>
           ) : isRecording ? (
             <Button
-              onClick={handleStopRecording}
+              onClick={() => void handleStopRecording()}
               className="rounded-full bg-red-600 hover:bg-red-700 text-white font-semibold px-6"
             >
               Stop Recording
@@ -4350,10 +4726,10 @@ function LiveCaptureDialog({
           ) : (
             <Button
               onClick={handleStartRecording}
-              disabled={!!error || !stream}
+              disabled={!!error || !stream || isFinalizing}
               className="rounded-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold px-6"
             >
-              Start Recording
+              {isFinalizing ? "Processing…" : "Start Recording"}
             </Button>
           )}
         </DialogFooter>

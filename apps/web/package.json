@@ -54,6 +54,7 @@
     "evlog": "catalog:",
     "import-in-the-middle": "^3.3.3",
     "lucide-react": "catalog:",
+    "mediabunny": "^1.55.3",
     "next-themes": "catalog:",
     "nitro": "^3.0.260610-beta",
     "react": "^19.2.7",

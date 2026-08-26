@@ -73,6 +73,7 @@ import {
   ExternalLink,
   Heart,
   Home,
+  Link2,
   LogOut,
   MapPin,
   MessageCircle,
@@ -366,6 +367,8 @@ const settingsInterestCategories = [
   {
     label: "Watch",
     suggestions: [
+      "Movies",
+      "TV shows",
       "Comedy",
       "Drama",
       "Thriller",
@@ -374,6 +377,8 @@ const settingsInterestCategories = [
       "Horror",
       "Documentary",
       "Anime",
+      "Wrestling",
+      "Theater",
     ],
   },
   {
@@ -387,10 +392,39 @@ const settingsInterestCategories = [
       "Family",
       "Art",
       "Tech",
+      "Politics",
       "Philosophy",
     ],
   },
 ] as const;
+
+const getProfileInterestKeys = (details: Record<string, string[]>) =>
+  settingsInterestCategories
+    .filter((category) =>
+      Object.entries(details).some(
+        ([key, values]) =>
+          values.length > 0 &&
+          (key === category.label || key.startsWith(`${category.label}_`)) &&
+          !key.endsWith("_places") &&
+          key !== "Watch_media"
+      )
+    )
+    .map((category) => category.label);
+
+const getProfileFavoriteThings = (details: Record<string, string[]>) =>
+  Array.from(
+    new Set(
+      Object.entries(details)
+        .filter(
+          ([key, values]) =>
+            values.length > 0 &&
+            !key.endsWith("_places") &&
+            key !== profileVisibleChipsKey &&
+            key !== "Watch_media"
+        )
+        .flatMap(([, values]) => values)
+    )
+  );
 
 const formatLabel = (value: string) =>
   value
@@ -879,6 +913,113 @@ function HomeDashboardView({
         </Button>
       </div>
     </div>
+  );
+}
+
+function ConnectedAccountsCard() {
+  const [accounts, setAccounts] = useState<
+    { id: string; providerId: string }[]
+  >([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLinking, setIsLinking] = useState(false);
+
+  const loadAccounts = async () => {
+    setIsLoading(true);
+    try {
+      const result = await authClient.listAccounts();
+      if (result.error) {
+        throw new Error(result.error.message || "Could not load sign-ins.");
+      }
+      setAccounts(
+        (result.data ?? []).map((account) => ({
+          id: account.id,
+          providerId: account.providerId,
+        }))
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not load sign-ins."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadAccounts();
+  }, []);
+
+  const googleIsLinked = accounts.some(
+    (account) => account.providerId === "google"
+  );
+
+  const handleLinkGoogle = async () => {
+    setIsLinking(true);
+    try {
+      const result = await authClient.linkSocial({
+        callbackURL: "/me/profile",
+        provider: "google",
+      });
+      if (result.error) {
+        throw new Error(result.error.message || "Could not link Google.");
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not link Google."
+      );
+      setIsLinking(false);
+    }
+  };
+
+  return (
+    <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 font-bold text-sm">
+          <Link2 aria-hidden="true" className="size-4 text-primary" />
+          Connected sign-ins
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Keep your email and Google sign-in together on one Chewbuu account.
+          Linking does not change your Chewbuu email.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {isLoading ? (
+            <Badge variant="secondary">Checking sign-ins...</Badge>
+          ) : (
+            accounts.map((account) => (
+              <Badge
+                className="rounded-full capitalize"
+                key={account.id}
+                variant="secondary"
+              >
+                {account.providerId === "credential"
+                  ? "Email & password"
+                  : account.providerId}
+                <span className="ml-1 text-emerald-600 dark:text-emerald-400">
+                  Connected
+                </span>
+              </Badge>
+            ))
+          )}
+        </div>
+        <Button
+          className="rounded-full"
+          disabled={isLoading || isLinking || googleIsLinked}
+          onClick={() => void handleLinkGoogle()}
+          type="button"
+          variant={googleIsLinked ? "outline" : "default"}
+        >
+          <Link2 aria-hidden="true" className="size-4" />
+          {googleIsLinked
+            ? "Google connected"
+            : isLinking
+              ? "Opening Google..."
+              : "Link Google"}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -2895,6 +3036,7 @@ export function MePage({
                               .filter(
                                 ([category, values]) =>
                                   !category.endsWith("_places") &&
+                                  category !== "Watch_media" &&
                                   values.length > 0
                               )
                               .slice(0, 3)
@@ -2908,6 +3050,24 @@ export function MePage({
                               ))
                           : null}
                       </div>
+                      {profile?.favoritePlaces &&
+                      Object.values(profile.favoritePlaces).some(
+                        (places) => places.length > 0
+                      ) ? (
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                          {Object.entries(profile.favoritePlaces).flatMap(
+                            ([category, places]) =>
+                              places.slice(0, 3).map((place) => (
+                                <span
+                                  className="rounded-full bg-primary/10 px-2.5 py-1 text-primary"
+                                  key={`${category}-${place.placeId}`}
+                                >
+                                  {place.name}
+                                </span>
+                              ))
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                     <ProfileMediaRail
                       media={profileMediaItems}
@@ -3737,6 +3897,7 @@ function ProfileSettingsPanel({
 
   return (
     <div className="grid gap-4 p-5">
+      <ConnectedAccountsCard />
       <PasskeysCard />
 
       <Card className="rounded-2xl border-border bg-card/45">
@@ -3848,6 +4009,7 @@ function ProfileEditPanel({
         ? sanitizeDateRequestCategories(profile?.datingModes)
         : [],
     favoriteThings: profile?.favoriteThings ?? [],
+    favoritePlaces: profile?.favoritePlaces ?? {},
     visibleProfileChips:
       savedVisibleProfileChips.length > 0
         ? savedVisibleProfileChips
@@ -4031,10 +4193,7 @@ function ProfileEditPanel({
           formProfileChipOptions.includes(chip)
         ),
       };
-      const nextFavoriteThings = Object.entries(nextInterestDetails)
-        .filter(([key]) => key !== profileVisibleChipsKey)
-        .flatMap(([, values]) => values)
-        .slice(0, 20);
+      const nextFavoriteThings = getProfileFavoriteThings(nextInterestDetails);
 
       const updatedPayload: DatingProfilePayload = {
         ...(profile ?? {
@@ -4042,13 +4201,11 @@ function ProfileEditPanel({
           birthday: formData.birthday,
           datingModes: sanitizeDateRequestCategories(formData.datingModes),
           favoriteThings: nextFavoriteThings,
+          favoritePlaces: formData.favoritePlaces,
           friendInvites: [],
           interestDetails: nextInterestDetails,
           interestedIn: formData.interestedIn,
-          interests: Object.keys(nextInterestDetails).filter(
-            (key) =>
-              key !== profileVisibleChipsKey && nextInterestDetails[key]?.length
-          ),
+          interests: getProfileInterestKeys(nextInterestDetails),
           lookingFor: formData.lookingFor,
           media: [],
           safetyOptIn: formData.safetyOptIn,
@@ -4078,11 +4235,9 @@ function ProfileEditPanel({
         lookingFor: formData.lookingFor,
         datingModes: sanitizeDateRequestCategories(formData.datingModes),
         favoriteThings: nextFavoriteThings,
+        favoritePlaces: formData.favoritePlaces,
         interestDetails: nextInterestDetails,
-        interests: Object.keys(nextInterestDetails).filter(
-          (key) =>
-            key !== profileVisibleChipsKey && nextInterestDetails[key]?.length
-        ),
+        interests: getProfileInterestKeys(nextInterestDetails),
         safetyOptIn: formData.safetyOptIn,
         trustedContacts: [
           {
@@ -4951,6 +5106,19 @@ function DashboardWidgets({
                 />
               ))}
             </div>
+            <Link
+              className={buttonVariants({
+                className: "mt-1 w-full rounded-full text-xs font-bold",
+                size: "sm",
+              })}
+              hash={
+                readinessItems.find((item) => !item.checked)?.hash ?? "basics"
+              }
+              to="/onboarding"
+            >
+              Continue onboarding
+              <ChevronRight className="ml-1 size-3.5" />
+            </Link>
           </CardContent>
         </Card>
       )}

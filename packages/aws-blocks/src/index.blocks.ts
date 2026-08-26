@@ -2,6 +2,7 @@ import { google } from "@ai-sdk/google";
 import { AppSetting } from "@aws-blocks/bb-app-setting";
 import { Dashboard } from "@aws-blocks/bb-dashboard";
 import { DistributedTable } from "@aws-blocks/bb-distributed-table";
+import { EmailClient } from "@aws-blocks/bb-email-client";
 import { FileBucket } from "@aws-blocks/bb-file-bucket";
 import { KVStore } from "@aws-blocks/bb-kv-store";
 import { Logger, type LogLevel } from "@aws-blocks/bb-logger";
@@ -63,14 +64,35 @@ import type {
   SendChatMessageInput,
   UploadDateMediaInput,
   MediaUploadInput,
+  VenueMediaKind,
+  VenueMediaUploadInput,
   NotificationChannelClient,
   NotificationsResponse,
   SyncPricingPlansResponse,
 } from "./types";
+import { previewVenueMenu } from "./venue-menu";
+import {
+  approveVenueClaim,
+  captureVenueMenu,
+  createVenueLocation,
+  createVenueOrder,
+  createVenueReferral,
+  followVenue,
+  getVenueWorkspace,
+  requestVenueClaim,
+  requestVenueReservation,
+  requestVenueShiftSwap,
+  startVenueDiningSession,
+  updateVenueOrder,
+  updateVenueReservation,
+} from "./venue-platform";
 
 type BlocksDbExecutor = Kysely<BlocksDatabase> | Transaction<BlocksDatabase>;
 
 const scope = new Scope("chewbuu-api");
+const venueEmailClient = new EmailClient(scope, "venue-email", {
+  fromAddress: process.env.VENUE_EMAIL_FROM ?? "noreply@chewbuu.com",
+});
 const LOG_LEVELS = new Set<LogLevel>(["debug", "error", "info", "warn"]);
 const deploymentStage =
   process.env.CHEWBUU_STAGE ??
@@ -286,6 +308,14 @@ const mediaPath = (userId: string, input: MediaUploadInput) =>
 const mediaPathIsValid = (path: string) =>
   path.startsWith("profiles/") && !path.includes("..") && !path.includes("\\");
 
+const venueMediaPath = (locationId: string, input: VenueMediaUploadInput) =>
+  `venues/${locationId}/${input.kind}/${crypto.randomUUID()}-${cleanMediaFileName(input.fileName)}`;
+
+const venueMediaPathIsValid = (path: string, locationId: string) =>
+  path.startsWith(`venues/${locationId}/`) &&
+  !path.includes("..") &&
+  !path.includes("\\");
+
 const mediaPathFromStoredValue = (stored: string | null) => {
   if (!stored) return null;
   if (!stored.startsWith("http")) return stored;
@@ -317,6 +347,16 @@ const chatMessageSchema = z.object({
   text: z.string().optional(),
 });
 
+const venueEventSchema = z.object({
+  detail: z.string(),
+  id: z.string(),
+  kind: z.enum(["order_created", "reservation_requested"]),
+  locationId: z.string(),
+  occurredAt: z.string(),
+  status: z.string(),
+  title: z.string(),
+});
+
 const realtime = new Realtime(scope, "chat", {
   namespaces: {
     messages: Realtime.namespace(chatMessageSchema),
@@ -339,6 +379,7 @@ const realtime = new Realtime(scope, "chat", {
         title: z.string(),
       })
     ),
+    venueEvents: Realtime.namespace(venueEventSchema),
   },
 });
 
@@ -896,6 +937,23 @@ export const notificationDeliveryJob = new AsyncJob(
   }
 );
 
+export const venueEmailJob = new AsyncJob(scope, "venue-email", {
+  handler: async (payload: {
+    body: string;
+    html?: string;
+    subject: string;
+    to: string;
+  }) => {
+    await venueEmailClient.send(payload);
+  },
+  schema: z.object({
+    body: z.string().min(1),
+    html: z.string().optional(),
+    subject: z.string().min(1),
+    to: z.email(),
+  }),
+});
+
 export const mediaProcessingJob = new AsyncJob(scope, "media-processing", {
   handler: async (
     payload: {
@@ -917,6 +975,116 @@ export const mediaProcessingJob = new AsyncJob(scope, "media-processing", {
     userId: z.string(),
   }),
 });
+
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+const isConfiguredAdmin = (sessionUser: SessionUser) =>
+  (process.env.ADMIN_EMAILS ?? "camstewart7@gmail.com")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .includes(sessionUser.email.toLowerCase());
+
+const publishVenueEvent = async (event: {
+  detail: string;
+  id: string;
+  kind: "order_created" | "reservation_requested";
+  locationId: string;
+  status: string;
+  title: string;
+}) => {
+  const venueEvent = {
+    ...event,
+    occurredAt: new Date().toISOString(),
+  } satisfies z.infer<typeof venueEventSchema>;
+  await realtime.publish("venueEvents", event.locationId, venueEvent);
+
+  const db = await getDb();
+  const members = await db
+    .selectFrom("venue_member")
+    .innerJoin(
+      "venue_location",
+      "venue_location.organization_id",
+      "venue_member.organization_id"
+    )
+    .innerJoin("user", "user.id", "venue_member.user_id")
+    .select(["user.id", "user.email"])
+    .where("venue_location.id", "=", event.locationId)
+    .where("venue_member.status", "=", "active")
+    .execute();
+
+  const recipients = new Map(
+    members.map((member) => [member.id, member.email])
+  );
+  const adminEmails = (process.env.ADMIN_EMAILS ?? "camstewart7@gmail.com")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+  const admins = await db
+    .selectFrom("user")
+    .select(["id", "email"])
+    .where("email", "in", adminEmails)
+    .execute();
+  for (const admin of admins) {
+    recipients.set(admin.id, admin.email);
+  }
+
+  await Promise.all(
+    Array.from(recipients.entries()).map(async ([recipientId, email]) => {
+      await Promise.all([
+        notificationDeliveryJob.submit({
+          body: event.detail,
+          dedupeKey: `venue-event:${event.id}:${recipientId}`,
+          entityId: event.id,
+          entityType: event.kind,
+          kind: `venue_${event.kind}`,
+          title: event.title,
+          userId: recipientId,
+        }),
+        venueEmailJob.submit({
+          body: `${event.title}\n\n${event.detail}`,
+          html: `<h2>${escapeHtml(event.title)}</h2><p>${escapeHtml(event.detail)}</p><p>Open Chewbuu Sync to handle it.</p>`,
+          subject: event.title,
+          to: email,
+        }),
+      ]);
+    })
+  );
+};
+
+const notifyVenueGuest = async (
+  userId: string,
+  event: { detail: string; id: string; kind: string; title: string }
+) => {
+  const db = await getDb();
+  const guest = await db
+    .selectFrom("user")
+    .select(["id", "email"])
+    .where("id", "=", userId)
+    .executeTakeFirst();
+  if (!guest) return;
+
+  await Promise.all([
+    notificationDeliveryJob.submit({
+      body: event.detail,
+      dedupeKey: `venue-guest-event:${event.id}`,
+      entityId: event.id,
+      entityType: event.kind,
+      kind: `venue_${event.kind}`,
+      title: event.title,
+      userId: guest.id,
+    }),
+    venueEmailJob.submit({
+      body: `${event.title}\n\n${event.detail}`,
+      html: `<h2>${escapeHtml(event.title)}</h2><p>${escapeHtml(event.detail)}</p><p>We’ll keep you posted in Chewbuu.</p>`,
+      subject: event.title,
+      to: guest.email,
+    }),
+  ]);
+};
 
 const loadProfile = async (userId: string, sessionUser: SessionUser) => {
   const db = await getDb();
@@ -966,6 +1134,7 @@ const loadProfile = async (userId: string, sessionUser: SessionUser) => {
     intro_video_url: introVideoUrl,
     profile_photo_url: profilePhotoUrl,
     email: sessionUser.email,
+    favoritePlaces: storedProfile.favorite_places ?? {},
     friendInvites: invites,
     media: resolvedMedia,
     name: sessionUser.name,
@@ -1044,7 +1213,16 @@ const loadDatingSummary = async (
       .execute(),
   ]);
   if (!profile || !hasLocation(profile)) {
-    throw new Error("Add your area and enable location before browsing dates.");
+    return {
+      membershipTier: sessionUser.membershipTier ?? "social",
+      pendingReviews: pendingReviews.length,
+      readiness: {
+        canDate: false,
+        onboarded: Boolean(profile?.onboarded),
+        pendingReviews: pendingReviews.length,
+      },
+      requests: [],
+    };
   }
 
   const [matches, places, partyMembers] = requests.length
@@ -1143,6 +1321,17 @@ const profileMediaInputSchema = z.object({
   url: z.string().url(),
 });
 
+const favoritePlaceInputSchema = z.object({
+  address: z.string().optional(),
+  category: z.string().trim().min(1),
+  googleMapsUri: z.string().url().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  name: z.string().trim().min(1),
+  placeId: z.string().trim().min(1),
+  types: z.array(z.string()).default([]),
+});
+
 const profileInputSchema = z.object({
   ageRangeMax: z.number().int().min(18).max(99).optional(),
   ageRangeMin: z.number().int().min(18).max(99).optional(),
@@ -1152,6 +1341,9 @@ const profileInputSchema = z.object({
   datingModes: z.array(z.string()).default([]),
   distanceMiles: z.number().int().min(1).max(250).default(25),
   favoriteThings: z.array(z.string()).default([]),
+  favoritePlaces: z
+    .record(z.string(), z.array(favoritePlaceInputSchema))
+    .default({}),
   friendInvites: z.array(z.record(z.string(), z.unknown())).default([]),
   height: z.string().optional(),
   interestDetails: z.record(z.string(), z.array(z.string())).default({}),
@@ -1186,6 +1378,9 @@ const profileDraftInputSchema = z.object({
   datingModes: z.array(z.string()).default([]),
   distanceMiles: z.number().int().min(1).max(250).default(25),
   favoriteThings: z.array(z.string()).default([]),
+  favoritePlaces: z
+    .record(z.string(), z.array(favoritePlaceInputSchema))
+    .default({}),
   friendInvites: z.array(z.record(z.string(), z.unknown())).default([]),
   height: z.string().optional().nullable(),
   interestDetails: z.record(z.string(), z.array(z.string())).default({}),
@@ -1315,6 +1510,7 @@ const saveProfile = async (
         dating_modes: jsonb(body.datingModes ?? []),
         distance_miles: body.distanceMiles ?? 25,
         favorite_things: jsonb(body.favoriteThings ?? []),
+        favorite_places: jsonb(body.favoritePlaces ?? {}),
         height: body.height || null,
         id: crypto.randomUUID(),
         interest_details: jsonb(body.interestDetails ?? {}),
@@ -1357,6 +1553,7 @@ const saveProfile = async (
           dating_modes: jsonb(body.datingModes ?? []),
           distance_miles: body.distanceMiles ?? 25,
           favorite_things: jsonb(body.favoriteThings ?? []),
+          favorite_places: jsonb(body.favoritePlaces ?? {}),
           height: body.height || null,
           interest_details: jsonb(body.interestDetails ?? {}),
           interested_in: jsonb(body.interestedIn ?? []),
@@ -2156,7 +2353,12 @@ export const buildBlocksPlaceSearchTextQuery = (
 ) => {
   const filters = input.filters.join(" ");
   if (input.searchKind === "place" && filters) {
-    return `${filters} near ${input.area}`;
+    const normalizedFilters = filters.trim().toLowerCase();
+    const expandedFilters =
+      normalizedFilters === "steak" || normalizedFilters === "steakhouse"
+        ? `${filters} steakhouse restaurant`
+        : filters;
+    return `${expandedFilters} near ${input.area}`;
   }
   const categories = input.what.map(
     (item) => placeSearchKeywords[item] ?? item
@@ -2263,6 +2465,10 @@ const suggestPlaces = async (userId: string, input: unknown) => {
   const area = body.area.trim() || profile?.area || "Austin, TX";
   const latitude = body.latitude ?? profile?.latitude;
   const longitude = body.longitude ?? profile?.longitude;
+  const latitudeNumber = Number(latitude);
+  const longitudeNumber = Number(longitude);
+  const hasCoordinates =
+    Number.isFinite(latitudeNumber) && Number.isFinite(longitudeNumber);
 
   await acquirePlaceSearchRateLimit(userId);
   const cacheKey = JSON.stringify({
@@ -2291,7 +2497,23 @@ const suggestPlaces = async (userId: string, input: unknown) => {
     const response = await fetch(
       "https://places.googleapis.com/v1/places:searchText",
       {
-        body: JSON.stringify({ pageSize: 12, textQuery }),
+        body: JSON.stringify({
+          pageSize: 12,
+          textQuery,
+          ...(hasCoordinates
+            ? {
+                locationBias: {
+                  circle: {
+                    center: {
+                      latitude: latitudeNumber,
+                      longitude: longitudeNumber,
+                    },
+                    radius: 50_000,
+                  },
+                },
+              }
+            : {}),
+        }),
         headers: {
           "content-type": "application/json",
           "x-goog-api-key": apiKey,
@@ -2775,7 +2997,7 @@ const getPricingPlans = async () => {
 };
 
 const requireAdmin = (sessionUser: SessionUser) => {
-  const admins = (process.env.ADMIN_EMAILS ?? "cg@rocktownlabs.com")
+  const admins = (process.env.ADMIN_EMAILS ?? "camstewart7@gmail.com")
     .split(",")
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
@@ -3530,6 +3752,29 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     )) as NotificationChannelClient;
   },
 
+  async subscribeVenueEvents(locationId: string) {
+    const sessionUser = await requireSession(context.request.headers);
+    const normalizedLocationId = z.string().min(1).parse(locationId);
+    const isAdmin = isConfiguredAdmin(sessionUser);
+    if (!isAdmin) {
+      const db = await getDb();
+      const member = await db
+        .selectFrom("venue_member")
+        .innerJoin(
+          "venue_location",
+          "venue_location.organization_id",
+          "venue_member.organization_id"
+        )
+        .select("venue_member.id")
+        .where("venue_location.id", "=", normalizedLocationId)
+        .where("venue_member.user_id", "=", sessionUser.id)
+        .where("venue_member.status", "=", "active")
+        .executeTakeFirst();
+      if (!member) throw new Error("Venue access required");
+    }
+    return realtime.getChannel("venueEvents", normalizedLocationId);
+  },
+
   async getProfile() {
     return observeOperation("getProfile", async () => {
       const sessionUser = await requireSession(context.request.headers);
@@ -3584,6 +3829,12 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
             draft.favoriteThings !== undefined
               ? draft.favoriteThings
               : ((current?.favorite_things as string[] | undefined) ?? []),
+          favoritePlaces:
+            draft.favoritePlaces !== undefined
+              ? draft.favoritePlaces
+              : ((current?.favoritePlaces as
+                  | Record<string, unknown>
+                  | undefined) ?? {}),
           friendInvites:
             draft.friendInvites !== undefined
               ? draft.friendInvites
@@ -3827,6 +4078,228 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return getPlacePhoto(photoName);
   },
 
+  async previewVenueMenu(input: { url: string }) {
+    return observeOperation("previewVenueMenu", async () => {
+      await requireSession(context.request.headers);
+      return previewVenueMenu(input);
+    });
+  },
+
+  async captureVenueMenu(input: { locationId: string; url: string }) {
+    return observeOperation("captureVenueMenu", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const body = z
+        .object({ locationId: z.string().min(1), url: z.string().min(1) })
+        .parse(input);
+      return captureVenueMenu(sessionUser.id, body.locationId, {
+        url: body.url,
+      });
+    });
+  },
+
+  async createVenueLocation(input: {
+    address?: string;
+    discoveryPlaceId?: string;
+    menuUrl?: string;
+    name: string;
+    organizationName?: string;
+    phone?: string;
+    referralCode?: string;
+    venueRole?: "owner" | "referrer";
+    websiteUrl?: string;
+  }) {
+    return observeOperation("createVenueLocation", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createVenueLocation(sessionUser.id, input);
+    });
+  },
+
+  async followVenue(locationId: string) {
+    return observeOperation("followVenue", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return followVenue(sessionUser.id, z.string().min(1).parse(locationId));
+    });
+  },
+
+  async createVenueReferral(locationId: string) {
+    return observeOperation("createVenueReferral", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createVenueReferral(
+        sessionUser.id,
+        z.string().min(1).parse(locationId)
+      );
+    });
+  },
+
+  async requestVenueClaim(locationId: string, input?: { claimNote?: string }) {
+    return observeOperation("requestVenueClaim", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return requestVenueClaim(
+        sessionUser.id,
+        z.string().min(1).parse(locationId),
+        input
+      );
+    });
+  },
+
+  async approveVenueClaim(locationId: string) {
+    return observeOperation("approveVenueClaim", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      requireAdmin(sessionUser);
+      return approveVenueClaim(
+        sessionUser.id,
+        z.string().min(1).parse(locationId)
+      );
+    });
+  },
+
+  async getVenueWorkspace(locationId: string) {
+    return observeOperation("getVenueWorkspace", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getVenueWorkspace(
+        sessionUser.id,
+        z.string().min(1).parse(locationId),
+        isConfiguredAdmin(sessionUser)
+      );
+    });
+  },
+
+  async updateVenueReservation(input: {
+    assignedStaffUserId?: string;
+    reservationId: string;
+    status: string;
+    tableLabel?: string;
+  }) {
+    return observeOperation("updateVenueReservation", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await updateVenueReservation(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+      await publishVenueEvent({
+        detail: `Reservation ${result.reservation.status}${result.reservation.tableLabel ? ` at table ${result.reservation.tableLabel}` : ""}.`,
+        id: result.reservation.id,
+        kind: "reservation_requested",
+        locationId: result.reservation.locationId,
+        status: result.reservation.status,
+        title: "Reservation updated",
+      });
+      await notifyVenueGuest(result.guestUserId, {
+        detail: `Your reservation is now ${result.reservation.status}${result.reservation.tableLabel ? ` at table ${result.reservation.tableLabel}` : ""}.`,
+        id: result.reservation.id,
+        kind: "reservation_requested",
+        title: "Reservation update",
+      });
+      return result;
+    });
+  },
+
+  async updateVenueOrder(input: {
+    assignedStaffUserId?: string;
+    orderId: string;
+    status: string;
+  }) {
+    return observeOperation("updateVenueOrder", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await updateVenueOrder(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+      await publishVenueEvent({
+        detail: `Order moved to ${result.order.status}.`,
+        id: result.order.id,
+        kind: "order_created",
+        locationId: result.order.locationId,
+        status: result.order.status,
+        title: "Order updated",
+      });
+      return result;
+    });
+  },
+
+  async requestVenueReservation(input: {
+    locationId: string;
+    notes?: string;
+    partySize: number;
+    requestedAt: string;
+  }) {
+    return observeOperation("requestVenueReservation", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await requestVenueReservation(sessionUser.id, input);
+      await publishVenueEvent({
+        detail: `A party of ${result.reservation.partySize} requested ${new Date(result.reservation.requestedAt).toLocaleString()}.`,
+        id: result.reservation.id,
+        kind: "reservation_requested",
+        locationId: result.reservation.locationId,
+        status: result.reservation.status,
+        title: "New reservation request",
+      });
+      await notifyVenueGuest(sessionUser.id, {
+        detail: `Your reservation request for ${new Date(result.reservation.requestedAt).toLocaleString()} is waiting for the venue to confirm it.`,
+        id: result.reservation.id,
+        kind: "reservation_requested",
+        title: "Reservation request sent",
+      });
+      return result;
+    });
+  },
+
+  async startVenueDiningSession(input: {
+    locationId: string;
+    reservationId?: string;
+    tableLabel?: string;
+  }) {
+    return observeOperation("startVenueDiningSession", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return startVenueDiningSession(sessionUser.id, input);
+    });
+  },
+
+  async createVenueOrder(input: {
+    diningSessionId?: string;
+    items: {
+      name: string;
+      notes?: string;
+      quantity: number;
+      unitPriceCents: number;
+    }[];
+    locationId: string;
+    reservationId?: string;
+    tipCents?: number;
+  }) {
+    return observeOperation("createVenueOrder", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await createVenueOrder(sessionUser.id, input);
+      await publishVenueEvent({
+        detail: `A new order for $${(result.order.totalCents / 100).toFixed(2)} is ready to review.`,
+        id: result.order.id,
+        kind: "order_created",
+        locationId: result.order.locationId,
+        status: result.order.status,
+        title: "New order received",
+      });
+      await notifyVenueGuest(sessionUser.id, {
+        detail: `Your order total is $${(result.order.totalCents / 100).toFixed(2)}. It is waiting for the venue to accept it.`,
+        id: result.order.id,
+        kind: "order_created",
+        title: "Order received",
+      });
+      return result;
+    });
+  },
+
+  async requestVenueShiftSwap(input: {
+    replacementUserId?: string;
+    shiftId: string;
+  }) {
+    return observeOperation("requestVenueShiftSwap", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return requestVenueShiftSwap(sessionUser.id, input);
+    });
+  },
+
   async checkIn(input: CheckInInput) {
     return observeOperation("checkIn", async () => {
       const sessionUser = await requireSession(context.request.headers);
@@ -3940,6 +4413,82 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return observeOperation("uploadDateMedia", async () => {
       const sessionUser = await requireSession(context.request.headers);
       return uploadDateMedia(sessionUser, input);
+    });
+  },
+
+  async createVenueMediaUpload(input: VenueMediaUploadInput) {
+    return observeOperation("createVenueMediaUpload", async () => {
+      await requireSession(context.request.headers);
+      const body = z
+        .object({
+          contentType: z.string().trim().min(1),
+          fileName: z.string().trim().min(1).max(255),
+          kind: z.enum(["food_photo", "menu_photo", "venue_photo"]),
+          locationId: z.string().min(1),
+        })
+        .parse(input);
+      const db = await getDb();
+      const location = await db
+        .selectFrom("venue_location")
+        .select("id")
+        .where("id", "=", body.locationId)
+        .executeTakeFirst();
+      if (!location) throw new Error("Venue not found");
+      if (!body.contentType.startsWith("image/")) {
+        throw new Error("Venue media must be an image upload.");
+      }
+      const pathname = venueMediaPath(body.locationId, body);
+      const uploadUrl = await mediaBucket.putUrl(pathname, {
+        contentType: body.contentType,
+        expiresIn: 300,
+      });
+      return {
+        mediaUrl: await mediaBucket.getUrl(pathname, { expiresIn: 3600 }),
+        pathname,
+        uploadUrl,
+      };
+    });
+  },
+
+  async saveVenueMedia(input: {
+    kind: VenueMediaKind;
+    locationId: string;
+    url: string;
+  }) {
+    return observeOperation("saveVenueMedia", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const body = z
+        .object({
+          kind: z.enum(["food_photo", "menu_photo", "venue_photo"]),
+          locationId: z.string().min(1),
+          url: z.string().min(1),
+        })
+        .parse(input);
+      const pathname = mediaPathFromStoredValue(body.url);
+      if (!pathname || !venueMediaPathIsValid(pathname, body.locationId)) {
+        throw new Error("Venue media path is invalid");
+      }
+      const db = await getDb();
+      const location = await db
+        .selectFrom("venue_location")
+        .select("id")
+        .where("id", "=", body.locationId)
+        .executeTakeFirst();
+      if (!location) throw new Error("Venue not found");
+      const mediaId = crypto.randomUUID();
+      await db
+        .insertInto("venue_media")
+        .values({
+          id: mediaId,
+          kind: body.kind,
+          location_id: body.locationId,
+          source: "user",
+          status: "pending",
+          uploaded_by_user_id: sessionUser.id,
+          url: body.url,
+        })
+        .execute();
+      return { mediaId };
     });
   },
 

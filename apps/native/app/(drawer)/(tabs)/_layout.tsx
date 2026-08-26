@@ -1,44 +1,45 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { useThemeColor } from "heroui-native";
+import React from "react";
+
+import { LiquidGlassTabBar } from "@/components/liquid-glass-tab-bar";
 
 export default function TabLayout() {
-  const themeColorForeground = useThemeColor("foreground");
-  const themeColorBackground = useThemeColor("background");
-
   return (
     <Tabs
+      tabBar={(props) => <LiquidGlassTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        headerStyle: {
-          backgroundColor: themeColorBackground,
-        },
-        headerTintColor: themeColorForeground,
-        headerTitleStyle: {
-          color: themeColorForeground,
-          fontWeight: "600",
-        },
-        tabBarStyle: {
-          backgroundColor: themeColorBackground,
-        },
+        tabBarHideOnKeyboard: true,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
-          ),
-          title: "Home",
+          title: "Discover",
         }}
       />
       <Tabs.Screen
-        name="two"
+        name="spots"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="compass" size={size} color={color} />
-          ),
-          title: "Explore",
+          title: "Spots",
+        }}
+      />
+      <Tabs.Screen
+        name="dates"
+        options={{
+          title: "Dates",
+        }}
+      />
+      <Tabs.Screen
+        name="chats"
+        options={{
+          title: "Chats",
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profile",
         }}
       />
     </Tabs>

@@ -39,6 +39,9 @@ export const useOnboardingStore = create<OnboardingState>()(
             occupation: merged.occupation ?? "",
             intent: merged.lookingFor?.[0] ?? "dating",
             interests: merged.interests ?? [],
+            favoriteThings: merged.favoriteThings ?? [],
+            interestDetails: merged.interestDetails ?? {},
+            favoritePlaces: merged.favoritePlaces ?? {},
             photos:
               merged.media
                 ?.filter(
