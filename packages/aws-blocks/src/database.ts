@@ -77,6 +77,28 @@ export interface UserTable {
   username: string | null;
 }
 
+export interface SubscriptionTable {
+  billing_interval: string | null;
+  cancel_at: Timestamp | null;
+  cancel_at_period_end: boolean;
+  canceled_at: Timestamp | null;
+  created_at: Timestamp;
+  ended_at: Timestamp | null;
+  id: string;
+  period_end: Timestamp | null;
+  period_start: Timestamp | null;
+  plan: string;
+  reference_id: string;
+  seats: number | null;
+  status: string;
+  stripe_customer_id: string | null;
+  stripe_schedule_id: string | null;
+  stripe_subscription_id: string | null;
+  trial_end: Timestamp | null;
+  trial_start: Timestamp | null;
+  updated_at: Timestamp;
+}
+
 export interface MembershipPlanTable {
   active: boolean;
   annual_price_cents: number;
@@ -170,13 +192,20 @@ export interface FriendInviteTable {
 }
 
 export interface CircleTable {
+  created_at: Timestamp;
+  description: string | null;
+  handle: string | null;
   id: string;
+  kind: string;
   name: string;
   owner_user_id: string;
+  style: JsonColumn<Record<string, string>>;
+  updated_at: Timestamp;
 }
 
 export interface CircleMemberTable {
   circle_id: string;
+  created_at?: Timestamp;
   id: string;
   invite_id: string | null;
   role: string;
@@ -318,10 +347,13 @@ export interface NotificationTable {
 export interface VenueOrganizationTable {
   created_at: Timestamp;
   created_by_user_id: string;
+  description: string | null;
+  handle: string | null;
   id: string;
   name: string;
   slug: string;
   status: string;
+  style: JsonColumn<Record<string, string>>;
   updated_at: Timestamp;
 }
 
@@ -330,6 +362,7 @@ export interface VenueLocationTable {
   claimed_at: Timestamp | null;
   created_at: Timestamp;
   discovery_place_id: string | null;
+  handle: string | null;
   id: string;
   menu_url: string | null;
   name: string;
@@ -351,6 +384,30 @@ export interface VenueMemberTable {
   status: string;
   updated_at: Timestamp;
   user_id: string;
+}
+
+export interface SyncSubscriptionTable {
+  created_at: Timestamp;
+  ended_at: Timestamp | null;
+  id: string;
+  organization_id: string | null;
+  plan: string;
+  status: string;
+  stripe_subscription_id: string | null;
+  updated_at: Timestamp;
+  user_id: string;
+}
+
+export interface VenueMemberInviteTable {
+  created_at: Timestamp;
+  email: string;
+  id: string;
+  invite_token: string;
+  name: string | null;
+  organization_id: string;
+  role: string;
+  status: string;
+  invited_by_user_id: string;
 }
 
 export interface VenueContributionTable {
@@ -514,6 +571,8 @@ export interface BlocksDatabase {
   friendship: FriendshipTable;
   membership_plan: MembershipPlanTable;
   notification: NotificationTable;
+  subscription: SubscriptionTable;
+  sync_subscription: SyncSubscriptionTable;
   profile: ProfileTable;
   profile_media: ProfileMediaTable;
   recap: RecapTable;
@@ -526,6 +585,7 @@ export interface BlocksDatabase {
   venue_location: VenueLocationTable;
   venue_media: VenueMediaTable;
   venue_member: VenueMemberTable;
+  venue_member_invite: VenueMemberInviteTable;
   venue_menu: VenueMenuTable;
   venue_order: VenueOrderTable;
   venue_order_item: VenueOrderItemTable;
