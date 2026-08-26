@@ -29,8 +29,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added a bottom-anchored `Sheet` drawer component (`packages/ui/src/components/sheet.tsx`) built on the Base UI dialog primitive with slide-up/down animation, a drag handle, and a scrollable body.
 - Added AWS Blocks observability with structured backend logs, CloudWatch EMF metrics, X-Ray tracing, API and SSR dashboards, and an admin dashboard link.
 
+### Changed
+
+- Redesigned onboarding Basics step into a 2-column mobile layout with 3 expandable accordion sections (Contact & Handle, Personal Details & Location, Identity & Bio) and embedded navigation.
+- Redesigned onboarding Permissions step into a 2-column mobile card grid with client-side mobile haptics capability detection.
+- Redesigned onboarding Media step into 3 expandable accordion sections (Profile Photo live capture, Intro Video live recording, Additional Photos gallery).
+- Redesigned onboarding Premium step with dynamic top-level feature matrix and 3 compact selectable plan pills (Social Free, Mingle Best Value, Sugar VIP) with direct Stripe checkout.
+- Filtered out username from initial sign-up form so handle validation against the bloom filter happens exclusively in the onboarding flow.
+
 ### Fixed
 
+- Fixed React hydration error #418 during onboarding by initializing SSR step to 0 and mounting persisted/hash state client-side.
+- Fixed date spot search (`suggestPlaces`) failing during onboarding by accepting request coordinates/area before a profile row exists in PostgreSQL and adding rich fallback places when Google Places API is unconfigured.
+- Fixed video recording missing audio tracks during playback by specifying audio codecs (`opus`/`mp4a`) and `playsInline` attributes on preview video elements.
 - Fixed onboarding 'Save for later' draft saving failing with Zod validation errors on partial or empty profiles by decoupling draft validation (`profileDraftInputSchema`) from full profile submission requirements (`profileInputSchema`).
 
 - Fixed mandatory onboarding bypass by strictly redirecting non-onboarded users to `/onboarding` from all protected `/_auth` routes, index `/`, and sign-up completion.
