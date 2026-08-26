@@ -155,7 +155,12 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           test -n "$BLOCKS_MIGRATION_DB_URL"
-          bun run db:migrate
+          migration_url=$(node -e '
+            const url = new URL(process.env.BLOCKS_MIGRATION_DB_URL);
+            url.searchParams.delete("sslrootcert");
+            process.stdout.write(url.toString());
+          ')
+          BLOCKS_MIGRATION_DB_URL="$migration_url" bun run db:migrate
         env:
           BLOCKS_MIGRATION_DB_URL: ${{ secrets.BLOCKS_MIGRATION_DB_URL }}
           CHEWBUU_STAGE: production
