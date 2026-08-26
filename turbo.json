@@ -29,7 +29,12 @@
     },
     "db:migrate": {
       "cache": false,
-      "env": ["BLOCKS_MIGRATION_DB_URL", "DATABASE_URL"]
+      "env": [
+        "BLOCKS_MIGRATION_DB_URL",
+        "CHEWBUU_STAGE",
+        "DATABASE_CA_CERT",
+        "DATABASE_URL"
+      ]
     }
   }
 }
