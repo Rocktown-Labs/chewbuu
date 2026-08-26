@@ -18,7 +18,8 @@ export interface ButtonProps extends PressableProps {
     | "outline"
     | "ghost"
     | "glass"
-    | "sugar";
+    | "sugar"
+    | "success";
   size?: "default" | "sm" | "lg" | "icon";
   children?: React.ReactNode;
   loading?: boolean;
@@ -67,6 +68,9 @@ export function Button({
       case "sugar": {
         return "bg-amber-500 active:bg-amber-600 border border-amber-400/50 shadow-md";
       }
+      case "success": {
+        return "bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/40";
+      }
       default: {
         return "bg-primary active:bg-primary/90 shadow-sm";
       }
@@ -90,6 +94,9 @@ export function Button({
       }
       case "sugar": {
         return "text-black font-bold";
+      }
+      case "success": {
+        return "text-emerald-400 font-bold";
       }
       default: {
         return "text-primary-foreground font-semibold";

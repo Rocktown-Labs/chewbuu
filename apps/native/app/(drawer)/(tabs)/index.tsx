@@ -1,5 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import {
   CalendarPlus,
   CheckCircle2,
@@ -10,7 +11,7 @@ import {
   Video,
   X,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dimensions,
   Image,
@@ -25,6 +26,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassView } from "@/components/ui/glass-view";
 import { useAppTheme } from "@/contexts/app-theme-context";
+import {
+  calculateCompletionPercentage,
+  DEFAULT_ONBOARDING_DATA,
+  loadOnboardingDraft,
+  type OnboardingData,
+} from "@/lib/onboarding-storage";
 
 const { width } = Dimensions.get("window");
 
@@ -61,9 +68,24 @@ const MOCK_PROFILES = [
 
 export default function DiscoverScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { isDark } = useAppTheme();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [onboardingDraft, setOnboardingDraft] = useState<OnboardingData>(
+    DEFAULT_ONBOARDING_DATA
+  );
+  const [dismissBanner, setDismissBanner] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const draft = await loadOnboardingDraft();
+      setOnboardingDraft(draft);
+    }
+    void load();
+  }, []);
+
   const profile = MOCK_PROFILES[currentIndex % MOCK_PROFILES.length];
+  const completionPercent = calculateCompletionPercentage(onboardingDraft);
 
   const handleLike = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -107,9 +129,43 @@ export default function DiscoverScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
+        {/* Onboarding Resume Banner if profile is incomplete */}
+        {!onboardingDraft.isComplete && !dismissBanner && (
+          <GlassView
+            className="mb-3 p-3.5 border-amber-500/40 bg-amber-950/40 flex-row items-center justify-between shadow-md"
+            borderRadius={22}
+          >
+            <View className="flex-col flex-1 pr-2">
+              <Text className="text-xs font-bold text-amber-300">
+                Profile Setup: {completionPercent}% Complete
+              </Text>
+              <Text className="text-[11px] text-zinc-300">
+                Finish basics & media to unlock all dating matches
+              </Text>
+            </View>
+
+            <View className="flex-row items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="sugar"
+                className="h-8 px-3"
+                onPress={() => router.push("/onboarding")}
+              >
+                <Text className="text-[11px] font-bold text-black">Resume</Text>
+              </Button>
+              <Pressable
+                onPress={() => setDismissBanner(true)}
+                className="p-1 rounded-full active:bg-white/10"
+              >
+                <X size={14} color="#a1a1aa" />
+              </Pressable>
+            </View>
+          </GlassView>
+        )}
+
         {/* Main Discovery Card with Liquid Glass Overlay */}
         <View
-          className="relative rounded-[36px] overflow-hidden border border-border/60 bg-card shadow-2xl mt-2"
+          className="relative rounded-[36px] overflow-hidden border border-border/60 bg-card shadow-2xl mt-1"
           style={{ width: width - 32, height: 490 }}
         >
           <Image
