@@ -109,7 +109,7 @@ import {
 type BlocksDbExecutor = Kysely<BlocksDatabase> | Transaction<BlocksDatabase>;
 
 const scope = new Scope("chewbuu-api");
-const venueEmailClient = new EmailClient(scope, "venue-email", {
+const venueEmailClient = new EmailClient(scope, "venue-email-client", {
   fromAddress: process.env.VENUE_EMAIL_FROM ?? "noreply@chewbuu.com",
 });
 const venueAppUrl = (
