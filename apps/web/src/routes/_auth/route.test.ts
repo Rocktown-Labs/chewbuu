@@ -43,7 +43,7 @@ describe("_auth route guard", () => {
     });
   });
 
-  it("redirects un-onboarded users trying to access /me to /onboarding", async () => {
+  it("allows un-onboarded users to resume from /me", async () => {
     mocks.getSession.mockResolvedValue({
       data: {
         user: {
@@ -59,18 +59,14 @@ describe("_auth route guard", () => {
       throw new Error("beforeLoad is required");
     }
 
-    await expect(
-      beforeLoad({
-        location: { pathname: "/me" },
-      } as any)
-    ).rejects.toMatchObject({
-      options: {
-        to: "/onboarding",
-      },
-    });
+    const result = await beforeLoad({
+      location: { pathname: "/me" },
+    } as any);
+
+    expect(result).toEqual({ session: { data: expect.anything() } });
   });
 
-  it("redirects un-onboarded users trying to access /me/profile to /onboarding", async () => {
+  it("allows un-onboarded users to access /me/profile", async () => {
     mocks.getSession.mockResolvedValue({
       data: {
         user: {
@@ -86,15 +82,11 @@ describe("_auth route guard", () => {
       throw new Error("beforeLoad is required");
     }
 
-    await expect(
-      beforeLoad({
-        location: { pathname: "/me/profile" },
-      } as any)
-    ).rejects.toMatchObject({
-      options: {
-        to: "/onboarding",
-      },
-    });
+    const result = await beforeLoad({
+      location: { pathname: "/me/profile" },
+    } as any);
+
+    expect(result).toEqual({ session: { data: expect.anything() } });
   });
 
   it("allows un-onboarded users to access /onboarding", async () => {

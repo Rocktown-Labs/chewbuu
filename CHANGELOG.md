@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Built React Native mobile app in \`apps/native\` with Expo Liquid Glass UI, floating \`LiquidGlassTabBar\` with \`expo-blur\` and gradient sheen, and 5 core tab screens: **Discover** (video profile cards, 3-min vibe check, quick matching), **Spots** (category filtering, Firecrawl menu highlights, date spot proposal), **Dates** (active date itinerary, Safety Beacon trusted circle status, \`.ics\` calendar export), **Chats** (realtime messaging threads, speed dating room queue), and **Profile** (media gallery, Safety Circle management, Sugar VIP Crews & Events manager).
+- Added React Native Reusables UI primitives in \`apps/native/components/ui/\` (\`GlassView\`, \`Button\` with haptics, \`Card\`, \`Badge\`, \`Avatar\`, \`Input\`).
 - Added reactive client-side database layer with `@tanstack/react-db`, `@tanstack/db`, and `@tanstack/query-db-collection` covering realtime Chat & Messaging collections (`chatRooms`, `chatMessages`, `chatReadStates`), Discovery & Matches (`matches`, `matchDecisions`), Date Spots (`dateSpots`, `savedSpots`), Date Lifecycle (`dateBookings`, `dateRequests`), Notifications (`notifications`), and Onboarding Drafts (`onboardingDrafts`).
 
 - Added Web Push Notification infrastructure in AWS Blocks with `push-subscriptions` DistributedTable, VAPID key signing, and instant push delivery on dating match, chat, and lifecycle events.

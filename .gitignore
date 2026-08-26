@@ -61,6 +61,7 @@ playwright-report
 test-results
 
 # Misc
+.learnings/
 *.tgz
 .cache
 tmp

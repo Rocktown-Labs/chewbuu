@@ -18,6 +18,17 @@ export interface DatingMedia {
   url: string;
 }
 
+export interface FavoritePlace {
+  address?: string;
+  category: PlaceSuggestWhat;
+  googleMapsUri?: string;
+  latitude?: number;
+  longitude?: number;
+  name: string;
+  placeId: string;
+  types: string[];
+}
+
 export interface DatingProfilePayload {
   ageRangeMax?: number;
   ageRangeMin?: number;
@@ -44,6 +55,7 @@ export interface DatingProfilePayload {
   interestDetails: Record<string, string[]>;
   interestedIn: string[];
   interests: string[];
+  favoritePlaces?: Record<string, FavoritePlace[]>;
   kids?: string;
   lookingFor: string[];
   maritalStatus?: string;
@@ -85,6 +97,79 @@ export interface DatePlace {
   websiteUri?: string;
   types: string[];
 }
+
+export interface VenueMenuPreviewItem {
+  description?: string;
+  name: string;
+  price?: string;
+  section?: string;
+}
+
+export interface VenueMenuPreview {
+  fetchedAt: string;
+  items: VenueMenuPreviewItem[];
+  sourceUrl: string;
+  status: "unverified";
+  title?: string;
+}
+
+export interface VenueLocation {
+  address?: string;
+  id: string;
+  menuUrl?: string;
+  name: string;
+  organizationId: string;
+  status: string;
+  websiteUrl?: string;
+}
+
+export interface VenueReferral {
+  id: string;
+  locationId: string;
+  rewardAmountCents: number;
+  status: string;
+}
+
+export interface VenueEvent {
+  detail: string;
+  id: string;
+  kind: "order_created" | "reservation_requested";
+  locationId: string;
+  occurredAt: string;
+  status: string;
+  title: string;
+}
+
+export interface VenueReservation {
+  assignedStaffUserId?: string;
+  id: string;
+  locationId: string;
+  notes?: string;
+  partySize: number;
+  requestedAt: string;
+  status: string;
+  tableLabel?: string;
+}
+
+export interface VenueOrder {
+  assignedStaffUserId?: string;
+  currency: string;
+  id: string;
+  locationId: string;
+  paymentStatus: string;
+  status: string;
+  subtotalCents: number;
+  tipCents: number;
+  totalCents: number;
+}
+
+export interface VenueWorkspace {
+  location: VenueLocation;
+  orders: VenueOrder[];
+  reservations: VenueReservation[];
+}
+
+export type VenueMediaKind = "food_photo" | "menu_photo" | "venue_photo";
 
 export interface DateRequestPayload {
   filters: string[];
@@ -275,6 +360,90 @@ export interface MembershipPlan {
   stripePriceId?: string;
   tier: MembershipTier;
 }
+
+export const venueApi = {
+  approveClaim: (locationId: string) => blocksApi.approveVenueClaim(locationId),
+  captureMenu: (locationId: string, url: string) =>
+    blocksApi.captureVenueMenu({ locationId, url }) as Promise<{
+      preview: VenueMenuPreview | null;
+      reason?: "firecrawl_not_configured" | "invalid_menu" | "unavailable";
+    }>,
+  createLocation: (input: {
+    address?: string;
+    discoveryPlaceId?: string;
+    menuUrl?: string;
+    name: string;
+    organizationName?: string;
+    phone?: string;
+    referralCode?: string;
+    venueRole?: "owner" | "referrer";
+    websiteUrl?: string;
+  }) =>
+    blocksApi.createVenueLocation(input) as unknown as Promise<{
+      location: VenueLocation;
+      referral?: VenueReferral;
+    }>,
+  follow: (locationId: string) => blocksApi.followVenue(locationId),
+  getWorkspace: (locationId: string) =>
+    blocksApi.getVenueWorkspace(locationId) as Promise<VenueWorkspace>,
+  previewMenu: (url: string) =>
+    blocksApi.previewVenueMenu({ url }) as Promise<{
+      preview: VenueMenuPreview | null;
+      reason?: "firecrawl_not_configured" | "invalid_menu" | "unavailable";
+    }>,
+  refer: (locationId: string) => blocksApi.createVenueReferral(locationId),
+  subscribeEvents: (locationId: string) =>
+    blocksApi.subscribeVenueEvents(locationId),
+  saveMedia: (input: {
+    kind: VenueMediaKind;
+    locationId: string;
+    url: string;
+  }) => blocksApi.saveVenueMedia(input),
+  uploadMedia: (input: {
+    contentType: string;
+    fileName: string;
+    kind: VenueMediaKind;
+    locationId: string;
+  }) => blocksApi.createVenueMediaUpload(input),
+  requestClaim: (locationId: string, claimNote?: string) =>
+    blocksApi.requestVenueClaim(locationId, { claimNote }),
+  requestReservation: (input: {
+    locationId: string;
+    notes?: string;
+    partySize: number;
+    requestedAt: string;
+  }) => blocksApi.requestVenueReservation(input),
+  requestShiftSwap: (input: { replacementUserId?: string; shiftId: string }) =>
+    blocksApi.requestVenueShiftSwap(input),
+  startDiningSession: (input: {
+    locationId: string;
+    reservationId?: string;
+    tableLabel?: string;
+  }) => blocksApi.startVenueDiningSession(input),
+  updateOrder: (input: {
+    assignedStaffUserId?: string;
+    orderId: string;
+    status: string;
+  }) => blocksApi.updateVenueOrder(input),
+  updateReservation: (input: {
+    assignedStaffUserId?: string;
+    reservationId: string;
+    status: string;
+    tableLabel?: string;
+  }) => blocksApi.updateVenueReservation(input),
+  createOrder: (input: {
+    diningSessionId?: string;
+    items: {
+      name: string;
+      notes?: string;
+      quantity: number;
+      unitPriceCents: number;
+    }[];
+    locationId: string;
+    reservationId?: string;
+    tipCents?: number;
+  }) => blocksApi.createVenueOrder(input),
+};
 
 export const datingApi = {
   createRequest: (body: DateRequestPayload) =>

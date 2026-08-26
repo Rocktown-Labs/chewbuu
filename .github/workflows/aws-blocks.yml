@@ -170,8 +170,8 @@ jobs:
           DATABASE_URL: ${{ secrets.BLOCKS_DB_URL }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           BETTER_AUTH_URL: ${{ secrets.BETTER_AUTH_URL }}
-          ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS || 'cg@rocktownlabs.com' }}
-          BETTER_AUTH_ADMIN_EMAILS: ${{ vars.BETTER_AUTH_ADMIN_EMAILS || 'cg@rocktownlabs.com' }}
+          ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS || 'camstewart7@gmail.com' }}
+          BETTER_AUTH_ADMIN_EMAILS: ${{ vars.BETTER_AUTH_ADMIN_EMAILS || 'camstewart7@gmail.com' }}
           CORS_ORIGIN: https://chewbuu.com
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}

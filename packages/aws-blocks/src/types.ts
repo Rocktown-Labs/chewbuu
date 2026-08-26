@@ -83,6 +83,94 @@ export interface DateRequestInput {
   what: string[];
 }
 
+export type VenueLocationStatus =
+  | "claim_requested"
+  | "claimed"
+  | "discovered"
+  | "live"
+  | "unclaimed"
+  | "verified";
+export type VenueMenuStatus = "draft" | "published" | "unverified";
+
+export interface VenueMenuPreviewItem {
+  description?: string;
+  name: string;
+  price?: string;
+  section?: string;
+}
+
+export interface VenueMenuPreview {
+  fetchedAt: string;
+  items: VenueMenuPreviewItem[];
+  sourceUrl: string;
+  status: "unverified";
+  title?: string;
+}
+
+export interface VenueLocation {
+  address?: string;
+  id: string;
+  menuUrl?: string;
+  name: string;
+  organizationId: string;
+  status: VenueLocationStatus;
+  websiteUrl?: string;
+}
+
+export interface VenueReferral {
+  id: string;
+  locationId: string;
+  rewardAmountCents: number;
+  status: "paid" | "payable" | "referred" | "venue_paid";
+}
+
+export interface VenueReservation {
+  assignedStaffUserId?: string;
+  id: string;
+  locationId: string;
+  notes?: string;
+  partySize: number;
+  requestedAt: string;
+  status: string;
+  tableLabel?: string;
+}
+
+export interface VenueDiningSession {
+  id: string;
+  locationId: string;
+  reservationId?: string;
+  startedAt: string;
+  tableLabel?: string;
+}
+
+export interface VenueOrder {
+  assignedStaffUserId?: string;
+  currency: string;
+  id: string;
+  locationId: string;
+  paymentStatus: string;
+  status: string;
+  subtotalCents: number;
+  tipCents: number;
+  totalCents: number;
+}
+
+export interface VenueEvent {
+  detail: string;
+  id: string;
+  kind: "order_created" | "reservation_requested";
+  locationId: string;
+  occurredAt: string;
+  status: string;
+  title: string;
+}
+
+export interface VenueWorkspace {
+  location: VenueLocation;
+  orders: VenueOrder[];
+  reservations: VenueReservation[];
+}
+
 export interface AwsBlocksApi {
   [method: string]: (...args: any[]) => Promise<unknown>;
   getRooms: () => Promise<ChatRoomsResponse>;
@@ -101,6 +189,9 @@ export interface AwsBlocksApi {
     unreadCount: number;
   }>;
   subscribeNotifications: () => Promise<NotificationChannelClient>;
+  subscribeVenueEvents: (
+    locationId: string
+  ) => Promise<RealtimeChannelClient<VenueEvent>>;
   saveProfile: (input: unknown) => Promise<{
     profile: DatingProfileResponse;
     readiness: DatingReadiness;
@@ -180,6 +271,84 @@ export interface AwsBlocksApi {
     p256dh: string;
   }) => Promise<{ ok: true }>;
   getVapidPublicKey: () => Promise<{ vapidPublicKey: string | null }>;
+  previewVenueMenu: (input: { url: string }) => Promise<{
+    preview: VenueMenuPreview | null;
+    reason?: "firecrawl_not_configured" | "invalid_menu" | "unavailable";
+  }>;
+  createVenueLocation: (input: {
+    address?: string;
+    discoveryPlaceId?: string;
+    menuUrl?: string;
+    name: string;
+    organizationName?: string;
+    phone?: string;
+    referralCode?: string;
+    venueRole?: "owner" | "referrer";
+    websiteUrl?: string;
+  }) => Promise<{ location: VenueLocation; referral?: VenueReferral }>;
+  followVenue: (locationId: string) => Promise<{ following: boolean }>;
+  captureVenueMenu: (input: { locationId: string; url: string }) => Promise<{
+    preview: VenueMenuPreview | null;
+    reason?: "firecrawl_not_configured" | "invalid_menu" | "unavailable";
+  }>;
+  createVenueReferral: (locationId: string) => Promise<{
+    referral: VenueReferral;
+  }>;
+  createVenueMediaUpload: (
+    input: VenueMediaUploadInput
+  ) => Promise<MediaUploadResponse>;
+  saveVenueMedia: (input: {
+    kind: VenueMediaKind;
+    locationId: string;
+    url: string;
+  }) => Promise<{ mediaId: string }>;
+  requestVenueClaim: (
+    locationId: string,
+    input?: { claimNote?: string }
+  ) => Promise<{ status: "requested" | "already_requested" }>;
+  approveVenueClaim: (locationId: string) => Promise<{
+    ownerUserId: string;
+    status: "claimed";
+  }>;
+  getVenueWorkspace: (locationId: string) => Promise<VenueWorkspace>;
+  updateVenueOrder: (input: {
+    assignedStaffUserId?: string;
+    orderId: string;
+    status: string;
+  }) => Promise<{ order: VenueOrder }>;
+  updateVenueReservation: (input: {
+    assignedStaffUserId?: string;
+    reservationId: string;
+    status: string;
+    tableLabel?: string;
+  }) => Promise<{ guestUserId: string; reservation: VenueReservation }>;
+  requestVenueReservation: (input: {
+    locationId: string;
+    notes?: string;
+    partySize: number;
+    requestedAt: string;
+  }) => Promise<{ reservation: VenueReservation }>;
+  startVenueDiningSession: (input: {
+    locationId: string;
+    reservationId?: string;
+    tableLabel?: string;
+  }) => Promise<{ session: VenueDiningSession }>;
+  createVenueOrder: (input: {
+    diningSessionId?: string;
+    items: {
+      name: string;
+      notes?: string;
+      quantity: number;
+      unitPriceCents: number;
+    }[];
+    locationId: string;
+    reservationId?: string;
+    tipCents?: number;
+  }) => Promise<{ order: VenueOrder }>;
+  requestVenueShiftSwap: (input: {
+    replacementUserId?: string;
+    shiftId: string;
+  }) => Promise<{ swapId: string; status: "requested" }>;
   sendPushNotification: (input: {
     badge?: string;
     body: string;
@@ -230,6 +399,15 @@ export interface MediaUploadResponse {
   mediaUrl: string;
   pathname: string;
   uploadUrl: string;
+}
+
+export type VenueMediaKind = "food_photo" | "menu_photo" | "venue_photo";
+
+export interface VenueMediaUploadInput {
+  contentType: string;
+  fileName: string;
+  kind: VenueMediaKind;
+  locationId: string;
 }
 
 export interface PlaceSuggestionInput {

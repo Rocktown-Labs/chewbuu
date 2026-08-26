@@ -1,9 +1,10 @@
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Link } from "expo-router";
 import { Drawer } from "expo-router/drawer";
 import { useThemeColor } from "heroui-native";
+import { Flame, Sparkles } from "lucide-react-native";
 import React, { useCallback } from "react";
-import { Pressable, Text } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -15,6 +16,7 @@ function DrawerLayout() {
 
   return (
     <Drawer
+      initialRouteName="(tabs)"
       screenOptions={{
         drawerStyle: { backgroundColor: themeColorBackground },
         headerRight: renderThemeToggle,
@@ -22,73 +24,66 @@ function DrawerLayout() {
         headerTintColor: themeColorForeground,
         headerTitleStyle: {
           color: themeColorForeground,
-          fontWeight: "600",
+          fontWeight: "700",
         },
       }}
     >
+      <Drawer.Screen
+        name="(tabs)"
+        options={{
+          headerShown: false,
+          drawerIcon: ({ size, color, focused }) => (
+            <Flame
+              size={size}
+              color={focused ? "#f59e0b" : themeColorForeground}
+            />
+          ),
+          drawerLabel: ({ color, focused }) => (
+            <Text
+              style={{
+                color: focused ? "#f59e0b" : themeColorForeground,
+                fontWeight: "600",
+              }}
+            >
+              Chewbuu Feed & Spots
+            </Text>
+          ),
+          headerTitle: "Chewbuu",
+        }}
+      />
       <Drawer.Screen
         name="index"
         options={{
           drawerIcon: ({ size, color, focused }) => (
             <Ionicons
-              name="home-outline"
+              name="person-circle-outline"
               size={size}
               color={focused ? color : themeColorForeground}
             />
           ),
           drawerLabel: ({ color, focused }) => (
             <Text style={{ color: focused ? color : themeColorForeground }}>
-              Home
+              Account & Sign In
             </Text>
           ),
-          headerTitle: "Home",
-        }}
-      />
-      <Drawer.Screen
-        name="(tabs)"
-        options={{
-          drawerIcon: ({ size, color, focused }) => (
-            <MaterialIcons
-              name="border-bottom"
-              size={size}
-              color={focused ? color : themeColorForeground}
-            />
-          ),
-          drawerLabel: ({ color, focused }) => (
-            <Text style={{ color: focused ? color : themeColorForeground }}>
-              Tabs
-            </Text>
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable className="mr-4">
-                <Ionicons
-                  name="add-outline"
-                  size={24}
-                  color={themeColorForeground}
-                />
-              </Pressable>
-            </Link>
-          ),
-          headerTitle: "Tabs",
+          headerTitle: "Account",
         }}
       />
       <Drawer.Screen
         name="ai"
         options={{
           drawerIcon: ({ size, color, focused }) => (
-            <Ionicons
-              name="chatbubble-ellipses-outline"
+            <Sparkles
               size={size}
-              color={focused ? color : themeColorForeground}
+              color={focused ? "#f59e0b" : themeColorForeground}
             />
           ),
           drawerLabel: ({ color, focused }) => (
-            <Text style={{ color: focused ? color : themeColorForeground }}>
-              AI
+            <Text style={{ color: focused ? "#f59e0b" : themeColorForeground }}>
+              AI Date Matchmaker
             </Text>
           ),
-          headerTitle: "AI",
+          headerTitle: "AI Matchmaker",
         }}
       />
     </Drawer>
