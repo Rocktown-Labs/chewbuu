@@ -36,7 +36,7 @@
     "dev:blocks": "tsx packages/aws-blocks/aws-blocks/scripts/server.ts",
     "aws:deploy": "tsx packages/aws-blocks/aws-blocks/scripts/deploy.ts",
     "aws:sandbox": "tsx packages/aws-blocks/aws-blocks/scripts/sandbox.ts",
-    "db:migrate": "turbo run db:migrate -F @chewbuu/db",
+    "db:migrate": "turbo run db:migrate -F @chewbuu/aws-blocks",
     "check": "ultracite check",
     "fix": "ultracite fix"
   },

@@ -150,9 +150,13 @@ jobs:
 
       - name: Apply PlanetScale database migrations
         if: github.ref == 'refs/heads/main'
-        run: bun run db:migrate
+        run: |
+          test -n "$BLOCKS_MIGRATION_DB_URL"
+          bun run db:migrate
         env:
           BLOCKS_MIGRATION_DB_URL: ${{ secrets.BLOCKS_MIGRATION_DB_URL }}
+          CHEWBUU_STAGE: production
+          DATABASE_CA_CERT: ${{ secrets.DATABASE_CA_CERT || '/etc/ssl/certs/ca-certificates.crt' }}
 
       - name: Remove stale CloudFormation change set
         continue-on-error: true
