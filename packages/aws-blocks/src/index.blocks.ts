@@ -1178,7 +1178,40 @@ const profileInputSchema = z.object({
   weight: z.string().optional(),
   wantsKids: z.string().optional(),
 });
-const profileDraftInputSchema = profileInputSchema.partial();
+const profileDraftInputSchema = z.object({
+  ageRangeMax: z.number().int().min(18).max(99).optional().nullable(),
+  ageRangeMin: z.number().int().min(18).max(99).optional().nullable(),
+  area: z.string().trim().optional().nullable(),
+  bio: z.string().optional().nullable(),
+  birthday: z.string().trim().optional().nullable(),
+  datingModes: z.array(z.string()).default([]),
+  distanceMiles: z.number().int().min(1).max(250).default(25),
+  favoriteThings: z.array(z.string()).default([]),
+  friendInvites: z.array(z.record(z.string(), z.unknown())).default([]),
+  height: z.string().optional().nullable(),
+  interestDetails: z.record(z.string(), z.array(z.string())).default({}),
+  interestedIn: z.array(z.string()).default([]),
+  interests: z.array(z.string()).default([]),
+  kids: z.string().optional().nullable(),
+  latitude: z.string().optional().nullable(),
+  lookingFor: z.array(z.string()).default([]),
+  longitude: z.string().optional().nullable(),
+  maritalStatus: z.string().optional().nullable(),
+  media: z.array(profileMediaInputSchema).max(7).default([]),
+  name: z.string().optional().nullable(),
+  occupation: z.string().optional().nullable(),
+  politics: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  race: z.string().optional().nullable(),
+  religion: z.string().optional().nullable(),
+  safetyOptIn: z.boolean().default(false),
+  sex: z.string().trim().optional().nullable(),
+  sexuality: z.string().trim().optional().nullable(),
+  trustedContacts: z.array(z.record(z.string(), z.unknown())).default([]),
+  username: z.string().optional().nullable(),
+  weight: z.string().optional().nullable(),
+  wantsKids: z.string().optional().nullable(),
+});
 
 const dateRequestInputSchema = z.object({
   filters: z.array(z.string()).default([]),
@@ -1231,30 +1264,40 @@ const saveProfile = async (
   input: unknown,
   draft: boolean
 ) => {
-  const body = profileInputSchema.parse(input);
-  const age = getAge(body.birthday);
-  if (age === null || (!draft && age < 18)) {
+  const body = draft
+    ? profileDraftInputSchema.parse(input)
+    : profileInputSchema.parse(input);
+  const age = body.birthday ? getAge(body.birthday) : null;
+  if (!draft) {
+    if (age === null || age < 18) {
+      throw new Error("Chewbuu is for users 18 and older.");
+    }
+  } else if (age !== null && age < 18) {
     throw new Error("Chewbuu is for users 18 and older.");
   }
 
-  const hasProfilePhoto = body.media.some(
+  const hasProfilePhoto = (body.media ?? []).some(
     (item) => item.kind === "profile_photo"
   );
-  const hasIntroVideo = body.media.some((item) => item.kind === "intro_video");
+  const hasIntroVideo = (body.media ?? []).some(
+    (item) => item.kind === "intro_video"
+  );
   const locationReady = hasLocation(body);
   const canDate = hasProfilePhoto && hasIntroVideo && locationReady;
-  const onboarded = Boolean(
-    hasProfilePhoto &&
-    hasIntroVideo &&
-    body.username &&
-    body.area &&
-    locationReady &&
-    body.birthday &&
-    body.sex &&
-    body.sexuality &&
-    (body.safetyOptIn || body.trustedContacts.length > 0) &&
-    !draft
-  );
+  const onboarded =
+    !draft &&
+    Boolean(
+      hasProfilePhoto &&
+      hasIntroVideo &&
+      body.username &&
+      body.area &&
+      locationReady &&
+      body.birthday &&
+      body.sex &&
+      body.sexuality &&
+      (body.safetyOptIn ||
+        (body.trustedContacts && body.trustedContacts.length > 0))
+    );
   const db = await getDb();
   const now = new Date();
 
@@ -1264,83 +1307,85 @@ const saveProfile = async (
       .values({
         age_range_max: body.ageRangeMax ?? null,
         age_range_min: body.ageRangeMin ?? null,
-        area: body.area,
-        bio: body.bio ?? null,
-        birthday: body.birthday,
+        area: body.area || null,
+        bio: body.bio || null,
+        birthday: body.birthday || null,
         can_date: canDate,
         contribution_score: 0,
         created_at: now,
-        dating_modes: jsonb(body.datingModes),
-        distance_miles: body.distanceMiles,
-        favorite_things: jsonb(body.favoriteThings),
-        height: body.height ?? null,
+        dating_modes: jsonb(body.datingModes ?? []),
+        distance_miles: body.distanceMiles ?? 25,
+        favorite_things: jsonb(body.favoriteThings ?? []),
+        height: body.height || null,
         id: crypto.randomUUID(),
-        interest_details: jsonb(body.interestDetails),
-        interested_in: jsonb(body.interestedIn),
-        interests: jsonb(body.interests),
+        interest_details: jsonb(body.interestDetails ?? {}),
+        interested_in: jsonb(body.interestedIn ?? []),
+        interests: jsonb(body.interests ?? []),
         intro_video_url:
-          body.media.find((item) => item.kind === "intro_video")?.url ?? null,
-        kids: body.kids ?? null,
-        latitude: body.latitude ?? null,
-        looking_for: jsonb(body.lookingFor),
-        longitude: body.longitude ?? null,
-        marital_status: body.maritalStatus ?? null,
+          body.media?.find((item) => item.kind === "intro_video")?.url ?? null,
+        kids: body.kids || null,
+        latitude: body.latitude || null,
+        looking_for: jsonb(body.lookingFor ?? []),
+        longitude: body.longitude || null,
+        marital_status: body.maritalStatus || null,
         onboarded,
         onboarding_completed_at: onboarded ? now : null,
-        occupation: body.occupation ?? null,
-        politics: body.politics ?? null,
+        occupation: body.occupation || null,
+        politics: body.politics || null,
         profile_photo_url:
-          body.media.find((item) => item.kind === "profile_photo")?.url ?? null,
-        phone: body.phone ?? null,
-        race: body.race ?? null,
-        religion: body.religion ?? null,
+          body.media?.find((item) => item.kind === "profile_photo")?.url ??
+          null,
+        phone: body.phone || null,
+        race: body.race || null,
+        religion: body.religion || null,
         reliability_score: 100,
-        safety_opt_in: body.safetyOptIn,
-        sex: body.sex,
-        sexuality: body.sexuality,
+        safety_opt_in: body.safetyOptIn ?? false,
+        sex: body.sex || null,
+        sexuality: body.sexuality || null,
         updated_at: now,
         user_id: sessionUser.id,
-        weight: body.weight ?? null,
-        wants_kids: body.wantsKids ?? null,
+        weight: body.weight || null,
+        wants_kids: body.wantsKids || null,
       })
       .onConflict((conflict) =>
         conflict.column("user_id").doUpdateSet({
           age_range_max: body.ageRangeMax ?? null,
           age_range_min: body.ageRangeMin ?? null,
-          area: body.area,
-          bio: body.bio ?? null,
-          birthday: body.birthday,
+          area: body.area || null,
+          bio: body.bio || null,
+          birthday: body.birthday || null,
           can_date: canDate,
-          dating_modes: jsonb(body.datingModes),
-          distance_miles: body.distanceMiles,
-          favorite_things: jsonb(body.favoriteThings),
-          height: body.height ?? null,
-          interest_details: jsonb(body.interestDetails),
-          interested_in: jsonb(body.interestedIn),
-          interests: jsonb(body.interests),
+          dating_modes: jsonb(body.datingModes ?? []),
+          distance_miles: body.distanceMiles ?? 25,
+          favorite_things: jsonb(body.favoriteThings ?? []),
+          height: body.height || null,
+          interest_details: jsonb(body.interestDetails ?? {}),
+          interested_in: jsonb(body.interestedIn ?? []),
+          interests: jsonb(body.interests ?? []),
           intro_video_url:
-            body.media.find((item) => item.kind === "intro_video")?.url ?? null,
-          kids: body.kids ?? null,
-          latitude: body.latitude ?? null,
-          looking_for: jsonb(body.lookingFor),
-          longitude: body.longitude ?? null,
-          marital_status: body.maritalStatus ?? null,
+            body.media?.find((item) => item.kind === "intro_video")?.url ??
+            null,
+          kids: body.kids || null,
+          latitude: body.latitude || null,
+          looking_for: jsonb(body.lookingFor ?? []),
+          longitude: body.longitude || null,
+          marital_status: body.maritalStatus || null,
           onboarded,
           onboarding_completed_at: onboarded ? now : null,
-          occupation: body.occupation ?? null,
-          politics: body.politics ?? null,
+          occupation: body.occupation || null,
+          politics: body.politics || null,
           profile_photo_url:
-            body.media.find((item) => item.kind === "profile_photo")?.url ??
+            body.media?.find((item) => item.kind === "profile_photo")?.url ??
             null,
-          phone: body.phone ?? null,
-          race: body.race ?? null,
-          religion: body.religion ?? null,
-          safety_opt_in: body.safetyOptIn,
-          sex: body.sex,
-          sexuality: body.sexuality,
+          phone: body.phone || null,
+          race: body.race || null,
+          religion: body.religion || null,
+          safety_opt_in: body.safetyOptIn ?? false,
+          sex: body.sex || null,
+          sexuality: body.sexuality || null,
           updated_at: now,
-          weight: body.weight ?? null,
-          wants_kids: body.wantsKids ?? null,
+          weight: body.weight || null,
+          wants_kids: body.wantsKids || null,
         })
       )
       .execute();
@@ -1349,7 +1394,7 @@ const saveProfile = async (
       .deleteFrom("profile_media")
       .where("user_id", "=", sessionUser.id)
       .execute();
-    if (body.media.length) {
+    if (body.media && body.media.length) {
       await tx
         .insertInto("profile_media")
         .values(
@@ -1372,7 +1417,7 @@ const saveProfile = async (
         has_completed_onboarding: onboarded,
         has_intro_video: hasIntroVideo,
         has_profile_photo: hasProfilePhoto,
-        username: body.username ?? null,
+        ...(body.username ? { username: body.username } : {}),
       })
       .where("id", "=", sessionUser.id)
       .execute();
@@ -3427,41 +3472,134 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
       return saveProfile(
         sessionUser,
         {
-          ageRangeMax: draft.ageRangeMax,
-          ageRangeMin: draft.ageRangeMin,
-          area: draft.area ?? (current?.area as string | undefined) ?? "",
-          bio: draft.bio,
+          ageRangeMax:
+            draft.ageRangeMax !== undefined
+              ? draft.ageRangeMax
+              : current?.age_range_max,
+          ageRangeMin:
+            draft.ageRangeMin !== undefined
+              ? draft.ageRangeMin
+              : current?.age_range_min,
+          area:
+            draft.area !== undefined
+              ? draft.area
+              : (current?.area as string | null | undefined),
+          bio:
+            draft.bio !== undefined
+              ? draft.bio
+              : (current?.bio as string | null | undefined),
           birthday:
-            draft.birthday ?? (current?.birthday as string | undefined) ?? "",
-          datingModes: draft.datingModes ?? [],
-          distanceMiles: draft.distanceMiles ?? 25,
-          favoriteThings: draft.favoriteThings ?? [],
-          friendInvites: draft.friendInvites ?? [],
-          height: draft.height,
-          interestDetails: draft.interestDetails ?? {},
-          interestedIn: draft.interestedIn ?? [],
-          interests: draft.interests ?? [],
-          kids: draft.kids,
-          latitude: draft.latitude,
-          lookingFor: draft.lookingFor ?? [],
-          longitude: draft.longitude,
-          maritalStatus: draft.maritalStatus,
-          media: draft.media ?? [],
-          name: draft.name,
-          occupation: draft.occupation,
-          politics: draft.politics,
-          phone: draft.phone,
-          race: draft.race,
-          religion: draft.religion,
-          safetyOptIn: draft.safetyOptIn ?? false,
-          sex: draft.sex ?? (current?.sex as string | undefined) ?? "",
+            draft.birthday !== undefined
+              ? draft.birthday
+              : (current?.birthday as string | null | undefined),
+          datingModes:
+            draft.datingModes !== undefined
+              ? draft.datingModes
+              : ((current?.dating_modes as string[] | undefined) ?? []),
+          distanceMiles:
+            draft.distanceMiles !== undefined
+              ? draft.distanceMiles
+              : ((current?.distance_miles as number | undefined) ?? 25),
+          favoriteThings:
+            draft.favoriteThings !== undefined
+              ? draft.favoriteThings
+              : ((current?.favorite_things as string[] | undefined) ?? []),
+          friendInvites:
+            draft.friendInvites !== undefined
+              ? draft.friendInvites
+              : (current?.friendInvites ?? []),
+          height:
+            draft.height !== undefined
+              ? draft.height
+              : (current?.height as string | null | undefined),
+          interestDetails:
+            draft.interestDetails !== undefined
+              ? draft.interestDetails
+              : ((current?.interest_details as
+                  | Record<string, string[]>
+                  | undefined) ?? {}),
+          interestedIn:
+            draft.interestedIn !== undefined
+              ? draft.interestedIn
+              : ((current?.interested_in as string[] | undefined) ?? []),
+          interests:
+            draft.interests !== undefined
+              ? draft.interests
+              : ((current?.interests as string[] | undefined) ?? []),
+          kids:
+            draft.kids !== undefined
+              ? draft.kids
+              : (current?.kids as string | null | undefined),
+          latitude:
+            draft.latitude !== undefined
+              ? draft.latitude
+              : (current?.latitude as string | null | undefined),
+          lookingFor:
+            draft.lookingFor !== undefined
+              ? draft.lookingFor
+              : ((current?.looking_for as string[] | undefined) ?? []),
+          longitude:
+            draft.longitude !== undefined
+              ? draft.longitude
+              : (current?.longitude as string | null | undefined),
+          maritalStatus:
+            draft.maritalStatus !== undefined
+              ? draft.maritalStatus
+              : (current?.marital_status as string | null | undefined),
+          media:
+            draft.media !== undefined ? draft.media : (current?.media ?? []),
+          name:
+            draft.name !== undefined
+              ? draft.name
+              : (current?.name as string | null | undefined),
+          occupation:
+            draft.occupation !== undefined
+              ? draft.occupation
+              : (current?.occupation as string | null | undefined),
+          politics:
+            draft.politics !== undefined
+              ? draft.politics
+              : (current?.politics as string | null | undefined),
+          phone:
+            draft.phone !== undefined
+              ? draft.phone
+              : (current?.phone as string | null | undefined),
+          race:
+            draft.race !== undefined
+              ? draft.race
+              : (current?.race as string | null | undefined),
+          religion:
+            draft.religion !== undefined
+              ? draft.religion
+              : (current?.religion as string | null | undefined),
+          safetyOptIn:
+            draft.safetyOptIn !== undefined
+              ? draft.safetyOptIn
+              : ((current?.safety_opt_in as boolean | undefined) ?? false),
+          sex:
+            draft.sex !== undefined
+              ? draft.sex
+              : (current?.sex as string | null | undefined),
           sexuality:
-            draft.sexuality ?? (current?.sexuality as string | undefined) ?? "",
-          trustedContacts: draft.trustedContacts ?? [],
+            draft.sexuality !== undefined
+              ? draft.sexuality
+              : (current?.sexuality as string | null | undefined),
+          trustedContacts:
+            draft.trustedContacts !== undefined
+              ? draft.trustedContacts
+              : (current?.trustedContacts ?? []),
           username:
-            draft.username ?? (current?.username as string | undefined) ?? "",
-          weight: draft.weight,
-          wantsKids: draft.wantsKids,
+            draft.username !== undefined
+              ? draft.username
+              : (current?.username as string | null | undefined),
+          weight:
+            draft.weight !== undefined
+              ? draft.weight
+              : (current?.weight as string | null | undefined),
+          wantsKids:
+            draft.wantsKids !== undefined
+              ? draft.wantsKids
+              : (current?.wants_kids as string | null | undefined),
         },
         true
       );
