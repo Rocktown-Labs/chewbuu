@@ -27,6 +27,7 @@ import {
 } from "@chewbuu/ui/components/select";
 import { Slider } from "@chewbuu/ui/components/slider";
 import { Textarea } from "@chewbuu/ui/components/textarea";
+import { cn } from "@chewbuu/ui/lib/utils";
 import {
   type FormAsyncValidateOrFn,
   type FormValidateOrFn,
@@ -39,6 +40,7 @@ import {
   Camera,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Heart,
@@ -470,7 +472,7 @@ export function OnboardingForm() {
     clear: clearPersistedOnboarding,
   } = useOnboardingStore();
 
-  const [step, setStep] = useState(persistedStep);
+  const [step, setStep] = useState(0);
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [underageBirthday, setUnderageBirthday] = useState("");
   const [isLeavingOnboarding, setIsLeavingOnboarding] = useState(false);
@@ -493,13 +495,13 @@ export function OnboardingForm() {
 
       if (!media.some((item) => item.kind === "profile_photo")) {
         toast.error("Add a profile photo before dating.");
-        updateStep(1);
+        updateStep(2);
         return;
       }
 
       if (!media.some((item) => item.kind === "intro_video")) {
         toast.error("Chewbuu is video-first. Add your intro video.");
-        updateStep(1);
+        updateStep(2);
         return;
       }
 
@@ -641,17 +643,29 @@ export function OnboardingForm() {
     (newStep: number) => {
       setStep(newStep);
       setPersistedStep(newStep);
+      if (typeof window !== "undefined") {
+        window.location.hash = steps[newStep].toLowerCase();
+      }
     },
     [setPersistedStep]
   );
 
   useEffect(() => {
-    const hash = window.location.hash.replace("#", "").toLowerCase();
+    const hash =
+      typeof window !== "undefined"
+        ? window.location.hash.replace("#", "").toLowerCase()
+        : "";
     const hashStep = onboardingStepByHash.get(hash);
     if (typeof hashStep === "number") {
-      updateStep(hashStep);
+      setStep(hashStep);
+    } else if (
+      typeof persistedStep === "number" &&
+      persistedStep > 0 &&
+      persistedStep < steps.length
+    ) {
+      setStep(persistedStep);
     }
-  }, [updateStep]);
+  }, [persistedStep]);
 
   const progress = ((step + 1) / steps.length) * 100;
 
@@ -935,7 +949,7 @@ export function OnboardingForm() {
           }}
         >
           <section className="min-h-[420px] rounded-3xl border bg-card p-6 shadow-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 md:p-8">
-            {step === 0 && <BasicsStep form={form} />}
+            {step === 0 && <BasicsStep form={form} onNextStep={goNext} />}
             {step === 1 && <PermissionsStep form={form} />}
             {step === 2 && <MediaStep form={form} />}
             {step === 3 && <PreferencesStep form={form} />}
@@ -1050,9 +1064,136 @@ function UsernameInput({ field }: { field: any }) {
   );
 }
 
-function BasicsStep({ form }: { form: OnboardingFormApi }) {
+function AccordionSection({
+  title,
+  subtitle,
+  isOpen,
+  onToggle,
+  isComplete,
+  badge,
+  children,
+  sectionNumber,
+}: {
+  title: string;
+  subtitle?: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  isComplete?: boolean;
+  badge?: string;
+  children: React.ReactNode;
+  sectionNumber?: number | string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-2xl border transition-all duration-200 overflow-hidden",
+        isOpen
+          ? "border-primary/50 bg-background shadow-xs ring-1 ring-primary/20"
+          : "border-border bg-card/60 hover:border-border-hover"
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-4 sm:p-5 text-left font-semibold cursor-pointer transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          {sectionNumber !== undefined && (
+            <span
+              className={cn(
+                "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                isComplete
+                  ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                  : isOpen
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+              )}
+            >
+              {isComplete ? <Check className="size-3.5" /> : sectionNumber}
+            </span>
+          )}
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm sm:text-base text-foreground font-semibold">
+                {title}
+              </span>
+              {badge && (
+                <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+                  {badge}
+                </Badge>
+              )}
+              {isComplete && (
+                <Badge
+                  variant="outline"
+                  className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] hidden sm:inline-flex"
+                >
+                  Completed
+                </Badge>
+              )}
+            </div>
+            {subtitle && (
+              <p className="text-xs text-muted-foreground font-normal mt-0.5">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        </div>
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground shrink-0 transition-transform duration-200",
+            isOpen && "rotate-180 text-primary"
+          )}
+        />
+      </button>
+
+      {isOpen && (
+        <div className="p-4 sm:p-5 pt-0 border-t border-border/40 animate-in fade-in-50 duration-200">
+          <div className="pt-4">{children}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BasicsStep({
+  form,
+  onNextStep,
+}: {
+  form: OnboardingFormApi;
+  onNextStep: () => void;
+}) {
+  const [openSection, setOpenSection] = useState<
+    "contact" | "personal" | "identity"
+  >("contact");
   const [area, setArea] = useState(form.state.values.area);
   const areaIsInvalid = area.length > 0 && !areaPattern.test(area.trim());
+
+  const { values } = form.state;
+
+  const isContactComplete = Boolean(
+    values.name?.trim() &&
+    values.name.trim().length >= 2 &&
+    values.email?.trim() &&
+    /^\S+@\S+\.\S+$/.test(values.email.trim()) &&
+    (values.phone || "").replaceAll(/\D/g, "").length >= 10
+  );
+
+  const isPersonalComplete = Boolean(
+    values.occupation?.trim() &&
+    values.race &&
+    areaPattern.test((values.area || "").trim()) &&
+    values.birthday &&
+    getAge(values.birthday) !== null &&
+    (getAge(values.birthday) as number) >= MINIMUM_AGE
+  );
+
+  const isIdentityComplete = Boolean(
+    values.sex &&
+    values.sexuality &&
+    values.maritalStatus &&
+    values.bio?.trim() &&
+    values.bio.trim().length >= 10
+  );
 
   const getPosition = () => {
     // eslint-disable-next-line promise/avoid-new
@@ -1113,194 +1254,375 @@ function BasicsStep({ form }: { form: OnboardingFormApi }) {
     }
   };
 
+  const handleNextFromContact = () => {
+    if (!values.name?.trim() || values.name.trim().length < 2) {
+      toast.error("Display Name must be at least 2 characters.");
+      return;
+    }
+    if (!values.email?.trim() || !/^\S+@\S+\.\S+$/.test(values.email.trim())) {
+      toast.error("A valid email address is required.");
+      return;
+    }
+    const cleanedPhone = (values.phone || "").replaceAll(/\D/g, "");
+    if (cleanedPhone.length < 10) {
+      toast.error("A valid 10-digit phone number is required.");
+      return;
+    }
+    setOpenSection("personal");
+  };
+
+  const handleNextFromPersonal = () => {
+    if (!values.occupation?.trim()) {
+      toast.error("Occupation / Career is required.");
+      return;
+    }
+    if (!values.race) {
+      toast.error("Race is required (stored privately).");
+      return;
+    }
+    if (!areaPattern.test(values.area.trim())) {
+      toast.error("Use a city and state format, like Little Rock, AR.");
+      return;
+    }
+    if (!values.birthday) {
+      toast.error("Birthday is required.");
+      return;
+    }
+    const age = getAge(values.birthday);
+    if (age === null || age < MINIMUM_AGE) {
+      toast.error("You must be at least 18 years old.");
+      return;
+    }
+    setOpenSection("identity");
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <StepIntro
         eyebrow="Basics"
         title="Tell Chewbuu who is going out."
-        text="Keep it clean and real. All fields are required. Birthday will verify you are over 18 years old."
+        text="Keep it clean and real. Fill out each section below to complete your basic profile."
       />
-      <FieldGroup>
-        <div className="grid gap-4 md:grid-cols-3">
-          <form.Field name="name">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor={field.name}>Display Name</FieldLabel>
-                <Input
-                  className="rounded-full h-10 px-4 text-sm"
-                  id={field.name}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="E.g. Sarah Smith"
-                  value={field.state.value}
-                />
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="username">
-            {(field) => <UsernameInput field={field} />}
-          </form.Field>
-          <form.Field name="email">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor={field.name}>Email Address</FieldLabel>
-                <Input
-                  className="rounded-full h-10 px-4 text-sm bg-muted/30"
-                  id={field.name}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="email@example.com"
-                  value={field.state.value}
-                  type="email"
-                  disabled
-                />
-              </Field>
-            )}
-          </form.Field>
-          <form.Field name="phone">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor={field.name}>Phone Number</FieldLabel>
-                <Input
-                  className="rounded-full h-10 px-4 text-sm"
-                  id={field.name}
-                  onChange={(event) => {
-                    const formatted = formatPhoneNumber(event.target.value);
-                    field.handleChange(formatted);
-                  }}
-                  placeholder="(555) 555-5555"
-                  value={field.state.value ?? ""}
-                  type="tel"
-                />
-              </Field>
-            )}
-          </form.Field>
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <form.Field name="occupation">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor={field.name}>
-                  Occupation / Career
-                </FieldLabel>
-                <Input
-                  className="rounded-full h-10 px-4 text-sm"
-                  id={field.name}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="E.g. Software Engineer, Designer, Teacher"
-                  value={field.state.value ?? ""}
-                />
-              </Field>
-            )}
-          </form.Field>
-          <SelectField
-            form={form}
-            label="Race / Ethnicity"
-            name="race"
-            options={raceOptions}
-            placeholder="Select race/ethnicity (private)"
-          />
-        </div>
+      <div className="flex flex-col gap-4">
+        {/* Section 1: Contact */}
+        <AccordionSection
+          sectionNumber={1}
+          title="Contact & Handle"
+          subtitle="Display name, username, email & phone"
+          isOpen={openSection === "contact"}
+          onToggle={() =>
+            setOpenSection(openSection === "contact" ? "personal" : "contact")
+          }
+          isComplete={isContactComplete}
+        >
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <form.Field name="name">
+                {(field) => (
+                  <Field>
+                    <FieldLabel htmlFor={field.name}>Display Name</FieldLabel>
+                    <Input
+                      className="rounded-full h-10 px-4 text-sm"
+                      id={field.name}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                      placeholder="E.g. Sarah Smith"
+                      value={field.state.value}
+                    />
+                  </Field>
+                )}
+              </form.Field>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <form.Field name="area">
-            {(field) => (
-              <Field data-invalid={areaIsInvalid || undefined}>
-                <FieldLabel htmlFor={field.name}>Area (City, ST)</FieldLabel>
-                <div className="relative flex-1">
-                  <Input
-                    className="rounded-full h-10 pl-4 pr-10 text-sm w-full"
-                    aria-invalid={areaIsInvalid}
+              <form.Field name="username">
+                {(field) => <UsernameInput field={field} />}
+              </form.Field>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <form.Field name="email">
+                {(field) => (
+                  <Field>
+                    <FieldLabel htmlFor={field.name}>Email Address</FieldLabel>
+                    <Input
+                      className="rounded-full h-10 px-4 text-sm bg-muted/30"
+                      id={field.name}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                      placeholder="email@example.com"
+                      value={field.state.value}
+                      type="email"
+                      disabled
+                    />
+                  </Field>
+                )}
+              </form.Field>
+
+              <form.Field name="phone">
+                {(field) => (
+                  <Field>
+                    <FieldLabel htmlFor={field.name}>Phone Number</FieldLabel>
+                    <Input
+                      className="rounded-full h-10 px-4 text-sm"
+                      id={field.name}
+                      onChange={(event) => {
+                        const formatted = formatPhoneNumber(event.target.value);
+                        field.handleChange(formatted);
+                      }}
+                      placeholder="(555) 555-5555"
+                      value={field.state.value ?? ""}
+                      type="tel"
+                    />
+                  </Field>
+                )}
+              </form.Field>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                type="button"
+                className="rounded-full px-5 h-9 font-semibold gap-1 text-xs"
+                onClick={handleNextFromContact}
+              >
+                Next: Personal Details
+                <ChevronDown className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        </AccordionSection>
+
+        {/* Section 2: Personal & Location */}
+        <AccordionSection
+          sectionNumber={2}
+          title="Personal Details & Location"
+          subtitle="Occupation, race, area & birthday"
+          isOpen={openSection === "personal"}
+          onToggle={() =>
+            setOpenSection(openSection === "personal" ? "identity" : "personal")
+          }
+          isComplete={isPersonalComplete}
+        >
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <form.Field name="occupation">
+                {(field) => (
+                  <Field>
+                    <FieldLabel htmlFor={field.name}>
+                      Occupation / Career
+                    </FieldLabel>
+                    <Input
+                      className="rounded-full h-10 px-4 text-sm"
+                      id={field.name}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                      placeholder="E.g. Software Engineer, Designer"
+                      value={field.state.value ?? ""}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+
+              <SelectField
+                form={form}
+                label="Race / Ethnicity"
+                name="race"
+                options={raceOptions}
+                placeholder="Select race/ethnicity (private)"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <form.Field name="area">
+                {(field) => (
+                  <Field data-invalid={areaIsInvalid || undefined}>
+                    <FieldLabel htmlFor={field.name}>
+                      Area (City, ST)
+                    </FieldLabel>
+                    <div className="relative flex-1">
+                      <Input
+                        className="rounded-full h-10 pl-4 pr-10 text-sm w-full"
+                        aria-invalid={areaIsInvalid}
+                        id={field.name}
+                        onChange={(event) => {
+                          setArea(event.target.value);
+                          field.handleChange(event.target.value);
+                        }}
+                        placeholder="Little Rock, AR"
+                        value={field.state.value}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleDetectLocation();
+                        }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition bg-transparent border-0 p-1 cursor-pointer flex items-center justify-center"
+                        title="Detect location"
+                      >
+                        <MapPin className="size-4" />
+                      </button>
+                    </div>
+                  </Field>
+                )}
+              </form.Field>
+
+              <form.Field name="birthday">
+                {(field) => (
+                  <Field>
+                    <FieldLabel htmlFor={field.name}>Birthday</FieldLabel>
+                    <Input
+                      className="rounded-full h-10 px-4 text-sm"
+                      id={field.name}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                      type="date"
+                      value={field.state.value}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+            </div>
+
+            <div className="flex justify-between pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                className="rounded-full px-4 h-9 font-semibold text-xs"
+                onClick={() => setOpenSection("contact")}
+              >
+                Back: Contact
+              </Button>
+              <Button
+                type="button"
+                className="rounded-full px-5 h-9 font-semibold gap-1 text-xs"
+                onClick={handleNextFromPersonal}
+              >
+                Next: Identity & Bio
+                <ChevronDown className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        </AccordionSection>
+
+        {/* Section 3: Identity & Bio */}
+        <AccordionSection
+          sectionNumber={3}
+          title="Identity & Bio"
+          subtitle="Sex, sexuality, relationship status & bio"
+          isOpen={openSection === "identity"}
+          onToggle={() =>
+            setOpenSection(openSection === "identity" ? "contact" : "identity")
+          }
+          isComplete={isIdentityComplete}
+        >
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <SelectField
+                form={form}
+                label="Sex"
+                name="sex"
+                options={sexOptions}
+                placeholder="Select sex"
+              />
+              <SelectField
+                form={form}
+                label="Sexuality"
+                name="sexuality"
+                options={sexualityOptions}
+                placeholder="Select sexuality"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <SelectField
+                form={form}
+                label="Relationship Status"
+                name="maritalStatus"
+                options={maritalStatusOptions}
+                placeholder="Select relationship status"
+              />
+              <form.Field name="height">
+                {(field) => (
+                  <Field>
+                    <FieldLabel htmlFor={field.name}>
+                      Height (Optional)
+                    </FieldLabel>
+                    <Input
+                      className="rounded-full h-10 px-4 text-sm"
+                      id={field.name}
+                      onChange={(event) =>
+                        field.handleChange(event.target.value)
+                      }
+                      placeholder={`E.g. 5'10"`}
+                      value={field.state.value ?? ""}
+                    />
+                  </Field>
+                )}
+              </form.Field>
+            </div>
+
+            <form.Field name="bio">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor={field.name}>Short Bio</FieldLabel>
+                  <Textarea
+                    className="rounded-2xl p-4 min-h-24 text-sm"
                     id={field.name}
-                    onChange={(event) => {
-                      setArea(event.target.value);
-                      field.handleChange(event.target.value);
-                    }}
-                    placeholder="Little Rock, AR"
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="What should someone know before saying yes?"
                     value={field.state.value}
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleDetectLocation();
-                    }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition bg-transparent border-0 p-1 cursor-pointer flex items-center justify-center"
-                    title="Detect location"
-                  >
-                    <MapPin className="size-4" />
-                  </button>
-                </div>
-                <FieldDescription>
-                  Matches start nearby based on this city.
-                </FieldDescription>
-              </Field>
-            )}
-          </form.Field>
+                  <FieldDescription>Min 10 characters.</FieldDescription>
+                </Field>
+              )}
+            </form.Field>
 
-          <form.Field name="birthday">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor={field.name}>Birthday</FieldLabel>
-                <Input
-                  className="rounded-full h-10 px-4 text-sm"
-                  id={field.name}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  type="date"
-                  value={field.state.value}
-                />
-              </Field>
-            )}
-          </form.Field>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <SelectField
-            form={form}
-            label="Sex"
-            name="sex"
-            options={sexOptions}
-            placeholder="Select sex"
-          />
-          <SelectField
-            form={form}
-            label="Sexuality"
-            name="sexuality"
-            options={sexualityOptions}
-            placeholder="Select sexuality"
-          />
-        </div>
-
-        <SelectField
-          form={form}
-          label="Relationship Status"
-          name="maritalStatus"
-          options={maritalStatusOptions}
-          placeholder="Select relationship status"
-        />
-
-        <form.Field name="bio">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>Short bio</FieldLabel>
-              <Textarea
-                className="rounded-3xl p-4 min-h-24 text-sm"
-                id={field.name}
-                onChange={(event) => field.handleChange(event.target.value)}
-                placeholder="What should someone know before saying yes?"
-                value={field.state.value}
-              />
-            </Field>
-          )}
-        </form.Field>
-      </FieldGroup>
+            <div className="flex justify-between pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                className="rounded-full px-4 h-9 font-semibold text-xs"
+                onClick={() => setOpenSection("personal")}
+              >
+                Back: Personal Details
+              </Button>
+              <Button
+                type="button"
+                className="rounded-full px-6 h-9 font-semibold gap-1 text-xs"
+                onClick={onNextStep}
+              >
+                Continue to Permissions
+                <ChevronRight className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        </AccordionSection>
+      </div>
     </div>
   );
 }
 
 function MediaStep({ form }: { form: OnboardingFormApi }) {
+  const [openSection, setOpenSection] = useState<"photo" | "video" | "extras">(
+    "photo"
+  );
+
   return (
     <form.Subscribe selector={(state) => [state.values.media]}>
       {([mediaValue]) => {
         const media = (mediaValue || []) as DatingMedia[];
+        const hasProfilePhoto = Boolean(
+          media.find((item) => item.kind === "profile_photo" && item.url)
+        );
+        const hasIntroVideo = Boolean(
+          media.find((item) => item.kind === "intro_video" && item.url)
+        );
+        const extraPhotoCount = media.filter(
+          (item) => item.kind === "photo" && item.url
+        ).length;
 
         return (
           <div className="flex flex-col gap-6">
@@ -1309,75 +1631,154 @@ function MediaStep({ form }: { form: OnboardingFormApi }) {
               title="Live Capture. Real photos."
               text="A profile photo and intro video are required to date on Chewbuu. To prevent AI & fake profiles, profile media must be captured live."
             />
-            <div className="grid gap-6 lg:grid-cols-2">
-              <MediaSlot
-                accept="image/*"
-                form={form}
-                icon={Camera}
-                index={0}
-                kind="profile_photo"
-                label="Profile photo"
-              />
-              <MediaSlot
-                accept="video/*"
-                form={form}
-                icon={Video}
-                index={1}
-                kind="intro_video"
-                label="Intro video"
-              />
-            </div>
 
-            <div className="flex flex-col gap-4 mt-2">
-              <div className="flex items-end justify-between gap-4">
-                <div>
-                  <h3 className="font-semibold text-lg">Real photo slots</h3>
-                  <p className="text-muted-foreground text-sm">
-                    Add up to six more photos from your camera roll or camera to
-                    enrich your profile.
-                  </p>
+            <div className="flex flex-col gap-4">
+              {/* Section 1: Profile Photo */}
+              <AccordionSection
+                sectionNumber={1}
+                title="Profile Photo"
+                subtitle="Live selfie capture required for identity verification"
+                isOpen={openSection === "photo"}
+                onToggle={() =>
+                  setOpenSection(openSection === "photo" ? "video" : "photo")
+                }
+                isComplete={hasProfilePhoto}
+                badge="Required"
+              >
+                <div className="flex flex-col gap-4">
+                  <MediaSlot
+                    accept="image/*"
+                    form={form}
+                    icon={Camera}
+                    index={0}
+                    kind="profile_photo"
+                    label="Profile photo"
+                  />
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      type="button"
+                      className="rounded-full px-5 h-9 font-semibold gap-1 text-xs"
+                      onClick={() => setOpenSection("video")}
+                    >
+                      Next: Intro Video
+                      <ChevronDown className="size-3.5" />
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  className="rounded-full px-4 font-semibold"
-                  onClick={() => {
-                    const photoCount = media.filter(
-                      (item) => item.kind === "photo"
-                    ).length;
+              </AccordionSection>
 
-                    if (photoCount >= 6) {
-                      toast.error("Six profile photos is the max for now.");
-                      return;
-                    }
+              {/* Section 2: Intro Video */}
+              <AccordionSection
+                sectionNumber={2}
+                title="Intro Video"
+                subtitle="Live 60-second video with audio introduction"
+                isOpen={openSection === "video"}
+                onToggle={() =>
+                  setOpenSection(openSection === "video" ? "extras" : "video")
+                }
+                isComplete={hasIntroVideo}
+                badge="Required"
+              >
+                <div className="flex flex-col gap-4">
+                  <MediaSlot
+                    accept="video/*"
+                    form={form}
+                    icon={Video}
+                    index={1}
+                    kind="intro_video"
+                    label="Intro video"
+                  />
+                  <div className="flex justify-between pt-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="rounded-full px-4 h-9 font-semibold text-xs"
+                      onClick={() => setOpenSection("photo")}
+                    >
+                      Back: Profile Photo
+                    </Button>
+                    <Button
+                      type="button"
+                      className="rounded-full px-5 h-9 font-semibold gap-1 text-xs"
+                      onClick={() => setOpenSection("extras")}
+                    >
+                      Next: Additional Photos
+                      <ChevronDown className="size-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </AccordionSection>
 
-                    form.setFieldValue("media", [
-                      ...media,
-                      createEmptyPhoto(photoCount + 1),
-                    ]);
-                  }}
-                  type="button"
-                  variant="outline"
-                >
-                  <Plus className="size-4 mr-1 inline" />
-                  Add photo
-                </Button>
-              </div>
+              {/* Section 3: Additional Photos */}
+              <AccordionSection
+                sectionNumber={3}
+                title="Additional Photos"
+                subtitle={`Add up to 6 photos to enrich your profile (${extraPhotoCount}/6)`}
+                isOpen={openSection === "extras"}
+                onToggle={() =>
+                  setOpenSection(openSection === "extras" ? "photo" : "extras")
+                }
+                isComplete={extraPhotoCount > 0}
+              >
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-muted-foreground text-xs">
+                      Upload from your gallery or snap new shots.
+                    </p>
+                    <Button
+                      className="rounded-full px-4 h-8 font-semibold text-xs"
+                      onClick={() => {
+                        const photoCount = media.filter(
+                          (item) => item.kind === "photo"
+                        ).length;
 
-              <div className="grid gap-4 md:grid-cols-3">
-                {media
-                  .map((item, index) => ({ item, index }))
-                  .filter(({ item }) => item.kind === "photo")
-                  .map(({ index }) => (
-                    <MediaSlot
-                      accept="image/*"
-                      form={form}
-                      icon={ImagePlus}
-                      index={index}
-                      key={index}
-                      kind="photo"
-                      label={`Extra Photo ${index - 1}`}
-                    />
-                  ))}
-              </div>
+                        if (photoCount >= 6) {
+                          toast.error("Six profile photos is the max for now.");
+                          return;
+                        }
+
+                        form.setFieldValue("media", [
+                          ...media,
+                          createEmptyPhoto(photoCount + 1),
+                        ]);
+                      }}
+                      type="button"
+                      variant="outline"
+                    >
+                      <Plus className="size-3.5 mr-1 inline" />
+                      Add photo
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                    {media
+                      .map((item, index) => ({ item, index }))
+                      .filter(({ item }) => item.kind === "photo")
+                      .map(({ index }) => (
+                        <MediaSlot
+                          accept="image/*"
+                          form={form}
+                          icon={ImagePlus}
+                          index={index}
+                          key={index}
+                          kind="photo"
+                          label={`Extra Photo ${index - 1}`}
+                        />
+                      ))}
+                  </div>
+
+                  <div className="flex justify-between pt-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="rounded-full px-4 h-9 font-semibold text-xs"
+                      onClick={() => setOpenSection("video")}
+                    >
+                      Back: Intro Video
+                    </Button>
+                  </div>
+                </div>
+              </AccordionSection>
             </div>
           </div>
         );
@@ -1401,8 +1802,15 @@ function PermissionsStep({ form }: { form: OnboardingFormApi }) {
   >("prompt");
   const [isRequestingAll, setIsRequestingAll] = useState(false);
   const [hapticTested, setHapticTested] = useState(false);
+  const [isHapticsSupported, setIsHapticsSupported] = useState(false);
 
   useEffect(() => {
+    setIsHapticsSupported(
+      typeof navigator !== "undefined" &&
+        typeof navigator.vibrate === "function" &&
+        ("ontouchstart" in window || navigator.maxTouchPoints > 0)
+    );
+
     const notifPermission = getPushPermissionState();
     if (notifPermission === "granted") {
       setPushState("granted");
@@ -1519,7 +1927,7 @@ function PermissionsStep({ form }: { form: OnboardingFormApi }) {
       toast.success("Haptic vibration triggered! 📳");
     } else {
       toast.info(
-        "Haptic feedback simulated (vibration not supported on this browser)."
+        "Haptic feedback simulated (vibration not supported on desktop browser)."
       );
     }
   };
@@ -1542,15 +1950,15 @@ function PermissionsStep({ form }: { form: OnboardingFormApi }) {
           Enable Device Access & Alerts
         </h2>
         <p className="text-sm text-muted-foreground">
-          Chewbuu uses camera and microphone for live video dates and selfie
-          verification, location for nearby restaurant matching, and
-          notifications for instant match updates.
+          Chewbuu uses camera and microphone for live video dates, location for
+          nearby restaurant matching, and notifications for instant match
+          updates.
         </p>
       </div>
 
       <div className="flex justify-end">
         <Button
-          className="rounded-full font-semibold gap-1.5"
+          className="rounded-full font-semibold gap-1.5 text-xs sm:text-sm"
           disabled={isRequestingAll}
           onClick={handleEnableAll}
           type="button"
@@ -1563,210 +1971,226 @@ function PermissionsStep({ form }: { form: OnboardingFormApi }) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      {/* 2 columns on mobile and desktop */}
+      <div className="grid grid-cols-2 gap-3">
         {/* Camera */}
-        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-5 shadow-xs transition-colors hover:border-primary/40">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Camera className="size-5" />
+        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-3.5 sm:p-5 shadow-xs transition-colors hover:border-primary/40">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 sm:size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Camera className="size-4 sm:size-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-foreground">Camera Access</h3>
-                <p className="text-xs text-muted-foreground">
-                  Photo verification, live selfies, and video date rooms.
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground">
+                  Camera
+                </h3>
+                <p className="text-[11px] text-muted-foreground hidden sm:block">
+                  Live selfies & video dates.
                 </p>
               </div>
             </div>
             {cameraState === "granted" ? (
               <Badge
-                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] self-start"
                 variant="outline"
               >
-                <CheckCircle2 className="size-3 mr-1" />
+                <CheckCircle2 className="size-2.5 mr-0.5" />
                 Granted
               </Badge>
             ) : cameraState === "denied" ? (
-              <Badge variant="destructive">Denied</Badge>
+              <Badge variant="destructive" className="text-[10px] self-start">
+                Denied
+              </Badge>
             ) : (
-              <Badge variant="outline">Ready</Badge>
+              <Badge variant="outline" className="text-[10px] self-start">
+                Ready
+              </Badge>
             )}
           </div>
-          <div className="mt-4 pt-3 border-t">
+          <div className="mt-3 pt-2.5 border-t">
             <Button
-              className="w-full rounded-xl"
+              className="w-full rounded-xl text-xs h-8 sm:h-9"
               disabled={cameraState === "granted"}
               onClick={requestCamera}
               type="button"
               variant={cameraState === "granted" ? "outline" : "default"}
             >
-              {cameraState === "granted" ? "Camera Enabled" : "Allow Camera"}
+              {cameraState === "granted" ? "Enabled" : "Allow Camera"}
             </Button>
           </div>
         </div>
 
         {/* Microphone */}
-        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-5 shadow-xs transition-colors hover:border-primary/40">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Mic className="size-5" />
+        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-3.5 sm:p-5 shadow-xs transition-colors hover:border-primary/40">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 sm:size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Mic className="size-4 sm:size-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-foreground">
-                  Microphone Access
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground">
+                  Microphone
                 </h3>
-                <p className="text-xs text-muted-foreground">
-                  Audio streaming during 1:1 and group video dates.
+                <p className="text-[11px] text-muted-foreground hidden sm:block">
+                  Audio during video dates.
                 </p>
               </div>
             </div>
             {micState === "granted" ? (
               <Badge
-                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] self-start"
                 variant="outline"
               >
-                <CheckCircle2 className="size-3 mr-1" />
+                <CheckCircle2 className="size-2.5 mr-0.5" />
                 Granted
               </Badge>
             ) : micState === "denied" ? (
-              <Badge variant="destructive">Denied</Badge>
+              <Badge variant="destructive" className="text-[10px] self-start">
+                Denied
+              </Badge>
             ) : (
-              <Badge variant="outline">Ready</Badge>
+              <Badge variant="outline" className="text-[10px] self-start">
+                Ready
+              </Badge>
             )}
           </div>
-          <div className="mt-4 pt-3 border-t">
+          <div className="mt-3 pt-2.5 border-t">
             <Button
-              className="w-full rounded-xl"
+              className="w-full rounded-xl text-xs h-8 sm:h-9"
               disabled={micState === "granted"}
               onClick={requestMicrophone}
               type="button"
               variant={micState === "granted" ? "outline" : "default"}
             >
-              {micState === "granted"
-                ? "Microphone Enabled"
-                : "Allow Microphone"}
+              {micState === "granted" ? "Enabled" : "Allow Mic"}
             </Button>
           </div>
         </div>
 
-        {/* Push Notifications */}
-        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-5 shadow-xs transition-colors hover:border-primary/40">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Bell className="size-5" />
+        {/* Notifications */}
+        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-3.5 sm:p-5 shadow-xs transition-colors hover:border-primary/40">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 sm:size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Bell className="size-4 sm:size-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-foreground">
-                  Push Notifications & Alerts
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground">
+                  Push Alerts
                 </h3>
-                <p className="text-xs text-muted-foreground">
-                  Instant updates for match requests, date invites, and chat
-                  replies.
+                <p className="text-[11px] text-muted-foreground hidden sm:block">
+                  Match & date updates.
                 </p>
               </div>
             </div>
             {pushState === "granted" ? (
               <Badge
-                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] self-start"
                 variant="outline"
               >
-                <CheckCircle2 className="size-3 mr-1" />
+                <CheckCircle2 className="size-2.5 mr-0.5" />
                 Granted
               </Badge>
             ) : pushState === "denied" ? (
-              <Badge variant="destructive">Denied</Badge>
+              <Badge variant="destructive" className="text-[10px] self-start">
+                Denied
+              </Badge>
             ) : (
-              <Badge variant="outline">Ready</Badge>
+              <Badge variant="outline" className="text-[10px] self-start">
+                Ready
+              </Badge>
             )}
           </div>
-          <div className="mt-4 pt-3 border-t">
+          <div className="mt-3 pt-2.5 border-t">
             <Button
-              className="w-full rounded-xl"
+              className="w-full rounded-xl text-xs h-8 sm:h-9"
               disabled={pushState === "granted"}
               onClick={requestPush}
               type="button"
               variant={pushState === "granted" ? "outline" : "default"}
             >
-              {pushState === "granted"
-                ? "Alerts Enabled"
-                : "Enable Push Alerts"}
+              {pushState === "granted" ? "Enabled" : "Allow Alerts"}
             </Button>
           </div>
         </div>
 
         {/* Location */}
-        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-5 shadow-xs transition-colors hover:border-primary/40">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <MapPin className="size-5" />
+        <div className="flex flex-col justify-between rounded-2xl border bg-background/50 p-3.5 sm:p-5 shadow-xs transition-colors hover:border-primary/40">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 sm:size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <MapPin className="size-4 sm:size-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-foreground">
-                  Location Access
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground">
+                  Location
                 </h3>
-                <p className="text-xs text-muted-foreground">
-                  Nearby restaurant suggestions and local match distance.
+                <p className="text-[11px] text-muted-foreground hidden sm:block">
+                  Nearby restaurant spots.
                 </p>
               </div>
             </div>
             {locationState === "granted" ? (
               <Badge
-                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px] self-start"
                 variant="outline"
               >
-                <CheckCircle2 className="size-3 mr-1" />
+                <CheckCircle2 className="size-2.5 mr-0.5" />
                 Granted
               </Badge>
             ) : locationState === "denied" ? (
-              <Badge variant="destructive">Denied</Badge>
+              <Badge variant="destructive" className="text-[10px] self-start">
+                Denied
+              </Badge>
             ) : (
-              <Badge variant="outline">Ready</Badge>
+              <Badge variant="outline" className="text-[10px] self-start">
+                Ready
+              </Badge>
             )}
           </div>
-          <div className="mt-4 pt-3 border-t">
+          <div className="mt-3 pt-2.5 border-t">
             <Button
-              className="w-full rounded-xl"
+              className="w-full rounded-xl text-xs h-8 sm:h-9"
               disabled={locationState === "granted"}
               onClick={requestLocation}
               type="button"
               variant={locationState === "granted" ? "outline" : "default"}
             >
-              {locationState === "granted"
-                ? "Location Shared"
-                : "Share Location"}
+              {locationState === "granted" ? "Enabled" : "Allow GPS"}
             </Button>
           </div>
         </div>
       </div>
 
       {/* Tactile Haptics Test */}
-      <div className="flex items-center justify-between rounded-2xl border border-dashed bg-muted/30 p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-background text-foreground">
-            <Smartphone className="size-4" />
+      <div className="rounded-2xl border bg-card/60 p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Smartphone className="size-4" />
+            </div>
+            <div>
+              <h4 className="text-xs sm:text-sm font-semibold text-foreground">
+                Tactile Haptic Feedback
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                {isHapticsSupported
+                  ? "Test vibration patterns for match confirmations and alerts."
+                  : "Vibration feedback is active on mobile devices (iOS/Android PWA)."}
+              </p>
+            </div>
           </div>
-          <div>
-            <h4 className="text-sm font-semibold text-foreground">
-              Mobile Haptic Feedback
-            </h4>
-            <p className="text-xs text-muted-foreground">
-              Experience tactile vibration patterns for match confirmations and
-              alerts.
-            </p>
-          </div>
+          {isHapticsSupported && (
+            <Button
+              className="rounded-full text-xs h-8 sm:h-9 px-4 self-start sm:self-auto font-semibold"
+              onClick={handleTestHaptics}
+              type="button"
+              variant="outline"
+            >
+              {hapticTested ? "Vibrate Again 📳" : "Test Vibration 📳"}
+            </Button>
+          )}
         </div>
-        <Button
-          className="rounded-full text-xs font-semibold"
-          onClick={handleTestHaptics}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          {hapticTested ? "Vibrate Again 📳" : "Test Haptics"}
-        </Button>
       </div>
     </div>
   );
@@ -2781,19 +3205,12 @@ function PremiumStep({
   form: OnboardingFormApi;
   onFinishLater: () => void;
 }) {
+  const [selectedTier, setSelectedTier] =
+    useState<MembershipPlan["tier"]>("mingle");
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">(
     "monthly"
   );
-
-  const getPriceLabel = (plan: MembershipPlan) => {
-    if (plan.tier === "social") return "Free Forever";
-    const baseCents = plan.monthlyPriceCents;
-    if (billingPeriod === "monthly") {
-      return `$${Math.round(baseCents / 100)}/mo`;
-    }
-    const annualPrice = Math.round((baseCents * 10) / 100);
-    return `$${annualPrice}/yr`;
-  };
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const planDetails: Record<
     MembershipPlan["tier"],
@@ -2801,61 +3218,87 @@ function PremiumStep({
       tagline: string;
       highlight: boolean;
       badge?: string;
-      ctaLabel: string;
       features: string[];
     }
   > = {
     social: {
       tagline: "Solo dating, standard speed",
       highlight: false,
-      ctaLabel: "Keep Free Social",
+      badge: "Free Forever",
       features: [
         "Create solo date requests (1 person)",
         "Max 2 booked dates per day",
         "100% verified real video intros",
         "Standard matchmaking pool",
+        "Direct chat with confirmed matches",
       ],
     },
     mingle: {
-      tagline: "Group hangs and circles",
+      tagline: "Group hangs, parties & social circles",
       highlight: true,
-      badge: "Best Value",
-      ctaLabel: "Get Mingle",
+      badge: "Most Popular",
       features: [
         "Go on group dates (up to 4 people)",
         "Invite friends & build social circles",
-        "Match with other groups/parties",
+        "Match with other groups and parties",
         "Book up to 8 dates per day",
-        "Unlock circle matching signals",
+        "Unlock circle matching signals & priority discovery",
       ],
     },
     sugar: {
-      tagline: "Cover dates and direct match",
+      tagline: "Cover dates and direct match requests",
       highlight: false,
       badge: "VIP Premium",
-      ctaLabel: "Get Sugar",
       features: [
         "Send direct requests to specific people",
         "Pay & cover date costs (Dutch optional)",
         "Bypass public search/fan-out pool",
         "Book up to 24 dates per day",
-        "Includes all Mingle features",
+        "Includes all Mingle features + VIP badge",
       ],
     },
   };
 
-  const handleUpgrade = async (plan: MembershipPlan) => {
-    if (plan.tier === "social") {
+  const currentPlan = plans.find((p) => p.tier === selectedTier) || {
+    active: true,
+    annualPriceCents: 19_000,
+    annualStripePriceId: "price_mingle_annual",
+    dailyDateLimit: 8,
+    id: "mingle",
+    monthlyPriceCents: 1900,
+    name: "Mingle",
+    stripePriceId: "price_mingle_monthly",
+    tier: "mingle" as const,
+  };
+
+  const currentDetail = planDetails[selectedTier];
+
+  const getPriceDisplay = (tier: MembershipPlan["tier"]) => {
+    const p = plans.find((item) => item.tier === tier);
+    if (tier === "social") return "Free";
+    const cents = p?.monthlyPriceCents ?? (tier === "mingle" ? 1900 : 4900);
+    if (billingPeriod === "monthly") {
+      return `$${Math.round(cents / 100)}/mo`;
+    }
+    const annualPrice = Math.round((cents * 10) / 100);
+    return `$${annualPrice}/yr`;
+  };
+
+  const handleFinishWithPlan = async () => {
+    setIsSubmitting(true);
+    if (selectedTier === "social") {
       void form.handleSubmit();
       return;
     }
 
     const priceId =
       billingPeriod === "monthly"
-        ? plan.stripePriceId
-        : plan.annualStripePriceId;
+        ? currentPlan.stripePriceId
+        : currentPlan.annualStripePriceId;
+
     if (!priceId) {
-      toast.error("Stripe integration is not synced for this tier yet.");
+      toast.info(`Completing onboarding with ${currentPlan.name} tier.`);
+      void form.handleSubmit();
       return;
     }
 
@@ -2870,6 +3313,7 @@ function PremiumStep({
       if (res.error) {
         toast.dismiss("checkout");
         toast.error(res.error.message, { duration: 4000 });
+        setIsSubmitting(false);
       }
     } catch (error) {
       toast.dismiss("checkout");
@@ -2877,23 +3321,24 @@ function PremiumStep({
         error instanceof Error ? error.message : "Failed to start checkout",
         { duration: 4000 }
       );
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <StepIntro
           eyebrow="Upgrade Chewbuu"
           title="Pick your dating mode."
-          text="Social is completely free. Upgrade to Mingle to bring friends and circles. Go Sugar to cover dates and send direct matchmaking requests."
+          text="Social is completely free. Upgrade to Mingle for group dates and circles, or Sugar to cover dates and send direct requests."
         />
 
         {/* Billing Period Toggle */}
-        <div className="flex items-center self-center md:self-end bg-muted p-1 rounded-full border border-border shadow-inner mt-2 md:mt-0">
+        <div className="flex items-center self-start sm:self-end bg-muted p-1 rounded-full border border-border shadow-inner">
           <button
             type="button"
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 ${
+            className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-all duration-200 ${
               billingPeriod === "monthly"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -2904,7 +3349,7 @@ function PremiumStep({
           </button>
           <button
             type="button"
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 ${
+            className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 ${
               billingPeriod === "annual"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -2912,88 +3357,142 @@ function PremiumStep({
             onClick={() => setBillingPeriod("annual")}
           >
             Annual
-            <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded-full text-[9px] font-bold">
-              Save ~17%
+            <span className="bg-primary/10 text-primary px-1 py-0.2 rounded-full text-[9px] font-bold">
+              -17%
             </span>
           </button>
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3 mt-4">
-        {plans.map((plan) => {
-          const detail = planDetails[plan.tier];
-          const isHighlighted = detail.highlight;
+      {/* Dynamic Features Box Above Selector */}
+      <div className="rounded-3xl border-2 border-primary/40 bg-primary/5 p-5 sm:p-6 shadow-sm transition-all duration-300">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-primary/15 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xl sm:text-2xl font-bold text-foreground">
+                {currentPlan.name} Plan
+              </h3>
+              {currentDetail.badge && (
+                <Badge className="bg-primary text-primary-foreground text-[10px] uppercase font-bold">
+                  {currentDetail.badge}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 font-medium">
+              {currentDetail.tagline}
+            </p>
+          </div>
+          <div className="text-right self-start sm:self-auto">
+            <span className="text-xl sm:text-2xl font-black text-primary">
+              {getPriceDisplay(selectedTier)}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+          {currentDetail.features.map((feature) => (
+            <div
+              key={feature}
+              className="flex items-center gap-2 text-xs sm:text-sm text-foreground"
+            >
+              <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+                <Check className="size-2.5" />
+              </span>
+              <span>{feature}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 3 Compact Plan Selector Buttons / Pills */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        {(["social", "mingle", "sugar"] as const).map((tier) => {
+          const isSelected = selectedTier === tier;
+          const planName =
+            tier === "social"
+              ? "Social"
+              : tier === "mingle"
+                ? "Mingle"
+                : "Sugar";
+          const priceStr = getPriceDisplay(tier);
 
           return (
-            <div
-              key={plan.tier}
-              className={`relative flex flex-col rounded-3xl border-2 p-6 transition-all duration-300 ${
-                isHighlighted
-                  ? "border-primary bg-primary/5 shadow-lg scale-102 lg:-translate-y-1"
-                  : "border-border bg-card hover:border-border-hover hover:shadow-md"
-              }`}
-            >
-              {isHighlighted && detail.badge && (
-                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-4 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow">
-                  {detail.badge}
-                </span>
+            <button
+              key={tier}
+              type="button"
+              onClick={() => setSelectedTier(tier)}
+              className={cn(
+                "flex flex-col items-center justify-between rounded-2xl border-2 p-3 sm:p-4 text-center transition-all duration-200 cursor-pointer",
+                isSelected
+                  ? "border-primary bg-background shadow-md ring-2 ring-primary/20 scale-102"
+                  : "border-border bg-card/60 hover:border-border-hover hover:bg-card"
               )}
-
-              <div className="flex items-start justify-between gap-4 mt-2">
-                <div>
-                  <h3 className="font-bold text-2xl text-foreground">
-                    {plan.name}
-                  </h3>
-                  <p className="text-muted-foreground text-sm font-medium mt-0.5">
-                    {detail.tagline}
-                  </p>
+            >
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "flex size-4 items-center justify-center rounded-full border text-[9px]",
+                      isSelected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-muted-foreground/40"
+                    )}
+                  >
+                    {isSelected && <Check className="size-2.5" />}
+                  </span>
+                  <span className="font-bold text-xs sm:text-sm text-foreground">
+                    {planName}
+                  </span>
                 </div>
+                {tier === "mingle" && (
+                  <span className="text-[9px] font-bold text-primary uppercase tracking-wide">
+                    Popular
+                  </span>
+                )}
               </div>
-
-              <div className="my-5 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold tracking-tight text-foreground">
-                  {getPriceLabel(plan)}
-                </span>
-              </div>
-
-              <p className="text-muted-foreground text-xs/relaxed mb-5">
-                {plan.description}
-              </p>
-
-              <hr className="border-border mb-5" />
-
-              <ul className="flex flex-1 flex-col gap-3 text-xs/relaxed font-medium text-foreground/80 mb-6">
-                {detail.features.map((feature) => (
-                  <li className="flex items-start gap-2.5" key={feature}>
-                    <Check className="text-primary size-4 shrink-0 mt-0.5" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
-              </ul>
-
-              <Button
-                onClick={() => handleUpgrade(plan)}
-                className={`w-full rounded-full py-2.5 font-bold transition-all duration-200 ${
-                  isHighlighted
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/10"
-                    : "bg-secondary text-secondary-foreground hover:bg-secondary/90"
-                }`}
-                type="button"
-              >
-                {detail.ctaLabel}
-              </Button>
-            </div>
+              <span className="mt-2 text-xs sm:text-sm font-semibold text-muted-foreground">
+                {priceStr}
+              </span>
+            </button>
           );
         })}
       </div>
 
-      <button
-        onClick={onFinishLater}
-        className="w-fit text-sm underline underline-offset-4 mt-4 self-center text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-0"
-        type="button"
-      >
-        I will upgrade later
-      </button>
+      {/* Completion Actions */}
+      <div className="flex flex-col items-center gap-3 pt-2">
+        <Button
+          type="button"
+          disabled={isSubmitting}
+          onClick={handleFinishWithPlan}
+          className="w-full sm:w-auto rounded-full px-8 h-11 font-bold text-sm bg-primary text-primary-foreground shadow-md hover:bg-primary/95"
+        >
+          <Sparkles className="size-4 mr-2" />
+          {selectedTier === "social"
+            ? "Finish Onboarding (Free)"
+            : `Get ${currentPlan.name} & Finish (${getPriceDisplay(selectedTier)})`}
+        </Button>
+
+        {selectedTier !== "social" && (
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedTier("social");
+              void form.handleSubmit();
+            }}
+            className="text-xs text-muted-foreground hover:text-foreground font-medium underline underline-offset-4 cursor-pointer bg-transparent border-0"
+          >
+            Or finish onboarding with Free Social
+          </button>
+        )}
+
+        <button
+          onClick={onFinishLater}
+          className="w-fit text-xs text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-0"
+          type="button"
+        >
+          Save progress for later
+        </button>
+      </div>
     </div>
   );
 }
@@ -3177,7 +3676,12 @@ function MediaSlot({
       {value && (
         <div className="mt-3 relative aspect-video w-full rounded-2xl overflow-hidden border border-border bg-black">
           {kind === "intro_video" ? (
-            <video src={value} controls className="w-full h-full object-cover">
+            <video
+              src={value}
+              controls
+              playsInline
+              className="w-full h-full object-cover"
+            >
               <track kind="captions" />
             </video>
           ) : (
@@ -3607,13 +4111,14 @@ function LiveCaptureDialog({
     setIsRecording(true);
     setCountdown(60);
 
-    // Pick best format supported by browser (WebM vp9/vp8, or MP4 for iOS/Safari)
+    // Pick best format supported by browser with audio codecs
     let mimeType = "";
     const types = [
-      "video/mp4;codecs=avc1",
+      "video/mp4;codecs=avc1,mp4a.40.2",
       "video/mp4",
-      "video/webm;codecs=vp9",
-      "video/webm;codecs=vp8",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm;codecs=h264,opus",
       "video/webm",
     ];
     for (const t of types) {
@@ -3648,8 +4153,11 @@ function LiveCaptureDialog({
         return;
       }
 
-      const mimeType = mediaRecorder.mimeType || "video/webm";
-      const uploadType = mimeType.includes("mp4") ? "video/mp4" : "video/webm";
+      const recorderMimeType =
+        mediaRecorder.mimeType || mimeType || "video/webm";
+      const uploadType = recorderMimeType.includes("mp4")
+        ? "video/mp4"
+        : "video/webm";
       const blob = new Blob(chunks, { type: uploadType });
       const url = URL.createObjectURL(blob);
       const extension = uploadType.includes("mp4") ? "mp4" : "webm";
@@ -3732,6 +4240,7 @@ function LiveCaptureDialog({
               <video
                 src={recordedUrl}
                 controls
+                playsInline
                 className="w-full h-full object-cover"
               >
                 <track kind="captions" />

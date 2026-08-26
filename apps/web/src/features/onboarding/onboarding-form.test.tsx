@@ -82,6 +82,9 @@ const birthdayForAge = (age: number, dayOffset = 0) => {
 
 describe("OnboardingForm", () => {
   beforeEach(() => {
+    if (typeof window !== "undefined") {
+      window.location.hash = "";
+    }
     localStorage.clear();
     useOnboardingStore.getState().clear();
     mocks.getProfile.mockResolvedValue(null);
@@ -92,7 +95,8 @@ describe("OnboardingForm", () => {
     mocks.saveProfileDraft.mockReset();
   });
 
-  it("renders the redesigned basics step with profile validation fields", async () => {
+  it("renders the redesigned basics step with profile validation sections", async () => {
+    const user = userEvent.setup();
     render(<OnboardingForm />);
 
     expect(
@@ -100,7 +104,14 @@ describe("OnboardingForm", () => {
         name: /tell chewbuu who is going out/i,
       })
     ).toBeVisible();
+    expect(screen.getByText("Contact & Handle")).toBeVisible();
+    expect(screen.getByText("Personal Details & Location")).toBeVisible();
+    expect(screen.getByText("Identity & Bio")).toBeVisible();
+
+    await user.click(screen.getByText("Personal Details & Location"));
     expect(screen.getByLabelText(/area/i)).toBeVisible();
+
+    await user.click(screen.getByText("Identity & Bio"));
     expect(screen.getByText("Sex")).toBeVisible();
     expect(screen.getByText("Sexuality")).toBeVisible();
     expect(screen.getByText("Relationship Status")).toBeVisible();
@@ -122,14 +133,13 @@ describe("OnboardingForm", () => {
         name: /enable device access & alerts/i,
       })
     ).toBeVisible();
-    expect(screen.getByText("Camera Access")).toBeVisible();
-    expect(screen.getByText("Microphone Access")).toBeVisible();
-    expect(screen.getByText("Push Notifications & Alerts")).toBeVisible();
-    expect(screen.getByText("Location Access")).toBeVisible();
+    expect(screen.getByText("Camera")).toBeVisible();
+    expect(screen.getByText("Microphone")).toBeVisible();
+    expect(screen.getByText("Push Alerts")).toBeVisible();
+    expect(screen.getByText("Location")).toBeVisible();
     expect(
       screen.getByRole("button", { name: /enable all permissions/i })
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: /test haptics/i })).toBeVisible();
   });
 
   it("can move to the media step with live capture and record actions", async () => {
@@ -149,6 +159,8 @@ describe("OnboardingForm", () => {
     expect(
       screen.getByRole("button", { name: /camera shutter/i })
     ).toBeVisible();
+
+    await user.click(screen.getByText("Intro Video"));
     expect(screen.getByRole("button", { name: /record live/i })).toBeVisible();
   });
 
@@ -194,7 +206,7 @@ describe("OnboardingForm", () => {
       name: /tell chewbuu who is going out/i,
     });
 
-    await user.click(screen.getByRole("button", { name: /^next/i }));
+    await user.click(screen.getByRole("button", { name: /^next$/i }));
 
     expect(
       await screen.findByRole("heading", {

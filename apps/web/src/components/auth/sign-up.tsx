@@ -289,17 +289,19 @@ export function SignUp({
                   <FieldError>{fieldErrors.email}</FieldError>
                 </Field>
 
-                {additionalFields?.map(
-                  (field) =>
-                    field.signUp === "above" && (
-                      <AdditionalField
-                        key={field.name}
-                        name={field.name}
-                        field={field}
-                        isPending={isPending}
-                      />
-                    )
-                )}
+                {additionalFields
+                  ?.filter((field) => field.name !== "username")
+                  .map(
+                    (field) =>
+                      field.signUp === "above" && (
+                        <AdditionalField
+                          key={field.name}
+                          name={field.name}
+                          field={field}
+                          isPending={isPending}
+                        />
+                      )
+                  )}
 
                 <Field data-invalid={!!fieldErrors.password}>
                   <Label
@@ -470,18 +472,20 @@ export function SignUp({
                   </Field>
                 )}
 
-                {additionalFields?.map(
-                  (field) =>
-                    field.signUp &&
-                    field.signUp !== "above" && (
-                      <AdditionalField
-                        key={field.name}
-                        name={field.name}
-                        field={field}
-                        isPending={isPending}
-                      />
-                    )
-                )}
+                {additionalFields
+                  ?.filter((field) => field.name !== "username")
+                  .map(
+                    (field) =>
+                      field.signUp &&
+                      field.signUp !== "above" && (
+                        <AdditionalField
+                          key={field.name}
+                          name={field.name}
+                          field={field}
+                          isPending={isPending}
+                        />
+                      )
+                  )}
 
                 {Captcha && (
                   <div className="flex justify-center">{Captcha}</div>
