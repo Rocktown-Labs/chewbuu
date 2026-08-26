@@ -3,13 +3,18 @@ import { randomUUID } from "node:crypto";
 import type { Kysely } from "kysely";
 import { z } from "zod";
 
+import { isReservedBrandHandle, isReservedBrandName } from "./brand-handles";
 import { getDb, jsonb } from "./database";
 import type { BlocksDatabase } from "./database";
 import type {
+  BrandStyle,
+  CommunityInviteResponse,
+  InviteVenueMembersInput,
   VenueLocation,
   VenueOrder,
   VenueReferral,
   VenueReservation,
+  UpdateVenueBrandInput,
   VenueWorkspace,
 } from "./types";
 import { previewVenueMenu } from "./venue-menu";
@@ -21,14 +26,42 @@ const httpUrl = z
     "URL must use http or https"
   );
 
+const brandStyleSchema = z
+  .object({
+    accentColor: z
+      .string()
+      .regex(/^#[0-9a-f]{6}$/i)
+      .optional(),
+    backgroundColor: z
+      .string()
+      .regex(/^#[0-9a-f]{6}$/i)
+      .optional(),
+    logoUrl: z.url().optional(),
+    tagline: z.string().trim().max(160).optional(),
+  })
+  .default({});
+
+const handleSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(32)
+  .transform((value) => value.replace(/^@/, "").toLowerCase())
+  .refine((value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value), {
+    message: "Handles use lowercase letters, numbers, and single hyphens.",
+  });
+
 const venueLocationInputSchema = z.object({
   address: z.string().trim().max(500).optional(),
+  description: z.string().trim().max(500).optional(),
   discoveryPlaceId: z.string().trim().max(300).optional(),
+  handle: handleSchema.optional(),
   menuUrl: httpUrl.optional(),
   name: z.string().trim().min(1).max(160),
   organizationName: z.string().trim().min(1).max(160).optional(),
   phone: z.string().trim().max(50).optional(),
   venueRole: z.enum(["owner", "referrer"]).default("referrer"),
+  style: brandStyleSchema,
   websiteUrl: httpUrl.optional(),
 });
 
@@ -36,18 +69,24 @@ const menuPreviewInputSchema = z.object({ url: httpUrl });
 
 const toVenueLocation = (location: {
   address: string | null;
+  description?: string | null;
+  handle?: string | null;
   id: string;
   menu_url: string | null;
   name: string;
   organization_id: string;
   status: string;
+  style?: Record<string, string> | null;
   website_url: string | null;
 }): VenueLocation => ({
   ...(location.address ? { address: location.address } : {}),
+  ...(location.description ? { description: location.description } : {}),
+  ...(location.handle ? { handle: location.handle } : {}),
   id: location.id,
   ...(location.menu_url ? { menuUrl: location.menu_url } : {}),
   name: location.name,
   organizationId: location.organization_id,
+  ...(location.style ? { style: location.style as BrandStyle } : {}),
   status: location.status as VenueLocation["status"],
   ...(location.website_url ? { websiteUrl: location.website_url } : {}),
 });
@@ -149,8 +188,58 @@ export const captureVenueMenu = async (
   return result;
 };
 
-export const createVenueLocation = async (userId: string, input: unknown) => {
+const handleFromName = (name: string) =>
+  name
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-|-$/g, "")
+    .slice(0, 32);
+
+export interface VenueCreateOptions {
+  allowReservedBrand?: boolean;
+}
+
+const assertVenueHandleAllowed = (handle: string, allowReserved: boolean) => {
+  if (!allowReserved && isReservedBrandHandle(handle)) {
+    throw new Error(`@${handle} is reserved for the Chewbuu brand.`);
+  }
+};
+
+const assertVenueHandleAvailable = async (
+  db: Kysely<BlocksDatabase>,
+  handle: string
+) => {
+  const [location, organization] = await Promise.all([
+    db
+      .selectFrom("venue_location")
+      .select("id")
+      .where("handle", "=", handle)
+      .executeTakeFirst(),
+    db
+      .selectFrom("venue_organization")
+      .select("id")
+      .where("handle", "=", handle)
+      .executeTakeFirst(),
+  ]);
+  if (location || organization) {
+    throw new Error(`@${handle} is already in use.`);
+  }
+};
+
+export const createVenueLocation = async (
+  userId: string,
+  input: unknown,
+  options: VenueCreateOptions = {}
+) => {
   const parsed = venueLocationInputSchema.parse(input);
+  const allowReserved = options.allowReservedBrand ?? false;
+  if (!allowReserved && isReservedBrandName(parsed.name)) {
+    throw new Error("Chewbuu brand words are reserved for official venues.");
+  }
+  const handle = handleSchema.parse(
+    parsed.handle ?? handleFromName(parsed.name)
+  );
+  assertVenueHandleAllowed(handle, allowReserved);
   const db = await getDb();
 
   let location = parsed.discoveryPlaceId
@@ -158,11 +247,14 @@ export const createVenueLocation = async (userId: string, input: unknown) => {
         .selectFrom("venue_location")
         .select([
           "address",
+          "description",
+          "handle",
           "id",
           "menu_url",
           "name",
           "organization_id",
           "status",
+          "style",
           "website_url",
         ])
         .where("discovery_place_id", "=", parsed.discoveryPlaceId)
@@ -170,6 +262,7 @@ export const createVenueLocation = async (userId: string, input: unknown) => {
     : undefined;
 
   if (!location) {
+    await assertVenueHandleAvailable(db, handle);
     const organizationId = randomUUID();
     const locationId = randomUUID();
     const slug = `${(parsed.organizationName ?? parsed.name)
@@ -182,24 +275,46 @@ export const createVenueLocation = async (userId: string, input: unknown) => {
         .insertInto("venue_organization")
         .values({
           created_by_user_id: userId,
+          description: parsed.description ?? null,
+          handle,
           id: organizationId,
           name: parsed.organizationName ?? parsed.name,
           slug,
           status: "active",
+          style: jsonb(parsed.style),
+          updated_at: new Date(),
+        })
+        .execute();
+      await transaction
+        .insertInto("sync_subscription")
+        .values({
+          created_at: new Date(),
+          ended_at: null,
+          id: randomUUID(),
+          organization_id: organizationId,
+          plan: "sync",
+          status: allowReserved ? "active" : "inactive",
+          stripe_subscription_id: null,
+          updated_at: new Date(),
+          user_id: userId,
         })
         .execute();
       await transaction
         .insertInto("venue_location")
         .values({
           address: parsed.address,
+          description: parsed.description ?? null,
           discovery_place_id: parsed.discoveryPlaceId,
+          handle,
           id: locationId,
           menu_url: parsed.menuUrl,
           name: parsed.name,
           organization_id: organizationId,
           phone: parsed.phone,
           status: "unclaimed",
+          style: jsonb(parsed.style),
           submitted_by_user_id: userId,
+          updated_at: new Date(),
           website_url: parsed.websiteUrl,
         })
         .execute();
@@ -212,8 +327,11 @@ export const createVenueLocation = async (userId: string, input: unknown) => {
           media_urls: jsonb([]),
           payload: jsonb({
             address: parsed.address,
+            description: parsed.description,
+            handle,
             menuUrl: parsed.menuUrl,
             phone: parsed.phone,
+            style: parsed.style,
             websiteUrl: parsed.websiteUrl,
           }),
           status: "pending",
@@ -226,11 +344,14 @@ export const createVenueLocation = async (userId: string, input: unknown) => {
       .selectFrom("venue_location")
       .select([
         "address",
+        "description",
+        "handle",
         "id",
         "menu_url",
         "name",
         "organization_id",
         "status",
+        "style",
         "website_url",
       ])
       .where("id", "=", locationId)
@@ -245,6 +366,278 @@ export const createVenueLocation = async (userId: string, input: unknown) => {
     location: toVenueLocation(location),
     ...(referral ? { referral } : {}),
   };
+};
+
+export const updateVenueBrand = async (
+  userId: string,
+  isAdmin: boolean,
+  input: UpdateVenueBrandInput
+) => {
+  const body = z
+    .object({
+      description: z.string().trim().max(500).optional(),
+      handle: handleSchema.optional(),
+      locationId: z.string().min(1),
+      name: z.string().trim().min(1).max(160).optional(),
+      style: brandStyleSchema.optional(),
+    })
+    .parse(input);
+  if (!isAdmin && body.name && isReservedBrandName(body.name)) {
+    throw new Error("Chewbuu brand words are reserved for official venues.");
+  }
+  if (!(await venueAccess(userId, body.locationId, isAdmin))) {
+    throw new Error("Venue membership is required to edit this venue.");
+  }
+  const db = await getDb();
+  const location = await db
+    .selectFrom("venue_location")
+    .select(["id", "organization_id"])
+    .where("id", "=", body.locationId)
+    .executeTakeFirst();
+  if (!location) throw new Error("Venue not found.");
+
+  if (body.handle) {
+    assertVenueHandleAllowed(body.handle, isAdmin);
+    const [sameLocation, sameOrganization] = await Promise.all([
+      db
+        .selectFrom("venue_location")
+        .select("id")
+        .where("handle", "=", body.handle)
+        .where("id", "!=", body.locationId)
+        .executeTakeFirst(),
+      db
+        .selectFrom("venue_organization")
+        .select("id")
+        .where("handle", "=", body.handle)
+        .where("id", "!=", location.organization_id)
+        .executeTakeFirst(),
+    ]);
+    if (sameLocation || sameOrganization) {
+      throw new Error(`@${body.handle} is already in use.`);
+    }
+  }
+
+  const now = new Date();
+  await db.transaction().execute(async (tx) => {
+    await tx
+      .updateTable("venue_location")
+      .set({
+        ...(body.description !== undefined
+          ? { description: body.description || null }
+          : {}),
+        ...(body.handle ? { handle: body.handle } : {}),
+        ...(body.name ? { name: body.name } : {}),
+        ...(body.style ? { style: jsonb(body.style) } : {}),
+        updated_at: now,
+      })
+      .where("id", "=", body.locationId)
+      .execute();
+    await tx
+      .updateTable("venue_organization")
+      .set({
+        ...(body.description !== undefined
+          ? { description: body.description || null }
+          : {}),
+        ...(body.handle ? { handle: body.handle } : {}),
+        ...(body.name ? { name: body.name } : {}),
+        ...(body.style ? { style: jsonb(body.style) } : {}),
+        updated_at: now,
+      })
+      .where("id", "=", location.organization_id)
+      .execute();
+  });
+
+  const updated = await db
+    .selectFrom("venue_location")
+    .select([
+      "address",
+      "description",
+      "handle",
+      "id",
+      "menu_url",
+      "name",
+      "organization_id",
+      "status",
+      "style",
+      "website_url",
+    ])
+    .where("id", "=", body.locationId)
+    .executeTakeFirstOrThrow();
+  return { location: toVenueLocation(updated) };
+};
+
+export const inviteVenueMembers = async (
+  userId: string,
+  isAdmin: boolean,
+  input: InviteVenueMembersInput
+) => {
+  const body = z
+    .object({
+      locationId: z.string().min(1),
+      members: z
+        .array(
+          z.object({
+            email: z.email(),
+            name: z.string().trim().max(120).optional(),
+            role: z.string().trim().min(1).max(50).default("staff"),
+          })
+        )
+        .min(1)
+        .max(50),
+    })
+    .parse(input);
+  if (!(await venueAccess(userId, body.locationId, isAdmin))) {
+    throw new Error("Venue membership is required to invite staff.");
+  }
+  const db = await getDb();
+  const location = await db
+    .selectFrom("venue_location")
+    .select("organization_id")
+    .where("id", "=", body.locationId)
+    .executeTakeFirst();
+  if (!location) throw new Error("Venue not found.");
+
+  const invites: CommunityInviteResponse[] = [];
+  for (const member of body.members) {
+    const email = member.email.trim().toLowerCase();
+    const existingUser = await db
+      .selectFrom("user")
+      .select("id")
+      .where("email", "=", email)
+      .executeTakeFirst();
+    const [invite] = await db
+      .insertInto("venue_member_invite")
+      .values({
+        created_at: new Date(),
+        email,
+        id: randomUUID(),
+        invite_token: randomUUID(),
+        name: member.name ?? null,
+        organization_id: location.organization_id,
+        role: member.role,
+        status: existingUser ? "joined" : "sent",
+        invited_by_user_id: userId,
+      })
+      .returningAll()
+      .execute();
+    if (!invite) throw new Error("Could not create venue invitation.");
+    if (existingUser) {
+      await db
+        .insertInto("venue_member")
+        .values({
+          created_at: new Date(),
+          id: randomUUID(),
+          organization_id: location.organization_id,
+          role: member.role,
+          status: "active",
+          updated_at: new Date(),
+          user_id: existingUser.id,
+        })
+        .onConflict((conflict) =>
+          conflict
+            .columns(["organization_id", "user_id"])
+            .doUpdateSet({ role: member.role, status: "active" })
+        )
+        .execute();
+    }
+    invites.push({
+      email,
+      id: invite.id,
+      inviteToken: invite.invite_token,
+      name: invite.name,
+      status: invite.status,
+    });
+  }
+  return { invites };
+};
+
+export const acceptVenueInvite = async (
+  userId: string,
+  email: string,
+  inviteToken: string
+) => {
+  const db = await getDb();
+  const invite = await db
+    .selectFrom("venue_member_invite")
+    .select(["email", "id", "organization_id", "role"])
+    .where("invite_token", "=", inviteToken)
+    .where("status", "=", "sent")
+    .executeTakeFirst();
+  if (!invite || invite.email.toLowerCase() !== email.toLowerCase()) {
+    throw new Error(
+      "This venue invitation is invalid or belongs to another email."
+    );
+  }
+  await db.transaction().execute(async (tx) => {
+    await tx
+      .insertInto("venue_member")
+      .values({
+        created_at: new Date(),
+        id: randomUUID(),
+        organization_id: invite.organization_id,
+        role: invite.role,
+        status: "active",
+        updated_at: new Date(),
+        user_id: userId,
+      })
+      .onConflict((conflict) =>
+        conflict
+          .columns(["organization_id", "user_id"])
+          .doUpdateSet({ role: invite.role, status: "active" })
+      )
+      .execute();
+    await tx
+      .updateTable("venue_member_invite")
+      .set({ status: "joined" })
+      .where("id", "=", invite.id)
+      .execute();
+  });
+  return { status: "joined" };
+};
+
+export const getVenueLocations = async (userId: string, isAdmin: boolean) => {
+  const db = await getDb();
+  const locations = isAdmin
+    ? await db
+        .selectFrom("venue_location")
+        .select([
+          "address",
+          "description",
+          "handle",
+          "id",
+          "menu_url",
+          "name",
+          "organization_id",
+          "status",
+          "style",
+          "website_url",
+        ])
+        .orderBy("created_at", "desc")
+        .execute()
+    : await db
+        .selectFrom("venue_location")
+        .innerJoin(
+          "venue_member",
+          "venue_member.organization_id",
+          "venue_location.organization_id"
+        )
+        .select([
+          "venue_location.address as address",
+          "venue_location.description as description",
+          "venue_location.handle as handle",
+          "venue_location.id as id",
+          "venue_location.menu_url as menu_url",
+          "venue_location.name as name",
+          "venue_location.organization_id as organization_id",
+          "venue_location.status as status",
+          "venue_location.style as style",
+          "venue_location.website_url as website_url",
+        ])
+        .where("venue_member.user_id", "=", userId)
+        .where("venue_member.status", "=", "active")
+        .orderBy("venue_location.created_at", "desc")
+        .execute();
+  return { locations: locations.map(toVenueLocation) };
 };
 
 export const followVenue = async (userId: string, locationId: string) => {
@@ -455,11 +848,14 @@ export const getVenueWorkspace = async (
     .selectFrom("venue_location")
     .select([
       "address",
+      "description",
+      "handle",
       "id",
       "menu_url",
       "name",
       "organization_id",
       "status",
+      "style",
       "website_url",
     ])
     .where("id", "=", locationId)
@@ -786,7 +1182,7 @@ export const createVenueOrder = async (userId: string, input: unknown) => {
         location_id: orderInput.locationId,
         payment_status: "unpaid",
         reservation_id: orderInput.reservationId,
-        status: "draft",
+        status: "submitted",
         subtotal_cents: subtotalCents,
         tip_cents: orderInput.tipCents,
         total_cents: totalCents,
@@ -813,7 +1209,7 @@ export const createVenueOrder = async (userId: string, input: unknown) => {
       id: orderId,
       locationId: orderInput.locationId,
       paymentStatus: "unpaid",
-      status: "draft",
+      status: "submitted",
       subtotalCents,
       tipCents: orderInput.tipCents,
       totalCents,

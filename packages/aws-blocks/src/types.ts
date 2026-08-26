@@ -107,12 +107,24 @@ export interface VenueMenuPreview {
   title?: string;
 }
 
+export type CommunityKind = "circle" | "crew";
+
+export interface BrandStyle {
+  accentColor?: string;
+  backgroundColor?: string;
+  logoUrl?: string;
+  tagline?: string;
+}
+
 export interface VenueLocation {
   address?: string;
+  description?: string;
+  handle?: string;
   id: string;
   menuUrl?: string;
   name: string;
   organizationId: string;
+  style?: BrandStyle;
   status: VenueLocationStatus;
   websiteUrl?: string;
 }
@@ -158,7 +170,7 @@ export interface VenueOrder {
 export interface VenueEvent {
   detail: string;
   id: string;
-  kind: "order_created" | "reservation_requested";
+  kind: "order_created" | "reservation_requested" | "venue_created";
   locationId: string;
   occurredAt: string;
   status: string;
@@ -253,7 +265,17 @@ export interface AwsBlocksApi {
     status: "accepted" | "declined"
   ) => Promise<{ friendship: FriendshipResponse }>;
   getCircles: () => Promise<{ circles: CircleResponse[] }>;
-  createCircle: (name: string) => Promise<{ circle: CircleResponse }>;
+  createCircle: (
+    input: CreateCommunityInput | string
+  ) => Promise<{ circle: CircleResponse }>;
+  updateCircle: (input: UpdateCommunityInput) => Promise<{
+    circle: CircleResponse;
+  }>;
+  inviteCircleMembers: (input: InviteCommunityMembersInput) => Promise<{
+    invites: CommunityInviteResponse[];
+  }>;
+  acceptCircleInvite: (inviteToken: string) => Promise<{ status: string }>;
+  getAccountEntitlements: () => Promise<AccountEntitlementsResponse>;
   getDateMedia: (requestId: string) => Promise<{ media: DateMediaResponse[] }>;
   uploadDateMedia: (
     input: UploadDateMediaInput
@@ -278,14 +300,24 @@ export interface AwsBlocksApi {
   createVenueLocation: (input: {
     address?: string;
     discoveryPlaceId?: string;
+    description?: string;
+    handle?: string;
     menuUrl?: string;
     name: string;
     organizationName?: string;
     phone?: string;
     referralCode?: string;
     venueRole?: "owner" | "referrer";
+    style?: BrandStyle;
     websiteUrl?: string;
   }) => Promise<{ location: VenueLocation; referral?: VenueReferral }>;
+  updateVenueBrand: (input: UpdateVenueBrandInput) => Promise<{
+    location: VenueLocation;
+  }>;
+  inviteVenueMembers: (input: InviteVenueMembersInput) => Promise<{
+    invites: CommunityInviteResponse[];
+  }>;
+  acceptVenueInvite: (inviteToken: string) => Promise<{ status: string }>;
   followVenue: (locationId: string) => Promise<{ following: boolean }>;
   captureVenueMenu: (input: { locationId: string; url: string }) => Promise<{
     preview: VenueMenuPreview | null;
@@ -310,6 +342,7 @@ export interface AwsBlocksApi {
     ownerUserId: string;
     status: "claimed";
   }>;
+  getVenueLocations: () => Promise<{ locations: VenueLocation[] }>;
   getVenueWorkspace: (locationId: string) => Promise<VenueWorkspace>;
   updateVenueOrder: (input: {
     assignedStaffUserId?: string;
@@ -504,10 +537,62 @@ export interface FriendshipResponse {
 }
 
 export interface CircleResponse {
+  description?: string;
+  handle?: string;
   id: string;
+  kind: CommunityKind;
   members: { id: string; role: string; status: string; userId: string }[];
   name: string;
   ownerUserId: string;
+  style?: BrandStyle;
+}
+
+export interface CreateCommunityInput {
+  description?: string;
+  handle?: string;
+  kind?: CommunityKind;
+  name: string;
+  style?: BrandStyle;
+}
+
+export interface UpdateCommunityInput {
+  description?: string;
+  handle?: string;
+  id: string;
+  name?: string;
+  style?: BrandStyle;
+}
+
+export interface InviteCommunityMembersInput {
+  circleId: string;
+  members: { email: string; name?: string }[];
+}
+
+export interface CommunityInviteResponse {
+  email: string;
+  id: string;
+  inviteToken?: string;
+  name: string | null;
+  status: string;
+}
+
+export interface UpdateVenueBrandInput {
+  description?: string;
+  handle?: string;
+  locationId: string;
+  name?: string;
+  style?: BrandStyle;
+}
+
+export interface InviteVenueMembersInput {
+  locationId: string;
+  members: { email: string; name?: string; role?: string }[];
+}
+
+export interface AccountEntitlementsResponse {
+  isAdmin: boolean;
+  membership: { plan: string; status: string };
+  sync: { plan: string; status: string };
 }
 
 export interface DateMediaResponse {

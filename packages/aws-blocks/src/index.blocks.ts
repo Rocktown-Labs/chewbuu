@@ -29,6 +29,14 @@ import Stripe from "stripe";
 import webpush from "web-push";
 import { z } from "zod";
 
+import {
+  acceptCommunityInvite,
+  createCommunity as createCommunityPlatform,
+  getCircles as getCommunities,
+  inviteCommunityMembers,
+  updateCommunity,
+} from "./community-platform";
+import type { CommunityActor } from "./community-platform";
 import { getDatabaseUrl, getDb, jsonb } from "./database";
 import type { BlocksDatabase } from "./database";
 import { nextDateLifecycleStatus } from "./date-lifecycle";
@@ -41,17 +49,22 @@ import {
 import type {
   ApiChatMessage,
   ApiChatParticipant,
+  AccountEntitlementsResponse,
   ApiChatRoom,
   AiMessage,
   ApiNotification,
   CheckInInput,
+  BrandStyle,
   CheckInResponse,
   ChimeMeetingResponse,
+  CreateCommunityInput,
   DateMediaResponse,
   DatingMatchResponse,
   DatingProfileResponse,
   DatingRequestResponse,
   DatingSummaryResponse,
+  InviteCommunityMembersInput,
+  InviteVenueMembersInput,
   PendingReviewResponse,
   PlacePhotoResponse,
   PlaceSuggestionInput,
@@ -69,9 +82,12 @@ import type {
   NotificationChannelClient,
   NotificationsResponse,
   SyncPricingPlansResponse,
+  UpdateCommunityInput,
+  UpdateVenueBrandInput,
 } from "./types";
 import { previewVenueMenu } from "./venue-menu";
 import {
+  acceptVenueInvite,
   approveVenueClaim,
   captureVenueMenu,
   createVenueLocation,
@@ -84,8 +100,10 @@ import {
   requestVenueReservation,
   requestVenueShiftSwap,
   startVenueDiningSession,
+  updateVenueBrand,
   updateVenueOrder,
   updateVenueReservation,
+  inviteVenueMembers,
 } from "./venue-platform";
 
 type BlocksDbExecutor = Kysely<BlocksDatabase> | Transaction<BlocksDatabase>;
@@ -354,7 +372,7 @@ const chatMessageSchema = z.object({
 const venueEventSchema = z.object({
   detail: z.string(),
   id: z.string(),
-  kind: z.enum(["order_created", "reservation_requested"]),
+  kind: z.enum(["order_created", "reservation_requested", "venue_created"]),
   locationId: z.string(),
   occurredAt: z.string(),
   status: z.string(),
@@ -469,6 +487,21 @@ const notificationPresence = new KVStore(scope, "notification-presence", {
   }),
 });
 
+const configuredAdminEmails = () =>
+  new Set(
+    (
+      process.env.BETTER_AUTH_ADMIN_EMAILS ??
+      process.env.ADMIN_EMAILS ??
+      "camstewart7@gmail.com"
+    )
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+const isConfiguredAdminEmail = (email: string) =>
+  configuredAdminEmails().has(email.toLowerCase());
+
 interface SessionUser {
   dailyDateLimit?: number;
   email: string;
@@ -493,19 +526,119 @@ const initializeAuthEnvironment = async () => {
   await authEnvironmentPromise;
 };
 
+const provisionAdminTestEntitlements = async (user: {
+  email: string;
+  id: string;
+}) => {
+  if (!isConfiguredAdminEmail(user.email)) return;
+  const db = await getDb();
+  const now = new Date();
+  await db.transaction().execute(async (tx) => {
+    await tx
+      .updateTable("user")
+      .set({ daily_date_limit: 24, membership_tier: "sugar" })
+      .where("id", "=", user.id)
+      .execute();
+
+    const sugarSubscription = await tx
+      .selectFrom("subscription")
+      .select("id")
+      .where("reference_id", "=", user.id)
+      .where("plan", "in", ["sugar", "Sugar"])
+      .where("status", "in", ["active", "trialing"])
+      .executeTakeFirst();
+    if (!sugarSubscription) {
+      await tx
+        .insertInto("subscription")
+        .values({
+          billing_interval: "month",
+          cancel_at: null,
+          cancel_at_period_end: false,
+          canceled_at: null,
+          created_at: now,
+          ended_at: null,
+          id: crypto.randomUUID(),
+          period_end: null,
+          period_start: now,
+          plan: "sugar",
+          reference_id: user.id,
+          seats: null,
+          status: "active",
+          stripe_customer_id: null,
+          stripe_schedule_id: null,
+          stripe_subscription_id: null,
+          trial_end: null,
+          trial_start: null,
+          updated_at: now,
+        })
+        .execute();
+    }
+
+    const syncSubscription = await tx
+      .selectFrom("sync_subscription")
+      .select("id")
+      .where("user_id", "=", user.id)
+      .where("organization_id", "is", null)
+      .where("plan", "=", "sync")
+      .where("status", "in", ["active", "trialing"])
+      .executeTakeFirst();
+    if (!syncSubscription) {
+      await tx
+        .insertInto("sync_subscription")
+        .values({
+          created_at: now,
+          ended_at: null,
+          id: crypto.randomUUID(),
+          organization_id: null,
+          plan: "sync",
+          status: "active",
+          stripe_subscription_id: null,
+          updated_at: now,
+          user_id: user.id,
+        })
+        .execute();
+    }
+  });
+};
+
+const adminEntitlementLocks = new Map<string, Promise<void>>();
+
+const ensureAdminTestEntitlements = async (user: {
+  email: string;
+  id: string;
+}) => {
+  if (!isConfiguredAdminEmail(user.email)) return;
+  const existing = adminEntitlementLocks.get(user.id);
+  if (existing) {
+    await existing;
+    return;
+  }
+  const pending = provisionAdminTestEntitlements(user);
+  adminEntitlementLocks.set(user.id, pending);
+  try {
+    await pending;
+  } finally {
+    adminEntitlementLocks.delete(user.id);
+  }
+};
+
 const requireSession = async (headers: Headers): Promise<SessionUser> => {
   await initializeAuthEnvironment();
   const { auth } = await import("@chewbuu/auth");
   const session = await auth.api.getSession({ headers });
   if (!session?.user) throw new Error("Authentication required");
+  await ensureAdminTestEntitlements(session.user);
+  const isAdmin = isConfiguredAdminEmail(session.user.email);
   return {
-    dailyDateLimit: session.user.dailyDateLimit ?? undefined,
+    dailyDateLimit: isAdmin ? 24 : (session.user.dailyDateLimit ?? undefined),
     email: session.user.email,
     hasCompletedOnboarding: session.user.hasCompletedOnboarding ?? false,
     hasIntroVideo: session.user.hasIntroVideo ?? false,
     hasProfilePhoto: session.user.hasProfilePhoto ?? false,
     id: session.user.id,
-    membershipTier: session.user.membershipTier ?? "social",
+    membershipTier: isAdmin
+      ? "sugar"
+      : (session.user.membershipTier ?? "social"),
     name: session.user.name,
     username: session.user.username ?? null,
   };
@@ -987,15 +1120,12 @@ const escapeHtml = (value: string) =>
     .replaceAll(">", "&gt;");
 
 const isConfiguredAdmin = (sessionUser: SessionUser) =>
-  (process.env.ADMIN_EMAILS ?? "camstewart7@gmail.com")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .includes(sessionUser.email.toLowerCase());
+  isConfiguredAdminEmail(sessionUser.email);
 
 const publishVenueEvent = async (event: {
   detail: string;
   id: string;
-  kind: "order_created" | "reservation_requested";
+  kind: "order_created" | "reservation_requested" | "venue_created";
   locationId: string;
   status: string;
   title: string;
@@ -3001,13 +3131,47 @@ const getPricingPlans = async () => {
 };
 
 const requireAdmin = (sessionUser: SessionUser) => {
-  const admins = (process.env.ADMIN_EMAILS ?? "camstewart7@gmail.com")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-  if (!admins.includes(sessionUser.email.toLowerCase())) {
+  if (!isConfiguredAdmin(sessionUser)) {
     throw new Error("Administrator access required");
   }
+};
+
+const getAccountEntitlements = async (
+  sessionUser: SessionUser
+): Promise<AccountEntitlementsResponse> => {
+  const db = await getDb();
+  const [user, membership] = await Promise.all([
+    db
+      .selectFrom("user")
+      .select("membership_tier")
+      .where("id", "=", sessionUser.id)
+      .executeTakeFirst(),
+    db
+      .selectFrom("subscription")
+      .select(["plan", "status"])
+      .where("reference_id", "=", sessionUser.id)
+      .where("status", "in", ["active", "trialing"])
+      .orderBy("created_at", "desc")
+      .executeTakeFirst(),
+  ]);
+  const sync = await db
+    .selectFrom("sync_subscription")
+    .select(["plan", "status"])
+    .where("user_id", "=", sessionUser.id)
+    .where("status", "in", ["active", "trialing"])
+    .orderBy("created_at", "desc")
+    .executeTakeFirst();
+  return {
+    isAdmin: isConfiguredAdmin(sessionUser),
+    membership: {
+      plan: membership?.plan ?? user?.membership_tier ?? "social",
+      status: membership?.status ?? "inactive",
+    },
+    sync: {
+      plan: sync?.plan ?? "sync",
+      status: sync?.status ?? "inactive",
+    },
+  };
 };
 
 const seedPricingPlans = async () => {
@@ -3496,93 +3660,6 @@ const respondFriendship = async (
       id: updated.id,
       status: updated.status,
       userId: updated.user_id,
-    },
-  };
-};
-
-const getCircles = async (userId: string) => {
-  const db = await getDb();
-  const circles = await db
-    .selectFrom("circle as circle")
-    .innerJoin(
-      "circle_member as membership",
-      "membership.circle_id",
-      "circle.id"
-    )
-    .selectAll("circle")
-    .select((expression) =>
-      expression.fn.count("membership.id").as("member_count")
-    )
-    .where("membership.user_id", "=", userId)
-    .groupBy(["circle.id", "circle.name", "circle.owner_user_id"])
-    .execute();
-  const members = circles.length
-    ? await db
-        .selectFrom("circle_member")
-        .selectAll()
-        .where(
-          "circle_id",
-          "in",
-          circles.map((circle) => circle.id)
-        )
-        .execute()
-    : [];
-  return {
-    circles: circles.map((circle) => ({
-      id: circle.id,
-      members: members
-        .filter((member) => member.circle_id === circle.id)
-        .map((member) => ({
-          id: member.id,
-          role: member.role,
-          status: member.status,
-          userId: member.user_id,
-        })),
-      name: circle.name,
-      ownerUserId: circle.owner_user_id,
-    })),
-  };
-};
-
-const createCircle = async (sessionUser: SessionUser, name: string) => {
-  if (
-    sessionUser.membershipTier !== "mingle" &&
-    sessionUser.membershipTier !== "sugar"
-  )
-    throw new Error("Upgrade to Mingle to create a circle");
-  const cleanName = z.string().trim().min(1).max(100).parse(name);
-  const db = await getDb();
-  const circleId = crypto.randomUUID();
-  await db.transaction().execute(async (tx) => {
-    await tx
-      .insertInto("circle")
-      .values({
-        id: circleId,
-        kind: "safety",
-        name: cleanName,
-        owner_user_id: sessionUser.id,
-      })
-      .execute();
-    await tx
-      .insertInto("circle_member")
-      .values({
-        circle_id: circleId,
-        id: crypto.randomUUID(),
-        invite_id: null,
-        role: "owner",
-        status: "active",
-        user_id: sessionUser.id,
-      })
-      .execute();
-  });
-  return {
-    circle: {
-      id: circleId,
-      members: [
-        { id: "", role: "owner", status: "active", userId: sessionUser.id },
-      ],
-      name: cleanName,
-      ownerUserId: sessionUser.id,
     },
   };
 };
@@ -4108,18 +4185,73 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
 
   async createVenueLocation(input: {
     address?: string;
+    description?: string;
     discoveryPlaceId?: string;
+    handle?: string;
     menuUrl?: string;
     name: string;
     organizationName?: string;
     phone?: string;
     referralCode?: string;
+    style?: BrandStyle;
     venueRole?: "owner" | "referrer";
     websiteUrl?: string;
   }) {
     return observeOperation("createVenueLocation", async () => {
       const sessionUser = await requireSession(context.request.headers);
-      return createVenueLocation(sessionUser.id, input);
+      const result = await createVenueLocation(sessionUser.id, input, {
+        allowReservedBrand: isConfiguredAdmin(sessionUser),
+      });
+      await publishVenueEvent({
+        detail: `${result.location.name} is now in the Chewbuu Sync pipeline.`,
+        id: result.location.id,
+        kind: "venue_created",
+        locationId: result.location.id,
+        status: result.location.status,
+        title: "Venue setup started",
+      });
+      return result;
+    });
+  },
+
+  async updateVenueBrand(input: UpdateVenueBrandInput) {
+    return observeOperation("updateVenueBrand", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await updateVenueBrand(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+      await publishVenueEvent({
+        detail: `${result.location.name} brand metadata was updated.`,
+        id: result.location.id,
+        kind: "venue_created",
+        locationId: result.location.id,
+        status: result.location.status,
+        title: "Venue brand updated",
+      });
+      return result;
+    });
+  },
+
+  async inviteVenueMembers(input: InviteVenueMembersInput) {
+    return observeOperation("inviteVenueMembers", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await inviteVenueMembers(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+      for (const invite of result.invites) {
+        const inviteToken = invite.inviteToken ?? "";
+        await venueEmailJob.submit({
+          body: `You were invited to help manage a Chewbuu Sync venue. Open ${venueAppUrl}/venues?invite=${encodeURIComponent(inviteToken)} to continue.`,
+          html: `<h2>You’re invited to Chewbuu Sync</h2><p>${escapeHtml(sessionUser.name)} invited you to help manage a venue.</p><p><a href="${venueAppUrl}/venues?invite=${encodeURIComponent(inviteToken)}">Accept the venue invitation</a></p>`,
+          subject: "You’re invited to Chewbuu Sync",
+          to: invite.email,
+        });
+      }
+      return result;
     });
   },
 
@@ -4158,6 +4290,17 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
       return approveVenueClaim(
         sessionUser.id,
         z.string().min(1).parse(locationId)
+      );
+    });
+  },
+
+  async acceptVenueInvite(inviteToken: string) {
+    return observeOperation("acceptVenueInvite", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return acceptVenueInvite(
+        sessionUser.id,
+        sessionUser.email,
+        z.string().min(1).parse(inviteToken)
       );
     });
   },
@@ -4412,12 +4555,72 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
 
   async getCircles() {
     const sessionUser = await requireSession(context.request.headers);
-    return getCircles(sessionUser.id);
+    return getCommunities(sessionUser.id);
   },
 
-  async createCircle(name: string) {
+  async createCircle(input: CreateCommunityInput | string) {
     const sessionUser = await requireSession(context.request.headers);
-    return createCircle(sessionUser, name);
+    const result = await createCommunityPlatform(
+      sessionUser as CommunityActor,
+      input,
+      isConfiguredAdmin(sessionUser)
+    );
+    await venueEmailJob.submit({
+      body: `${result.circle.name} was created on Chewbuu. Open ${venueAppUrl}/circles to finish adding people.`,
+      html: `<h2>${escapeHtml(result.circle.name)} is ready</h2><p>Your ${result.circle.kind} is ready for metadata and people.</p><p><a href="${venueAppUrl}/circles">Open your ${result.circle.kind}</a></p>`,
+      subject: `${result.circle.kind === "crew" ? "Crew" : "Circle"} created: ${result.circle.name}`,
+      to: sessionUser.email,
+    });
+    return result;
+  },
+
+  async updateCircle(input: UpdateCommunityInput) {
+    const sessionUser = await requireSession(context.request.headers);
+    const result = await updateCommunity(
+      sessionUser as CommunityActor,
+      input,
+      isConfiguredAdmin(sessionUser)
+    );
+    await venueEmailJob.submit({
+      body: `${result.circle.name} metadata was updated. Open ${venueAppUrl}/circles to review it.`,
+      html: `<h2>${escapeHtml(result.circle.name)} was updated</h2><p>Your ${result.circle.kind} branding and metadata are saved.</p><p><a href="${venueAppUrl}/circles">Review it in Chewbuu</a></p>`,
+      subject: `${result.circle.kind === "crew" ? "Crew" : "Circle"} updated: ${result.circle.name}`,
+      to: sessionUser.email,
+    });
+    return result;
+  },
+
+  async inviteCircleMembers(input: InviteCommunityMembersInput) {
+    const sessionUser = await requireSession(context.request.headers);
+    const result = await inviteCommunityMembers(
+      sessionUser as CommunityActor,
+      input,
+      isConfiguredAdmin(sessionUser)
+    );
+    for (const invite of result.invites) {
+      const inviteToken = invite.inviteToken ?? "";
+      await venueEmailJob.submit({
+        body: `You were invited to join a Chewbuu Circle. Open ${venueAppUrl}/circles?invite=${encodeURIComponent(inviteToken)} to join it.`,
+        html: `<h2>You’re invited to a Chewbuu Circle</h2><p>${escapeHtml(sessionUser.name)} invited you to join their Circle.</p><p><a href="${venueAppUrl}/circles?invite=${encodeURIComponent(inviteToken)}">Accept the invitation</a></p>`,
+        subject: "You’re invited to a Chewbuu Circle",
+        to: invite.email,
+      });
+    }
+    return result;
+  },
+
+  async acceptCircleInvite(inviteToken: string) {
+    const sessionUser = await requireSession(context.request.headers);
+    return acceptCommunityInvite(
+      sessionUser.id,
+      sessionUser.email,
+      z.string().min(1).parse(inviteToken)
+    );
+  },
+
+  async getAccountEntitlements() {
+    const sessionUser = await requireSession(context.request.headers);
+    return getAccountEntitlements(sessionUser);
   },
 
   async getDateMedia(requestId: string) {

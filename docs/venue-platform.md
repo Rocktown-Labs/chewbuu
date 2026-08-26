@@ -100,6 +100,25 @@ Chewbuu-branded cards through Stripe Issuing/Treasury are a later financial-prod
 - first special published
 - 30-day venue retention
 
+## Shared community and brand setup
+
+Crews and Circles intentionally use the same lifecycle as a venue:
+
+```text
+Create → add metadata and style → invite people → operate the space
+```
+
+The admin test account `camstewart7@gmail.com` is provisioned on first authenticated API use with an active Sugar test subscription and an active Sync test subscription. The grant has no Stripe IDs and is clearly a test entitlement; live billing still requires Stripe Checkout and webhook confirmation.
+
+The official brand handles are reserved:
+
+- Crew: `@chewbuu`
+- Chewbuu Sync venue: `@chewbuusync`
+
+These tokens cannot be claimed by ordinary user accounts, Circles, or venues. Admin-only branded creation is supported so the complete official flows can be exercised. Community and venue style metadata currently includes accent color, background color, logo URL, and tagline.
+
+Invitations are email-backed, tokenized, and email-matched on acceptance. Existing Chewbuu users are added immediately; new recipients can accept after signing in. Venue invitations grant the configured staff role, while Circle invitations create active Circle membership.
+
 ## Rollout
 
 1. Venue discovery, contribution, temporary menu preview, claim request, referral tracking.

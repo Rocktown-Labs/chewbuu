@@ -16,6 +16,11 @@ import {
   parseAdminEmails,
 } from "./membership";
 
+const RESERVED_USERNAMES = new Set(["chewbuu", "chewbuusync"]);
+
+export const isReservedUsername = (value: string) =>
+  RESERVED_USERNAMES.has(value.trim().replace(/^@/, "").toLowerCase());
+
 export const buildStripePlans = async (db?: ReturnType<typeof createDb>) => {
   const executor = db ?? createDb();
   try {
@@ -178,6 +183,7 @@ export const createAuth = () => {
     plugins: [
       expo(),
       username({
+        usernameValidator: (value) => !isReservedUsername(value),
         schema: {
           user: {
             fields: {

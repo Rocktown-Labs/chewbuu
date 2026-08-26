@@ -5038,6 +5038,12 @@ function ProfileStatPanel({
   return (
     <Card className="rounded-2xl border-border bg-card/45">
       <CardContent className="grid gap-3 p-4">
+        <Link
+          className="text-primary text-sm font-semibold underline"
+          to="/communities"
+        >
+          Create or manage a Crew / Circle
+        </Link>
         {circleGroups.map((circle) => (
           <div
             className="rounded-2xl border border-border bg-background/45 p-3"

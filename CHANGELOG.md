@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added branded Chewbuu Sync venue and Crew workflows with admin Sugar/Sync test entitlements, reserved brand handles, styled community metadata, people invitations, venue staff invitations, lifecycle emails, venue operations pages, and the branded-community migration.
 - Added full-featured mobile authentication and multi-step onboarding in \`apps/native\` with **Basics**, **Device Permissions**, **Media Check**, **Dating Preferences**, and **Interests & Category Spots**, plus an explicit **Save for Later** action that persists drafts via \`expo-secure-store\` and enables immediate home tab exploration with top-feed resumption banners.
 - Built branded liquid glass mobile Login and Sign-Up screens (\`apps/native/app/auth/login.tsx\`, \`apps/native/app/auth/sign-up.tsx\`) and connected them to Better Auth and onboarding navigation.
 - Built React Native mobile app in \`apps/native\` with Expo Liquid Glass UI, floating \`LiquidGlassTabBar\` with \`expo-blur\` and gradient sheen, and 5 core tab screens: **Discover** (video profile cards, 3-min vibe check, quick matching), **Spots** (category filtering, Firecrawl menu highlights, date spot proposal), **Dates** (active date itinerary, Safety Beacon trusted circle status, \`.ics\` calendar export), **Chats** (realtime messaging threads, speed dating room queue), and **Profile** (media gallery, Safety Circle management, Sugar VIP Crews & Events manager).

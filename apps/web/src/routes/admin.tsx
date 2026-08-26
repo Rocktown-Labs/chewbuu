@@ -23,7 +23,7 @@ import {
   TabsTrigger,
 } from "@chewbuu/ui/components/tabs";
 import { Textarea } from "@chewbuu/ui/components/textarea";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   Activity,
   BadgeCheck,
@@ -312,6 +312,38 @@ const RouteComponent = () => {
           </Card>
         ))}
       </div>
+
+      <Card className="mt-6 border-primary/20 bg-primary/5">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold">Venue operations preview</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Create a venue, generate demo reservations and orders, and test
+              the live service pipeline.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              className="inline-flex items-center justify-center rounded-lg border px-4 py-2 font-medium text-sm"
+              to="/communities"
+            >
+              Create Crew / Circle
+            </Link>
+            <Link
+              className="inline-flex items-center justify-center rounded-lg border px-4 py-2 font-medium text-sm"
+              to="/venues"
+            >
+              View venues
+            </Link>
+            <Link
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm"
+              to="/venue-portal"
+            >
+              Open venue setup
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="mt-8">
         <Tabs

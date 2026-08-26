@@ -5,6 +5,8 @@ import type { AwsBlocksApi, DateRequestInput } from "./types";
 describe("AWS Blocks API surface", () => {
   it("keeps the expanded API methods typed", () => {
     const methodNames: (keyof AwsBlocksApi)[] = [
+      "acceptCircleInvite",
+      "acceptVenueInvite",
       "approveVenueClaim",
       "captureVenueMenu",
       "checkIn",
@@ -13,6 +15,7 @@ describe("AWS Blocks API surface", () => {
       "createFriendInvite",
       "createMediaUpload",
       "generateAiResponse",
+      "getAccountEntitlements",
       "getCircles",
       "getDateMedia",
       "getDateMeeting",
@@ -29,6 +32,7 @@ describe("AWS Blocks API surface", () => {
       "getReviewPrompt",
       "getRooms",
       "getVapidPublicKey",
+      "getVenueLocations",
       "getVenueWorkspace",
       "createVenueLocation",
       "createVenueMediaUpload",
@@ -60,13 +64,17 @@ describe("AWS Blocks API surface", () => {
       "subscribeVenueEvents",
       "suggestPlaces",
       "syncPricingPlans",
+      "updateCircle",
       "updatePricingPlans",
+      "updateVenueBrand",
       "updateVenueOrder",
       "updateVenueReservation",
       "uploadDateMedia",
+      "inviteCircleMembers",
+      "inviteVenueMembers",
     ];
 
-    expect(methodNames).toHaveLength(59);
+    expect(methodNames).toHaveLength(67);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {

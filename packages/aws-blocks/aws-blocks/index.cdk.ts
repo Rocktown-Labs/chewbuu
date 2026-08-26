@@ -76,6 +76,7 @@ const runtimeEnvironment: Record<string, string | undefined> = {
   RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
   RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET,
   VENUE_EMAIL_FROM: process.env.VENUE_EMAIL_FROM,
+  VENUE_APP_URL: process.env.VENUE_APP_URL,
   SENT_DM_API_KEY: process.env.SENT_DM_API_KEY,
   SENT_DM_BASE_URL: process.env.SENT_DM_BASE_URL,
   SENT_DM_FROM: process.env.SENT_DM_FROM,
