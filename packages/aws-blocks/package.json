@@ -14,6 +14,7 @@
   },
   "scripts": {
     "check-types": "tsc --noEmit",
+    "db:migrate": "bb-data migrate ./migrations --url \"$BLOCKS_MIGRATION_DB_URL\" --stage \"${CHEWBUU_STAGE:-production}\"",
     "test": "vitest run"
   },
   "dependencies": {

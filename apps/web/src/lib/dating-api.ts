@@ -115,11 +115,14 @@ export interface VenueMenuPreview {
 
 export interface VenueLocation {
   address?: string;
+  description?: string;
+  handle?: string;
   id: string;
   menuUrl?: string;
   name: string;
   organizationId: string;
   status: string;
+  style?: BrandStyle;
   websiteUrl?: string;
 }
 
@@ -133,7 +136,7 @@ export interface VenueReferral {
 export interface VenueEvent {
   detail: string;
   id: string;
-  kind: "order_created" | "reservation_requested";
+  kind: "order_created" | "reservation_requested" | "venue_created";
   locationId: string;
   occurredAt: string;
   status: string;
@@ -269,11 +272,24 @@ export interface Friendship {
   userId: string;
 }
 
+export type CommunityKind = "circle" | "crew";
+
+export interface BrandStyle {
+  accentColor?: string;
+  backgroundColor?: string;
+  logoUrl?: string;
+  tagline?: string;
+}
+
 export interface Circle {
+  description?: string;
+  handle?: string;
   id: string;
+  kind: CommunityKind;
   members: { id: string; role: string; status: string; userId: string }[];
   name: string;
   ownerUserId: string;
+  style?: BrandStyle;
 }
 
 export interface DateMedia {
@@ -345,6 +361,12 @@ export const apiFetch = async <T>(path: string, options: ApiOptions = {}) => {
   return data as T;
 };
 
+export interface AccountEntitlements {
+  isAdmin: boolean;
+  membership: { plan: string; status: string };
+  sync: { plan: string; status: string };
+}
+
 export interface MembershipPlan {
   active: boolean;
   annualPriceCents: number;
@@ -362,6 +384,8 @@ export interface MembershipPlan {
 }
 
 export const venueApi = {
+  acceptInvite: (inviteToken: string) =>
+    blocksApi.acceptVenueInvite(inviteToken),
   approveClaim: (locationId: string) => blocksApi.approveVenueClaim(locationId),
   captureMenu: (locationId: string, url: string) =>
     blocksApi.captureVenueMenu({ locationId, url }) as Promise<{
@@ -370,12 +394,15 @@ export const venueApi = {
     }>,
   createLocation: (input: {
     address?: string;
+    description?: string;
     discoveryPlaceId?: string;
+    handle?: string;
     menuUrl?: string;
     name: string;
     organizationName?: string;
     phone?: string;
     referralCode?: string;
+    style?: BrandStyle;
     venueRole?: "owner" | "referrer";
     websiteUrl?: string;
   }) =>
@@ -384,6 +411,19 @@ export const venueApi = {
       referral?: VenueReferral;
     }>,
   follow: (locationId: string) => blocksApi.followVenue(locationId),
+  getLocations: () =>
+    blocksApi.getVenueLocations() as Promise<{ locations: VenueLocation[] }>,
+  updateBrand: (input: {
+    description?: string;
+    handle?: string;
+    locationId: string;
+    name?: string;
+    style?: BrandStyle;
+  }) => blocksApi.updateVenueBrand(input),
+  inviteMembers: (input: {
+    locationId: string;
+    members: { email: string; name?: string; role?: string }[];
+  }) => blocksApi.inviteVenueMembers(input),
   getWorkspace: (locationId: string) =>
     blocksApi.getVenueWorkspace(locationId) as Promise<VenueWorkspace>,
   previewMenu: (url: string) =>
@@ -528,8 +568,35 @@ export const friendshipsApi = {
 };
 
 export const circlesApi = {
+  acceptInvite: (inviteToken: string) =>
+    blocksApi.acceptCircleInvite(inviteToken),
+  create: (
+    input:
+      | {
+          description?: string;
+          handle?: string;
+          kind?: CommunityKind;
+          name: string;
+          style?: BrandStyle;
+        }
+      | string
+  ) => blocksApi.createCircle(input),
   get: () => blocksApi.getCircles() as Promise<{ circles: Circle[] }>,
-  create: (name: string) => blocksApi.createCircle(name),
+  inviteMembers: (input: {
+    circleId: string;
+    members: { email: string; name?: string }[];
+  }) => blocksApi.inviteCircleMembers(input),
+  update: (input: {
+    description?: string;
+    handle?: string;
+    id: string;
+    name?: string;
+    style?: BrandStyle;
+  }) => blocksApi.updateCircle(input),
+};
+
+export const entitlementsApi = {
+  get: () => blocksApi.getAccountEntitlements() as Promise<AccountEntitlements>,
 };
 
 export const notificationsApi = {

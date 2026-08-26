@@ -112,16 +112,18 @@ Run migrations locally with a direct/session URL:
 
 ```bash
 BLOCKS_MIGRATION_DB_URL='postgres://...:5432/...' bun run db:migrate
+# Equivalent package-level command:
+# (cd packages/aws-blocks && bun run db:migrate)
 ```
 
-The runner in `packages/db/src/migrate.ts`:
+The `@aws-blocks/bb-data` CLI runner:
 
 - forces migrations to the direct `5432` session port;
 - serializes deploys with a PostgreSQL advisory lock;
 - runs each migration transactionally;
-- recognizes the previous `schema_migrations` table and old baseline tables during cutover;
+- recognizes existing baseline tables during cutover;
 - records successful files in `_migrations`; and
-- prints sanitized PostgreSQL diagnostics without exposing credentials.
+- verifies TLS using `DATABASE_CA_CERT` (the production workflow falls back to the runner system CA bundle).
 
 Never edit an applied migration. Add a new timestamped `.sql` file, test it against an isolated database, and then deploy it through the production workflow.
 
@@ -132,7 +134,7 @@ The production workflow is `.github/workflows/aws-blocks.yml`. It performs migra
 ```text
 BLOCKS_MIGRATION_DB_URL: PlanetScale 5432 direct/session connection
         │
-        └── bun run db:migrate
+        └── @aws-blocks/bb-data migrate ./migrations --url "$BLOCKS_MIGRATION_DB_URL"
 
 BLOCKS_DB_URL: PlanetScale 6432 pooled runtime connection
         │

@@ -75,6 +75,7 @@ export const env = createEnv({
     VAPID_PUBLIC_KEY: z.string().optional(),
     VAPID_SUBJECT: z.string().default("mailto:admin@chewbuu.com"),
     VENUE_EMAIL_FROM: z.string().email().default("noreply@chewbuu.com"),
+    VENUE_APP_URL: z.url().default("https://chewbuu.com"),
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
 });

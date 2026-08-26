@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildStripePlans } from "./index";
+import { buildStripePlans, isReservedUsername } from "./index";
+
+describe("reserved usernames", () => {
+  it("protects official brand usernames", () => {
+    expect(isReservedUsername("@chewbuu")).toBe(true);
+    expect(isReservedUsername("chewbuusync")).toBe(true);
+    expect(isReservedUsername("real-plans")).toBe(false);
+  });
+});
 
 describe("buildStripePlans", () => {
   it("resolves dynamic Stripe price IDs from the membership_plan table", async () => {

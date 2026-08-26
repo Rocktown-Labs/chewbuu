@@ -361,6 +361,7 @@ export interface VenueLocationTable {
   address: string | null;
   claimed_at: Timestamp | null;
   created_at: Timestamp;
+  description: string | null;
   discovery_place_id: string | null;
   handle: string | null;
   id: string;
@@ -369,6 +370,7 @@ export interface VenueLocationTable {
   organization_id: string;
   phone: string | null;
   status: string;
+  style: JsonColumn<Record<string, string>>;
   submitted_by_user_id: string | null;
   stripe_account_id: string | null;
   updated_at: Timestamp;

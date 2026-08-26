@@ -29,6 +29,7 @@ These workflow inputs were not present in the GitHub `production` secret list wh
 | --- | --- |
 | `GOOGLE_CLIENT_ID` | Google sign-in will use placeholder credentials and fail in production |
 | `GOOGLE_CLIENT_SECRET` | Google sign-in will use placeholder credentials and fail in production |
+| `FIRECRAWL_API_KEY` | Venue menu previews and menu capture are unavailable |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | AI responses are unavailable |
 | `GOOGLE_PLACES_API_KEY` | Place search and place-photo proxy are unavailable |
 | `R2_ACCESS_KEY_ID` | No current AWS Blocks source usage found; legacy/pass-through configuration |
@@ -48,6 +49,9 @@ These workflow inputs were not present in the GitHub `production` secret list wh
 These production variables are optional but should be deliberately reviewed:
 
 - `RESEND_FROM_EMAIL` — otherwise the code default is `Chewbuu <noreply@news.chewbuu.com>`; the sender domain must be verified in Resend
+- `DATABASE_CA_CERT` — optional PEM or certificate path for verified PlanetScale migration connections; the workflow falls back to the GitHub runner system CA bundle
+- `VENUE_EMAIL_FROM` — verified SES sender used by AWS Blocks venue notification jobs
+- `VENUE_APP_URL` — base URL used for clickable venue notification links; defaults to `https://chewbuu.com`
 - `R2_PUBLIC_URL`
 - `CORS_ALLOWED_ORIGINS`
 - `ADMIN_EMAILS`

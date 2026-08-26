@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@chewbuu/ui/components/card";
 import { Input } from "@chewbuu/ui/components/input";
+import { Textarea } from "@chewbuu/ui/components/textarea";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Check, ExternalLink, LoaderCircle, Sparkles } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
@@ -62,6 +63,18 @@ function VenuePortalPage() {
 
   const updateField = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const useChewbuuSyncBrand = () => {
+    setForm((current) => ({
+      ...current,
+      name: "Chewbuu Sync",
+      organizationName: "Chewbuu Sync",
+      websiteUrl: "https://chewbuu.com",
+    }));
+    toast.info(
+      "Chewbuu Sync defaults loaded. Save the identity after creation."
+    );
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -178,11 +191,22 @@ function VenuePortalPage() {
 
         <Card className="mt-8">
           <CardHeader>
-            <CardTitle>Start with the basics</CardTitle>
-            <CardDescription>
-              You can add tables, staff, shifts, and payments after the venue is
-              claimed.
-            </CardDescription>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle>Start with the basics</CardTitle>
+                <CardDescription>
+                  You can add tables, staff, shifts, and payments after the
+                  venue is claimed.
+                </CardDescription>
+              </div>
+              <Button
+                onClick={useChewbuuSyncBrand}
+                type="button"
+                variant="outline"
+              >
+                Use Chewbuu Sync brand
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <form className="space-y-5" onSubmit={handleSubmit}>
@@ -336,17 +360,198 @@ function VenuePortalPage() {
                   {referral.status.replaceAll("_", " ")}
                 </p>
               ) : null}
+              <Link
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                params={{ venueId: location.id }}
+                to="/venues/$venueId"
+              >
+                Open venue workspace
+              </Link>
               {isPreviewing ? (
                 <p className="text-sm text-muted-foreground">
                   Finding the menu…
                 </p>
               ) : null}
               {preview ? <MenuPreview preview={preview} /> : null}
+              <VenueSetupSteps location={location} />
             </CardContent>
           </Card>
         ) : null}
       </div>
     </main>
+  );
+}
+
+function VenueSetupSteps({ location }: { location: VenueLocation }) {
+  const [step, setStep] = useState<2 | 3 | 4>(2);
+  const [isSaving, setIsSaving] = useState(false);
+  const [brand, setBrand] = useState({
+    accentColor: location.style?.accentColor ?? "#0f766e",
+    backgroundColor: location.style?.backgroundColor ?? "#f7f4ed",
+    description:
+      location.description ?? "A place for real dates and good people.",
+    handle: location.handle ?? "chewbuusync",
+    logoUrl: location.style?.logoUrl ?? "",
+    tagline: location.style?.tagline ?? "A better way to run real places.",
+  });
+  const [staffEmails, setStaffEmails] = useState("");
+
+  const updateBrand = (field: keyof typeof brand, value: string) => {
+    setBrand((current) => ({ ...current, [field]: value }));
+  };
+
+  const saveBrand = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSaving(true);
+    try {
+      await venueApi.updateBrand({
+        description: brand.description,
+        handle: brand.handle,
+        locationId: location.id,
+        name: location.name,
+        style: {
+          accentColor: brand.accentColor,
+          backgroundColor: brand.backgroundColor,
+          ...(brand.logoUrl ? { logoUrl: brand.logoUrl } : {}),
+          tagline: brand.tagline,
+        },
+      });
+      setStep(3);
+      toast.success("Venue identity saved. Add staff or partners next.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not save venue identity."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const inviteStaff = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const members = staffEmails
+      .split(/[\\n,]/)
+      .map((email) => email.trim())
+      .filter(Boolean)
+      .map((email) => ({ email }));
+    if (members.length === 0) {
+      setStep(4);
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await venueApi.inviteMembers({ locationId: location.id, members });
+      setStep(4);
+      toast.success(
+        `${members.length} venue invitation${members.length === 1 ? "" : "s"} sent.`
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not invite venue staff."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 space-y-4 border-t pt-5">
+      <div className="flex flex-wrap gap-2 text-xs font-medium text-muted-foreground">
+        <Badge variant={step === 2 ? "default" : "secondary"}>
+          2 · Identity
+        </Badge>
+        <Badge variant={step === 3 ? "default" : "secondary"}>3 · People</Badge>
+        <Badge variant={step === 4 ? "default" : "secondary"}>4 · Ready</Badge>
+      </div>
+      {step === 2 ? (
+        <form className="space-y-4" onSubmit={saveBrand}>
+          <FormField label="Venue handle">
+            <Input
+              required
+              value={brand.handle}
+              onChange={(event) => updateBrand("handle", event.target.value)}
+            />
+          </FormField>
+          <FormField label="Venue description">
+            <Textarea
+              value={brand.description}
+              onChange={(event) =>
+                updateBrand("description", event.target.value)
+              }
+            />
+          </FormField>
+          <FormField label="Tagline">
+            <Input
+              value={brand.tagline}
+              onChange={(event) => updateBrand("tagline", event.target.value)}
+            />
+          </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Accent">
+              <Input
+                type="color"
+                value={brand.accentColor}
+                onChange={(event) =>
+                  updateBrand("accentColor", event.target.value)
+                }
+              />
+            </FormField>
+            <FormField label="Background">
+              <Input
+                type="color"
+                value={brand.backgroundColor}
+                onChange={(event) =>
+                  updateBrand("backgroundColor", event.target.value)
+                }
+              />
+            </FormField>
+          </div>
+          <FormField label="Logo URL">
+            <Input
+              type="url"
+              value={brand.logoUrl}
+              onChange={(event) => updateBrand("logoUrl", event.target.value)}
+            />
+          </FormField>
+          <Button disabled={isSaving} type="submit">
+            Save venue identity
+          </Button>
+        </form>
+      ) : null}
+      {step === 3 ? (
+        <form className="space-y-4" onSubmit={inviteStaff}>
+          <FormField
+            label="Invite staff or partners"
+            description="Existing Chewbuu members are added immediately. New people receive a secure invitation email."
+          >
+            <Textarea
+              value={staffEmails}
+              onChange={(event) => setStaffEmails(event.target.value)}
+              placeholder="manager@example.com\nchef@example.com"
+            />
+          </FormField>
+          <Button disabled={isSaving} type="submit">
+            Send venue invitations
+          </Button>
+          <Button
+            className="ml-2"
+            onClick={() => setStep(4)}
+            type="button"
+            variant="ghost"
+          >
+            Skip for now
+          </Button>
+        </form>
+      ) : null}
+      {step === 4 ? (
+        <p className="rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-700">
+          @{brand.handle} is ready for menu editing, hours, tables, schedules,
+          reservations, and orders.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
