@@ -10,15 +10,31 @@ import {
 import { Input } from "@chewbuu/ui/components/input";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Check, ExternalLink, LoaderCircle, Sparkles } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import {
+  BadgeCheck,
+  Camera,
+  Check,
+  ExternalLink,
+  LoaderCircle,
+  Plus,
+  ShieldCheck,
+  Sparkles,
+} from "lucide-react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 import {
   venueApi,
+  type VenueIdentityVerificationSession,
   type VenueLocation,
-  type VenueMediaKind,
+  type VenueMenuItem,
   type VenueMenuPreview,
   type VenueReferral,
 } from "@/lib/dating-api";
@@ -37,15 +53,9 @@ function VenuePortalPage() {
   const [location, setLocation] = useState<VenueLocation | null>(null);
   const [preview, setPreview] = useState<VenueMenuPreview | null>(null);
   const [referral, setReferral] = useState<VenueReferral | undefined>();
-  const [mediaFiles, setMediaFiles] = useState<
-    Record<VenueMediaKind, File | null>
-  >({
-    food_photo: null,
-    menu_photo: null,
-    venue_photo: null,
-  });
   const [form, setForm] = useState({
     address: "",
+    description: "",
     menuUrl: "",
     name: "",
     organizationName: "",
@@ -83,6 +93,7 @@ function VenuePortalPage() {
     try {
       const result = await venueApi.createLocation({
         address: form.address || undefined,
+        description: form.description || undefined,
         menuUrl: form.menuUrl || undefined,
         name: form.name,
         organizationName: form.organizationName || undefined,
@@ -114,32 +125,6 @@ function VenuePortalPage() {
           );
         }
       }
-      const mediaToUpload = Object.entries(mediaFiles).filter(
-        (entry): entry is [VenueMediaKind, File] => entry[1] instanceof File
-      );
-      await Promise.all(
-        mediaToUpload.map(async ([kind, file]) => {
-          const upload = await venueApi.uploadMedia({
-            contentType: file.type,
-            fileName: file.name,
-            kind,
-            locationId: result.location.id,
-          });
-          const uploadResponse = await fetch(upload.uploadUrl, {
-            body: file,
-            headers: { "content-type": file.type },
-            method: "PUT",
-          });
-          if (!uploadResponse.ok) {
-            throw new Error(`Could not upload ${kind.replaceAll("_", " ")}.`);
-          }
-          await venueApi.saveMedia({
-            kind,
-            locationId: result.location.id,
-            url: upload.mediaUrl,
-          });
-        })
-      );
       toast.success(
         isOwner ? "Venue setup started." : "Venue sent to Chewbuu."
       );
@@ -189,8 +174,8 @@ function VenuePortalPage() {
           marked unverified until the venue confirms it.
         </p>
 
-        <Card className="mt-8">
-          <CardHeader>
+        <Card className="mt-8 overflow-hidden rounded-3xl border-primary/15 shadow-xl shadow-primary/5 [&_[data-slot=input]]:rounded-xl [&_[data-slot=textarea]]:rounded-xl">
+          <CardHeader className="bg-primary/5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <CardTitle>Start with the basics</CardTitle>
@@ -225,6 +210,16 @@ function VenuePortalPage() {
                     updateField("organizationName", event.target.value)
                   }
                   placeholder="Optional for restaurant groups"
+                />
+              </FormField>
+              <FormField label="What should guests know about this place?">
+                <Textarea
+                  value={form.description}
+                  onChange={(event) =>
+                    updateField("description", event.target.value)
+                  }
+                  placeholder="A neighborhood spot known for..."
+                  rows={3}
                 />
               </FormField>
               <FormField label="Address">
@@ -270,44 +265,6 @@ function VenuePortalPage() {
                   placeholder="https://restaurant.example/menu"
                 />
               </FormField>
-              <div className="grid gap-5 sm:grid-cols-3">
-                <FormField label="Store photo">
-                  <Input
-                    accept="image/*"
-                    onChange={(event) =>
-                      setMediaFiles((current) => ({
-                        ...current,
-                        venue_photo: event.target.files?.[0] ?? null,
-                      }))
-                    }
-                    type="file"
-                  />
-                </FormField>
-                <FormField label="Menu photo">
-                  <Input
-                    accept="image/*"
-                    onChange={(event) =>
-                      setMediaFiles((current) => ({
-                        ...current,
-                        menu_photo: event.target.files?.[0] ?? null,
-                      }))
-                    }
-                    type="file"
-                  />
-                </FormField>
-                <FormField label="Food photo">
-                  <Input
-                    accept="image/*"
-                    onChange={(event) =>
-                      setMediaFiles((current) => ({
-                        ...current,
-                        food_photo: event.target.files?.[0] ?? null,
-                      }))
-                    }
-                    type="file"
-                  />
-                </FormField>
-              </div>
               <label className="flex items-start gap-3 rounded-lg border p-4 text-sm">
                 <input
                   checked={isOwner}
@@ -382,22 +339,94 @@ function VenuePortalPage() {
   );
 }
 
+type VenueSetupStep = 2 | 3 | 4 | 5;
+
 function VenueSetupSteps({ location }: { location: VenueLocation }) {
-  const [step, setStep] = useState<2 | 3 | 4>(2);
+  const [step, setStep] = useState<VenueSetupStep>(2);
   const [isSaving, setIsSaving] = useState(false);
+  const [verification, setVerification] =
+    useState<VenueIdentityVerificationSession | null>(null);
+  const [venuePhoto, setVenuePhoto] = useState<File | null>(null);
+  const [items, setItems] = useState<VenueMenuItem[]>([]);
+  const [itemPhoto, setItemPhoto] = useState<File | null>(null);
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
   const [brand, setBrand] = useState({
     accentColor: location.style?.accentColor ?? "#0f766e",
     backgroundColor: location.style?.backgroundColor ?? "#f7f4ed",
     description:
       location.description ?? "A place for real dates and good people.",
-    handle: location.handle ?? "chewbuusync",
+    handle: location.handle ?? "venue-handle",
     logoUrl: location.style?.logoUrl ?? "",
     tagline: location.style?.tagline ?? "A better way to run real places.",
   });
   const [staffEmails, setStaffEmails] = useState("");
+  const [itemForm, setItemForm] = useState({
+    description: "",
+    name: "",
+    priceCents: "",
+    section: "",
+  });
 
   const updateBrand = (field: keyof typeof brand, value: string) => {
     setBrand((current) => ({ ...current, [field]: value }));
+  };
+
+  const loadVerification = useCallback(async () => {
+    try {
+      setVerification(
+        await venueApi.getIdentityVerificationStatus(location.id)
+      );
+    } catch {
+      setVerification(null);
+    }
+  }, [location.id]);
+
+  useEffect(() => {
+    void loadVerification();
+  }, [loadVerification]);
+
+  const startVerification = async () => {
+    setIsSaving(true);
+    try {
+      const session = await venueApi.createIdentityVerificationSession(
+        location.id
+      );
+      setVerification(session);
+      if (!session.url) {
+        throw new Error("Stripe did not return an identity verification URL.");
+      }
+      window.location.assign(session.url);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not start identity verification."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const uploadVenuePhoto = async () => {
+    if (!venuePhoto) return;
+    const upload = await venueApi.uploadMedia({
+      contentType: venuePhoto.type,
+      fileName: venuePhoto.name,
+      kind: "venue_photo",
+      locationId: location.id,
+    });
+    const response = await fetch(upload.uploadUrl, {
+      body: venuePhoto,
+      headers: { "content-type": venuePhoto.type },
+      method: "PUT",
+    });
+    if (!response.ok) throw new Error("Could not upload the venue photo.");
+    await venueApi.saveMedia({
+      kind: "venue_photo",
+      locationId: location.id,
+      url: upload.mediaUrl,
+    });
+    setVenuePhoto(null);
   };
 
   const saveBrand = async (event: FormEvent<HTMLFormElement>) => {
@@ -416,13 +445,82 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
           tagline: brand.tagline,
         },
       });
-      setStep(3);
-      toast.success("Venue identity saved. Add staff or partners next.");
+      await uploadVenuePhoto();
+      setStep(4);
+      toast.success("Brand and venue assets saved. Build the menu next.");
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Could not save venue identity."
+        error instanceof Error ? error.message : "Could not save venue assets."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const loadItems = useCallback(async () => {
+    setIsLoadingItems(true);
+    try {
+      const result = await venueApi.listMenuItems(location.id);
+      setItems(result.items);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not load menu items."
+      );
+    } finally {
+      setIsLoadingItems(false);
+    }
+  }, [location.id]);
+
+  useEffect(() => {
+    if (step === 4) void loadItems();
+  }, [loadItems, step]);
+
+  const saveMenuItem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSaving(true);
+    try {
+      const input = {
+        description: itemForm.description || undefined,
+        locationId: location.id,
+        name: itemForm.name,
+        priceCents: Number(itemForm.priceCents || 0),
+        section: itemForm.section || undefined,
+      };
+      let result = await venueApi.upsertMenuItem(input);
+      if (itemPhoto) {
+        const upload = await venueApi.uploadMedia({
+          contentType: itemPhoto.type,
+          fileName: itemPhoto.name,
+          kind: "food_photo",
+          locationId: location.id,
+        });
+        const response = await fetch(upload.uploadUrl, {
+          body: itemPhoto,
+          headers: { "content-type": itemPhoto.type },
+          method: "PUT",
+        });
+        if (!response.ok) throw new Error("Could not upload the menu photo.");
+        await venueApi.saveMedia({
+          kind: "food_photo",
+          locationId: location.id,
+          url: upload.mediaUrl,
+        });
+        result = await venueApi.upsertMenuItem({
+          ...input,
+          id: result.item.id,
+          photoUrl: upload.mediaUrl,
+        });
+      }
+      setItems((current) => [
+        ...current.filter((item) => item.id !== result.item.id),
+        result.item,
+      ]);
+      setItemForm({ description: "", name: "", priceCents: "", section: "" });
+      setItemPhoto(null);
+      toast.success("Menu item saved. Add modifiers below it when needed.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not save menu item."
       );
     } finally {
       setIsSaving(false);
@@ -432,18 +530,18 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
   const inviteStaff = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const members = staffEmails
-      .split(/[\\n,]/)
+      .split(/[\n,]/)
       .map((email) => email.trim())
       .filter(Boolean)
       .map((email) => ({ email }));
     if (members.length === 0) {
-      setStep(4);
+      setStep(5);
       return;
     }
     setIsSaving(true);
     try {
       await venueApi.inviteMembers({ locationId: location.id, members });
-      setStep(4);
+      setStep(5);
       toast.success(
         `${members.length} venue invitation${members.length === 1 ? "" : "s"} sent.`
       );
@@ -457,16 +555,92 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
   };
 
   return (
-    <div className="mt-5 space-y-4 border-t pt-5">
-      <div className="flex flex-wrap gap-2 text-xs font-medium text-muted-foreground">
-        <Badge variant={step === 2 ? "default" : "secondary"}>
-          2 · Identity
-        </Badge>
-        <Badge variant={step === 3 ? "default" : "secondary"}>3 · People</Badge>
-        <Badge variant={step === 4 ? "default" : "secondary"}>4 · Ready</Badge>
+    <div className="mt-6 space-y-5 border-t pt-6 [&_[data-slot=input]]:rounded-xl [&_[data-slot=textarea]]:rounded-xl">
+      <div className="grid gap-2 sm:grid-cols-4" aria-label="Venue setup steps">
+        {(
+          [
+            { label: "Verify", value: 2 },
+            { label: "Brand & photos", value: 3 },
+            { label: "Menu", value: 4 },
+            { label: "People & launch", value: 5 },
+          ] as const
+        ).map(({ label, value }) => (
+          <button
+            className={`rounded-2xl border px-3 py-3 text-left text-xs transition ${step === value ? "border-primary bg-primary/10 text-foreground" : "border-border/70 text-muted-foreground hover:bg-muted/50"}`}
+            key={value}
+            onClick={() => setStep(value as VenueSetupStep)}
+            type="button"
+          >
+            <span className="block font-semibold">0{value - 1}</span>
+            {label}
+          </button>
+        ))}
       </div>
+
       {step === 2 ? (
-        <form className="space-y-4" onSubmit={saveBrand}>
+        <div className="rounded-3xl border bg-muted/20 p-5">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-1 size-5 text-primary" />
+            <div>
+              <h3 className="font-semibold text-lg">
+                Verify the venue representative
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Stripe Identity opens a Stripe-hosted document and selfie check.
+                We use the verified name for the representative record and do
+                not handle document images ourselves.
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Badge
+              variant={
+                verification?.status === "verified" ? "default" : "secondary"
+              }
+            >
+              {verification?.status?.replaceAll("_", " ") ?? "Not started"}
+            </Badge>
+            {verification?.verifiedName ? (
+              <span className="text-sm text-muted-foreground">
+                Verified as {verification.verifiedName}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {verification?.status !== "verified" ? (
+              <Button
+                disabled={isSaving}
+                onClick={startVerification}
+                type="button"
+              >
+                <BadgeCheck className="mr-2 size-4" /> Verify with Stripe
+                Identity
+              </Button>
+            ) : null}
+            <Button onClick={loadVerification} type="button" variant="outline">
+              Refresh status
+            </Button>
+            <Button onClick={() => setStep(3)} type="button" variant="ghost">
+              Do this later
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {step === 3 ? (
+        <form
+          className="space-y-4 rounded-3xl border bg-muted/20 p-5"
+          onSubmit={saveBrand}
+        >
+          <div>
+            <h3 className="font-semibold text-lg">
+              Make the place feel like itself
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Your public brand, store imagery, and venue story live here. Menu
+              item photography belongs with the item in the next step.
+            </p>
+          </div>
           <FormField label="Venue handle">
             <Input
               required
@@ -480,6 +654,7 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
               onChange={(event) =>
                 updateBrand("description", event.target.value)
               }
+              rows={3}
             />
           </FormField>
           <FormField label="Tagline">
@@ -515,42 +690,293 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
               onChange={(event) => updateBrand("logoUrl", event.target.value)}
             />
           </FormField>
-          <Button disabled={isSaving} type="submit">
-            Save venue identity
-          </Button>
-        </form>
-      ) : null}
-      {step === 3 ? (
-        <form className="space-y-4" onSubmit={inviteStaff}>
           <FormField
-            label="Invite staff or partners"
-            description="Existing Chewbuu members are added immediately. New people receive a secure invitation email."
+            label="Storefront photo"
+            description="Upload the front door, interior, or another image that helps guests recognize the venue."
           >
-            <Textarea
-              value={staffEmails}
-              onChange={(event) => setStaffEmails(event.target.value)}
-              placeholder="manager@example.com\nchef@example.com"
+            <Input
+              accept="image/*"
+              onChange={(event) =>
+                setVenuePhoto(event.target.files?.[0] ?? null)
+              }
+              type="file"
             />
           </FormField>
-          <Button disabled={isSaving} type="submit">
-            Send venue invitations
-          </Button>
-          <Button
-            className="ml-2"
-            onClick={() => setStep(4)}
-            type="button"
-            variant="ghost"
-          >
-            Skip for now
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button disabled={isSaving} type="submit">
+              <Camera className="mr-2 size-4" /> Save brand & photo
+            </Button>
+            <Button onClick={() => setStep(4)} type="button" variant="ghost">
+              Skip for now
+            </Button>
+          </div>
         </form>
       ) : null}
+
       {step === 4 ? (
-        <p className="rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-700">
-          @{brand.handle} is ready for menu editing, hours, tables, schedules,
-          reservations, and orders.
-        </p>
+        <div className="space-y-4 rounded-3xl border bg-muted/20 p-5">
+          <div>
+            <h3 className="font-semibold text-lg">
+              Build the menu guests can actually order
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add venue-owned items, prices, modifiers, and an optional photo
+              for that specific item. Online previews stay separate and
+              unverified.
+            </p>
+          </div>
+          <form className="grid gap-3 sm:grid-cols-2" onSubmit={saveMenuItem}>
+            <Input
+              aria-label="Menu item name"
+              onChange={(event) =>
+                setItemForm((current) => ({
+                  ...current,
+                  name: event.target.value,
+                }))
+              }
+              placeholder="Item name"
+              required
+              value={itemForm.name}
+            />
+            <Input
+              aria-label="Menu item price in cents"
+              onChange={(event) =>
+                setItemForm((current) => ({
+                  ...current,
+                  priceCents: event.target.value,
+                }))
+              }
+              placeholder="Price in cents (e.g. 1450)"
+              type="number"
+              value={itemForm.priceCents}
+            />
+            <Input
+              aria-label="Menu item section"
+              onChange={(event) =>
+                setItemForm((current) => ({
+                  ...current,
+                  section: event.target.value,
+                }))
+              }
+              placeholder="Section, e.g. Brunch"
+              value={itemForm.section}
+            />
+            <Input
+              accept="image/*"
+              aria-label="Menu item photo"
+              onChange={(event) =>
+                setItemPhoto(event.target.files?.[0] ?? null)
+              }
+              type="file"
+            />
+            <Textarea
+              aria-label="Menu item description"
+              className="sm:col-span-2"
+              onChange={(event) =>
+                setItemForm((current) => ({
+                  ...current,
+                  description: event.target.value,
+                }))
+              }
+              placeholder="Describe what guests receive"
+              value={itemForm.description}
+            />
+            <Button className="w-fit" disabled={isSaving} type="submit">
+              <Plus className="mr-2 size-4" /> Add menu item
+            </Button>
+          </form>
+          {isLoadingItems ? (
+            <p className="text-sm text-muted-foreground">Loading menu…</p>
+          ) : null}
+          <div className="space-y-3">
+            {items.map((item) => (
+              <MenuItemCard
+                item={item}
+                key={item.id}
+                locationId={location.id}
+                onSaved={loadItems}
+              />
+            ))}
+          </div>
+          <Button onClick={() => setStep(5)} type="button" variant="outline">
+            Continue to people & launch
+          </Button>
+        </div>
       ) : null}
+
+      {step === 5 ? (
+        <div className="space-y-4 rounded-3xl border bg-muted/20 p-5">
+          <div>
+            <h3 className="font-semibold text-lg">
+              Invite the team and open the doors
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Staff can help with shifts, tables, orders, specials, and timeline
+              events after they accept their invitation.
+            </p>
+          </div>
+          <form className="space-y-4" onSubmit={inviteStaff}>
+            <FormField label="Invite staff or partners">
+              <Textarea
+                value={staffEmails}
+                onChange={(event) => setStaffEmails(event.target.value)}
+                placeholder="manager@example.com\nchef@example.com"
+              />
+            </FormField>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={isSaving} type="submit">
+                Send invitations & finish
+              </Button>
+              <Button onClick={() => setStep(2)} type="button" variant="ghost">
+                Review verification
+              </Button>
+            </div>
+          </form>
+          <p className="rounded-2xl bg-emerald-500/10 p-4 text-sm text-emerald-700">
+            @{brand.handle} is ready for hours, tables, schedules, reservations,
+            orders, specials, and feedback moderation.
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MenuItemCard({
+  item,
+  locationId,
+  onSaved,
+}: {
+  item: VenueMenuItem;
+  locationId: string;
+  onSaved: () => Promise<void>;
+}) {
+  const [groupName, setGroupName] = useState("");
+  const [optionDrafts, setOptionDrafts] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const addModifierGroup = async () => {
+    if (!groupName.trim()) return;
+    setIsSaving(true);
+    try {
+      await venueApi.upsertModifierGroup({
+        locationId,
+        menuItemId: item.id,
+        name: groupName,
+      });
+      setGroupName("");
+      await onSaved();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not add modifier group."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const addModifierOption = async (groupId: string) => {
+    const name = optionDrafts[groupId]?.trim();
+    if (!name) return;
+    setIsSaving(true);
+    try {
+      await venueApi.upsertModifierOption({ groupId, locationId, name });
+      setOptionDrafts((current) => ({ ...current, [groupId]: "" }));
+      await onSaved();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not add modifier option."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border bg-background/70 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-semibold">{item.name}</p>
+          <p className="text-sm text-muted-foreground">
+            {item.section ? `${item.section} · ` : ""}$
+            {(item.priceCents / 100).toFixed(2)}
+            {item.description ? ` · ${item.description}` : ""}
+          </p>
+        </div>
+        {item.photoUrl ? (
+          <img
+            alt={`${item.name} menu item`}
+            className="size-14 rounded-xl object-cover"
+            src={item.photoUrl}
+          />
+        ) : null}
+      </div>
+      <div className="mt-4 space-y-3 border-t pt-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Modifiers
+        </p>
+        {item.modifierGroups.map((group) => (
+          <div className="rounded-xl bg-muted/40 p-3" key={group.id}>
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="font-medium">{group.name}</span>
+              <Badge variant="outline">
+                {group.selectionType === "multiple"
+                  ? "Choose any"
+                  : "Choose one"}
+              </Badge>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {group.options.map((option) => (
+                <Badge key={option.id} variant="secondary">
+                  {option.name}
+                  {option.priceDeltaCents
+                    ? ` +$${(option.priceDeltaCents / 100).toFixed(2)}`
+                    : ""}
+                </Badge>
+              ))}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Input
+                aria-label={`New option for ${group.name}`}
+                onChange={(event) =>
+                  setOptionDrafts((current) => ({
+                    ...current,
+                    [group.id]: event.target.value,
+                  }))
+                }
+                placeholder="Add option"
+                value={optionDrafts[group.id] ?? ""}
+              />
+              <Button
+                disabled={isSaving}
+                onClick={() => void addModifierOption(group.id)}
+                type="button"
+                variant="outline"
+              >
+                Add
+              </Button>
+            </div>
+          </div>
+        ))}
+        <div className="flex gap-2">
+          <Input
+            aria-label={`New modifier group for ${item.name}`}
+            onChange={(event) => setGroupName(event.target.value)}
+            placeholder="New modifier group, e.g. Choose a side"
+            value={groupName}
+          />
+          <Button
+            disabled={isSaving}
+            onClick={() => void addModifierGroup()}
+            type="button"
+            variant="outline"
+          >
+            <Plus className="mr-1 size-4" /> Group
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

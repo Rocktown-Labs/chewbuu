@@ -55,7 +55,7 @@ These production variables are optional but should be deliberately reviewed:
 - `BLOCKS_STRIPE_CONNECT_SECRET_PARAMETER` — optional SSM SecureString path for the admin-configured Stripe restricted/secret platform key; defaults to `/chewbuu-prod-stripe-connect-secret-key`
 - `BLOCKS_STRIPE_CONNECT_WEBHOOK_PARAMETER` — optional SSM SecureString path for the admin-configured Stripe Connect webhook secret; defaults to `/chewbuu-prod-stripe-connect-webhook-secret`
 
-Stripe Connect credentials can be entered from the admin Billing & Plans control room. The server verifies the key and stores both values in SSM SecureString; raw values are never returned or logged. Account creation, charges, transfers, payouts, refunds, disputes, and webhook fulfillment remain disabled until the platform/venue countries and Connect responsibility and charge-pattern decisions are approved.
+Stripe Connect credentials can be entered from the admin Billing & Plans control room. The server verifies the key and stores both values in SSM SecureString; raw values are never returned or logged. The same server-side key can create Stripe Identity document-verification sessions when it has Identity permissions; the portal redirects to Stripe-hosted verification and polls the session status on return. Account creation, charges, transfers, payouts, refunds, disputes, and webhook fulfillment remain disabled until the platform/venue countries and Connect responsibility and charge-pattern decisions are approved.
 
 - `R2_PUBLIC_URL`
 - `CORS_ALLOWED_ORIGINS`

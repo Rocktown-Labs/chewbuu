@@ -9,6 +9,12 @@ describe("AWS Blocks API surface", () => {
       "acceptVenueInvite",
       "approveVenueClaim",
       "captureVenueMenu",
+      "createVenueIdentityVerificationSession",
+      "getVenueIdentityVerificationStatus",
+      "listVenueMenuItems",
+      "upsertVenueMenuItem",
+      "upsertVenueMenuModifierGroup",
+      "upsertVenueMenuModifierOption",
       "checkIn",
       "completeDate",
       "createCircle",
@@ -88,7 +94,7 @@ describe("AWS Blocks API surface", () => {
       "inviteVenueMembers",
     ];
 
-    expect(methodNames).toHaveLength(81);
+    expect(methodNames).toHaveLength(87);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {

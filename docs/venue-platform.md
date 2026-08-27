@@ -53,6 +53,12 @@ When a user selects a place, Chewbuu may use a transient official website URL to
 
 The preview is useful for date planning and can expire. Once the venue claims the location, the operator can import the draft into an editable menu version and publish corrections. Firecrawl is an ingestion assistant, not the canonical source of truth.
 
+## Guided vendor setup
+
+The venue portal uses a progressive setup flow: basics, representative verification, brand and storefront assets, the venue-owned menu, then staff and launch readiness. Stripe Identity uses a Stripe-hosted redirect for document and matching-selfie checks; Chewbuu stores the session ID, status, and verified representative name only, never document images or the short-lived session URL.
+
+Venue-owned menu items live in PostgreSQL and can include an item-linked food photo plus modifier groups and options (for example, side choices, add-ons, and preparation preferences). Firecrawl menu rows remain temporary and unverified, and cannot overwrite the operator's catalog.
+
 ## Venue operations
 
 Better Auth Organizations is the canonical organization boundary. Venue locations remain the location-level resource, while `member` provides organization membership and `venue_member` retains location role metadata during the non-destructive bridge. This supports independent restaurants and enterprise groups without allowing a member of one organization to see another.

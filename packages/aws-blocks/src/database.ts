@@ -401,6 +401,10 @@ export interface VenueLocationTable {
   public_analytics_enabled: boolean;
   public_analytics_min_samples: number;
   status: string;
+  stripe_identity_status: ColumnType<string, string | undefined, string>;
+  stripe_identity_verification_session_id: string | null;
+  stripe_identity_verified_at: Timestamp | null;
+  stripe_identity_verified_name: string | null;
   style: JsonColumn<Record<string, string>>;
   submitted_by_user_id: string | null;
   stripe_account_id: string | null;
@@ -468,6 +472,45 @@ export interface VenueMenuTable {
   source_url: string | null;
   status: string;
   submitted_by_user_id: string | null;
+  updated_at: Timestamp;
+}
+
+export interface VenueMenuItemTable {
+  available: boolean;
+  created_at: Timestamp;
+  description: string | null;
+  id: string;
+  location_id: string;
+  menu_id: string | null;
+  name: string;
+  photo_url: string | null;
+  price_cents: number;
+  section: string | null;
+  sort_order: number;
+  status: string;
+  updated_at: Timestamp;
+}
+
+export interface VenueMenuModifierGroupTable {
+  created_at: Timestamp;
+  id: string;
+  max_selections: number;
+  menu_item_id: string;
+  min_selections: number;
+  name: string;
+  selection_type: string;
+  sort_order: number;
+  updated_at: Timestamp;
+}
+
+export interface VenueMenuModifierOptionTable {
+  available: boolean;
+  created_at: Timestamp;
+  group_id: string;
+  id: string;
+  name: string;
+  price_delta_cents: number;
+  sort_order: number;
   updated_at: Timestamp;
 }
 
@@ -670,6 +713,9 @@ export interface BlocksDatabase {
   venue_member: VenueMemberTable;
   venue_member_invite: VenueMemberInviteTable;
   venue_menu: VenueMenuTable;
+  venue_menu_item: VenueMenuItemTable;
+  venue_menu_modifier_group: VenueMenuModifierGroupTable;
+  venue_menu_modifier_option: VenueMenuModifierOptionTable;
   venue_operational_event: VenueOperationalEventTable;
   venue_order: VenueOrderTable;
   venue_order_item: VenueOrderItemTable;
