@@ -47,6 +47,7 @@ describe("AWS Blocks API surface", () => {
       "getVenueAnalytics",
       "getVenueTimeline",
       "getVenuePublicSummary",
+      "listPublicVenueLocations",
       "listPublicVenueSpecials",
       "listVenueSpecials",
       "createVenueSpecial",
@@ -101,7 +102,7 @@ describe("AWS Blocks API surface", () => {
       "inviteVenueMembers",
     ];
 
-    expect(methodNames).toHaveLength(94);
+    expect(methodNames).toHaveLength(95);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {

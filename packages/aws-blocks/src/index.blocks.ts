@@ -105,6 +105,7 @@ import {
   getVenueAnalytics,
   getVenuePublicSummary,
   getVenueTimeline,
+  listPublicVenueLocations,
   listPublicVenueSpecials,
   listVenueSpecials,
   listVenueTables,
@@ -515,6 +516,7 @@ const placeSuggestionSchema = z.object({
   name: z.string(),
   openNow: z.boolean().optional(),
   photoUrl: z.string().optional(),
+  phone: z.string().optional(),
   placeId: z.string(),
   priceLevel: z.string().optional(),
   rating: z.string().optional(),
@@ -2523,7 +2525,8 @@ const placeSuggestionInputSchema = z.object({
   filters: z.array(z.string().trim().min(1)).default([]),
   latitude: z.string().optional(),
   longitude: z.string().optional(),
-  searchKind: z.enum(["place", "signal"]).default("signal"),
+  query: z.string().trim().max(200).optional(),
+  searchKind: z.enum(["place", "signal", "venue"]).default("signal"),
   what: z.array(z.string().trim().min(1)).min(1),
 });
 
@@ -2588,6 +2591,9 @@ export const buildBlocksPlaceSearchTextQuery = (
   input: PlaceSuggestionInput
 ) => {
   const filters = input.filters.join(" ");
+  if (input.searchKind === "venue") {
+    return input.query?.trim() || filters || input.area;
+  }
   if (input.searchKind === "place" && filters) {
     const normalizedFilters = filters.trim().toLowerCase();
     const expandedFilters =
@@ -2712,6 +2718,7 @@ const suggestPlaces = async (userId: string, input: unknown) => {
     filters: [...body.filters].toSorted(),
     latitude,
     longitude,
+    query: body.query,
     searchKind: body.searchKind,
     what: [...body.what].toSorted(),
   });
@@ -2720,6 +2727,9 @@ const suggestPlaces = async (userId: string, input: unknown) => {
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
   if (!apiKey) {
+    if (body.searchKind === "venue") {
+      return { places: [], reason: "google_not_configured" as const };
+    }
     const fallback = generateFallbackPlaces(area, body.what, body.filters);
     await placeSearchCache.put(cacheKey, {
       expiresAt: Date.now() + 1000 * 60 * 60,
@@ -2754,12 +2764,15 @@ const suggestPlaces = async (userId: string, input: unknown) => {
           "content-type": "application/json",
           "x-goog-api-key": apiKey,
           "x-goog-fieldmask":
-            "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.photos,places.priceLevel,places.googleMapsUri,places.websiteUri,places.location,places.currentOpeningHours,places.userRatingCount",
+            "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.photos,places.priceLevel,places.googleMapsUri,places.websiteUri,places.location,places.currentOpeningHours,places.userRatingCount,places.internationalPhoneNumber",
         },
         method: "POST",
       }
     );
     if (!response.ok) {
+      if (body.searchKind === "venue") {
+        return { places: [], reason: "unavailable" as const };
+      }
       const fallback = generateFallbackPlaces(area, body.what, body.filters);
       return { places: fallback };
     }
@@ -2776,6 +2789,7 @@ const suggestPlaces = async (userId: string, input: unknown) => {
           authorAttributions?: { displayName?: string }[];
           name?: string;
         }[];
+        internationalPhoneNumber?: string;
         priceLevel?: string;
         rating?: number;
         types?: string[];
@@ -2805,6 +2819,9 @@ const suggestPlaces = async (userId: string, input: unknown) => {
           ...(place.currentOpeningHours?.openNow !== undefined
             ? { openNow: place.currentOpeningHours.openNow }
             : {}),
+          ...(place.internationalPhoneNumber
+            ? { phone: place.internationalPhoneNumber }
+            : {}),
           ...(place.priceLevel ? { priceLevel: place.priceLevel } : {}),
           ...(place.rating !== undefined
             ? { rating: place.rating.toFixed(1) }
@@ -2825,7 +2842,7 @@ const suggestPlaces = async (userId: string, input: unknown) => {
     });
 
     const resultPlaces =
-      places.length > 0
+      places.length > 0 || body.searchKind === "venue"
         ? places
         : generateFallbackPlaces(area, body.what, body.filters);
 
@@ -2835,6 +2852,9 @@ const suggestPlaces = async (userId: string, input: unknown) => {
     });
     return { places: resultPlaces };
   } catch {
+    if (body.searchKind === "venue") {
+      return { places: [], reason: "unavailable" as const };
+    }
     const fallback = generateFallbackPlaces(area, body.what, body.filters);
     return { places: fallback };
   }
@@ -4763,6 +4783,12 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   async getVenuePublicSummary(locationId: string) {
     return observeOperation("getVenuePublicSummary", async () =>
       getVenuePublicSummary(z.string().min(1).parse(locationId))
+    );
+  },
+
+  async listPublicVenueLocations() {
+    return observeOperation("listPublicVenueLocations", () =>
+      listPublicVenueLocations()
     );
   },
 

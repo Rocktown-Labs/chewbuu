@@ -9,6 +9,7 @@ import type {
   VenueAnalytics,
   VenueOperationalEvent,
   VenueOperationalEventType,
+  VenuePublicMenuItem,
   VenuePublicSummary,
   VenueSpecial,
   VenueTable,
@@ -444,8 +445,15 @@ export const listPublicVenueSpecials = async (input?: unknown) => {
   const now = new Date();
   let query = db
     .selectFrom("venue_special")
-    .selectAll()
-    .where("status", "=", "published")
+    .innerJoin(
+      "venue_location",
+      "venue_location.id",
+      "venue_special.location_id"
+    )
+    .selectAll("venue_special")
+    .where("venue_special.status", "=", "published")
+    .where("venue_location.status", "in", ["claimed", "live", "verified"])
+    .where("venue_location.stripe_identity_status", "=", "verified")
     .where("starts_at", "<=", now)
     .where((expression) =>
       expression.or([
@@ -453,8 +461,10 @@ export const listPublicVenueSpecials = async (input?: unknown) => {
         expression("ends_at", ">", now),
       ])
     );
-  if (body.locationId) query = query.where("location_id", "=", body.locationId);
-  if (body.category) query = query.where("category", "=", body.category);
+  if (body.locationId)
+    query = query.where("venue_special.location_id", "=", body.locationId);
+  if (body.category)
+    query = query.where("venue_special.category", "=", body.category);
   const specials = await query
     .orderBy("featured", "desc")
     .orderBy("display_order", "asc")
@@ -595,6 +605,64 @@ export const setVenuePublicAnalytics = async (
   };
 };
 
+const publicVenueStatuses = ["claimed", "live", "verified"] as const;
+
+const isPublicVenue = (location: {
+  status: string;
+  stripe_identity_status: string;
+}) =>
+  publicVenueStatuses.includes(
+    location.status as (typeof publicVenueStatuses)[number]
+  ) && location.stripe_identity_status === "verified";
+
+const toPublicMenuItem = (item: {
+  description: string | null;
+  id: string;
+  name: string;
+  price_cents: number;
+  section: string | null;
+}): VenuePublicMenuItem => ({
+  ...(item.description ? { description: item.description } : {}),
+  id: item.id,
+  name: item.name,
+  priceCents: item.price_cents,
+  ...(item.section ? { section: item.section } : {}),
+});
+
+export const listPublicVenueLocations = async () => {
+  const db = await getDb();
+  const locations = await db
+    .selectFrom("venue_location")
+    .select([
+      "address",
+      "handle",
+      "id",
+      "name",
+      "status",
+      "stripe_identity_status",
+    ])
+    .where("status", "in", publicVenueStatuses)
+    .where("stripe_identity_status", "=", "verified")
+    .where("handle", "is not", null)
+    .orderBy("name", "asc")
+    .limit(100)
+    .execute();
+  return {
+    locations: locations.flatMap((location) =>
+      location.handle
+        ? [
+            {
+              address: location.address ?? undefined,
+              handle: location.handle,
+              id: location.id,
+              name: location.name,
+            },
+          ]
+        : []
+    ),
+  };
+};
+
 export const getVenuePublicSummary = async (
   locationId: string
 ): Promise<VenuePublicSummary> => {
@@ -603,24 +671,51 @@ export const getVenuePublicSummary = async (
     .selectFrom("venue_location")
     .select([
       "address",
+      "handle",
       "id",
       "name",
       "public_analytics_enabled",
       "public_analytics_min_samples",
+      "status",
+      "stripe_identity_status",
+      "website_url",
     ])
-    .where("id", "=", locationId)
+    .where((expression) =>
+      expression.or([
+        expression("id", "=", locationId),
+        expression("handle", "=", locationId),
+      ])
+    )
     .executeTakeFirst();
   if (!location) throw new Error("Venue not found");
-  const specialsResult = await listPublicVenueSpecials({ locationId });
+  if (!isPublicVenue(location)) throw new Error("Spot is not published");
+
+  const [specialsResult, menuItems] = await Promise.all([
+    listPublicVenueSpecials({ locationId: location.id }),
+    db
+      .selectFrom("venue_menu_item")
+      .select(["description", "id", "name", "price_cents", "section"])
+      .where("location_id", "=", location.id)
+      .where("status", "=", "published")
+      .orderBy("sort_order", "asc")
+      .orderBy("name", "asc")
+      .execute(),
+  ]);
+  const publicFields = {
+    ...(location.address ? { address: location.address } : {}),
+    handle: location.handle ?? location.id,
+    locationId: location.id,
+    menuItems: menuItems.map(toPublicMenuItem),
+    name: location.name,
+    specials: specialsResult.specials,
+    ...(location.website_url ? { websiteUrl: location.website_url } : {}),
+  };
   if (!location.public_analytics_enabled) {
     return {
-      ...(location.address ? { address: location.address } : {}),
+      ...publicFields,
       averageCostCents: null,
       averageFoodWaitMinutes: null,
-      locationId,
-      name: location.name,
       sampleSize: 0,
-      specials: specialsResult.specials,
     };
   }
 
@@ -628,7 +723,7 @@ export const getVenuePublicSummary = async (
     db
       .selectFrom("venue_order")
       .select(["payment_status", "status", "total_cents"])
-      .where("location_id", "=", locationId)
+      .where("location_id", "=", location.id)
       .where("payment_status", "=", "paid")
       .where("status", "=", "completed")
       .execute(),
@@ -643,19 +738,16 @@ export const getVenuePublicSummary = async (
         "occurred_at",
         "order_id",
       ])
-      .where("location_id", "=", locationId)
+      .where("location_id", "=", location.id)
       .orderBy("occurred_at", "asc")
       .execute(),
   ]);
   if (orders.length < location.public_analytics_min_samples) {
     return {
-      ...(location.address ? { address: location.address } : {}),
+      ...publicFields,
       averageCostCents: null,
       averageFoodWaitMinutes: null,
-      locationId,
-      name: location.name,
       sampleSize: orders.length,
-      specials: specialsResult.specials,
     };
   }
 
@@ -669,15 +761,12 @@ export const getVenuePublicSummary = async (
     }
   }
   return {
-    ...(location.address ? { address: location.address } : {}),
+    ...publicFields,
     averageCostCents: Math.round(
       orders.reduce((sum, order) => sum + order.total_cents, 0) / orders.length
     ),
     averageFoodWaitMinutes: average(waits),
-    locationId,
-    name: location.name,
     sampleSize: orders.length,
-    specials: specialsResult.specials,
   };
 };
 

@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added Better Auth Organizations as the canonical venue organization boundary with a non-destructive bridge from existing venue memberships.
 - Added admin Stripe Connect credential verification with SSM SecureString storage; connected-account creation and money movement remain capability-gated pending policy decisions.
 - Added branded Chewbuu Sync venue and Crew workflows with admin Sugar/Sync test entitlements, reserved brand handles, styled community metadata, people invitations, venue staff invitations, lifecycle emails, venue operations pages, and the branded-community migration.
+- Added debounced Google venue lookup with Place ID retention, editable prefill, Chewbuu-hosted menu planning, and public Sync-verified spot listings and detail pages.
 - Added full-featured mobile authentication and multi-step onboarding in \`apps/native\` with **Basics**, **Device Permissions**, **Media Check**, **Dating Preferences**, and **Interests & Category Spots**, plus an explicit **Save for Later** action that persists drafts via \`expo-secure-store\` and enables immediate home tab exploration with top-feed resumption banners.
 - Built branded liquid glass mobile Login and Sign-Up screens (\`apps/native/app/auth/login.tsx\`, \`apps/native/app/auth/sign-up.tsx\`) and connected them to Better Auth and onboarding navigation.
 - Built React Native mobile app in \`apps/native\` with Expo Liquid Glass UI, floating \`LiquidGlassTabBar\` with \`expo-blur\` and gradient sheen, and 5 core tab screens: **Discover** (video profile cards, 3-min vibe check, quick matching), **Spots** (category filtering, Firecrawl menu highlights, date spot proposal), **Dates** (active date itinerary, Safety Beacon trusted circle status, \`.ics\` calendar export), **Chats** (realtime messaging threads, speed dating room queue), and **Profile** (media gallery, Safety Circle management, Sugar VIP Crews & Events manager).
@@ -44,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Reworked venue onboarding around Find → Claim → Verify → Build → Launch, with role selection, Google prefill, menu destination choices, clearer progress, and a public verified-spot path.
 - Added a Stripe Identity tab and verification gate to personal onboarding, surfaced identity in the home readiness rail, and replaced fabricated dashboard cards with real counts or honest empty states.
 - Reworked completed-user profile editing into closed-by-default accordions with independently dirty-only saves, persisted media previews/playback, and the same age-range slider rules used by onboarding.
 - Made existing usernames read-only and added a bloom-filter-assisted, email-verified, rate-limited username change queue with admin approval and notification emails.

@@ -53,6 +53,14 @@ When a user selects a place, Chewbuu may use a transient official website URL to
 
 The preview is useful for date planning and can expire. Once the venue claims the location, the operator can import the draft into an editable menu version and publish corrections. Firecrawl is an ingestion assistant, not the canonical source of truth.
 
+## Smart venue onboarding and public spots
+
+Venue onboarding starts with a debounced Google Places lookup by venue name or address. Google is used only to identify the physical place and prefill editable name, address, phone, website, and coordinates. Chewbuu retains the permitted Place ID and then treats the submitted record as venue-owned data; the Google result is not the canonical profile or menu.
+
+A venue organization represents the brand or restaurant group, and each physical branch is a `venue_location`. Every location already has a stable internal ID and a unique handle suitable for a public URL such as `/spots/cgs-southern-cafe`. Multiple branches should therefore share one organization while keeping separate locations, menus, hours, tables, and operating data. The system should never auto-merge branches by matching names; attaching a new location to an existing organization requires an authorized operator or enterprise setup flow.
+
+Public spot pages are available at `/spots` and `/spots/:handle`, but only claimed, Stripe Identity-verified locations are published. Unclaimed, pending, or incomplete locations remain available inside the authenticated app and venue workflow without becoming public.
+
 ## Guided vendor setup
 
 The venue portal is a public starting point for venue discovery and referrals. Anyone can view it, but an authenticated Chewbuu account is required to submit a venue. A signed-in member may either refer a venue or identify themselves as someone who works there; an owner claim remains pending until approved. Venue operations are available only to an approved claimant, an accepted venue-team invite, or an authorized admin.

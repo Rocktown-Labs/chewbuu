@@ -178,12 +178,20 @@ const HomeComponent = () => {
               Sign In
             </Link>
           </div>
-          <Link
-            className="text-sm font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            to="/venue-portal"
-          >
-            Own or help onboard a venue →
-          </Link>
+          <div className="flex flex-col items-center gap-3 sm:flex-row">
+            <Link
+              className="text-sm font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              to="/spots"
+            >
+              Explore verified spots →
+            </Link>
+            <Link
+              className="text-sm font-semibold text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              to="/venue-portal"
+            >
+              Own or help onboard a venue →
+            </Link>
+          </div>
         </div>
       </section>
 
