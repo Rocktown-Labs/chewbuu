@@ -40,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Made Stripe Identity a required gate in venue onboarding before profile media, and added venue profile picture, intro video, and multi-select additional photo uploads to the media step.
 - Compacted onboarding step navigation pills to dynamic fit-to-text widths across mobile and desktop, removing empty spacing and checkmark icons while styling completed steps with a clean green accent.
 - Redesigned onboarding Basics step into a 2-column mobile layout with 3 expandable accordion sections (Contact & Handle, Personal Details & Location, Identity & Bio) and embedded navigation.
 - Redesigned onboarding Permissions step into a 2-column mobile card grid with client-side mobile haptics capability detection.
