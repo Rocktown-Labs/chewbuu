@@ -55,7 +55,7 @@ The preview is useful for date planning and can expire. Once the venue claims th
 
 ## Guided vendor setup
 
-The venue portal uses a progressive setup flow: basics, representative verification, brand and storefront assets, the venue-owned menu, then staff and launch readiness. Stripe Identity uses a Stripe-hosted redirect for document and matching-selfie checks; Chewbuu stores the session ID, status, and verified representative name only, never document images or the short-lived session URL.
+The venue portal uses a progressive setup flow: basics, representative permissions and Stripe Identity verification, profile/media, the venue-owned menu, then staff and launch readiness. Identity must be confirmed before the media step unlocks. The media step collects a venue profile picture, intro video, and optional additional venue photos in one place. Stripe Identity uses a Stripe-hosted redirect for document and matching-selfie checks; Chewbuu stores the session ID, status, and verified representative name only, never document images or the short-lived session URL.
 
 Venue-owned menu items live in PostgreSQL and can include an item-linked food photo plus modifier groups and options (for example, side choices, add-ons, and preparation preferences). Firecrawl menu rows remain temporary and unverified, and cannot overwrite the operator's catalog.
 

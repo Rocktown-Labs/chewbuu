@@ -344,9 +344,12 @@ type VenueSetupStep = 2 | 3 | 4 | 5;
 function VenueSetupSteps({ location }: { location: VenueLocation }) {
   const [step, setStep] = useState<VenueSetupStep>(2);
   const [isSaving, setIsSaving] = useState(false);
+  const [mediaSaved, setMediaSaved] = useState(false);
   const [verification, setVerification] =
     useState<VenueIdentityVerificationSession | null>(null);
-  const [venuePhoto, setVenuePhoto] = useState<File | null>(null);
+  const [venueProfilePhoto, setVenueProfilePhoto] = useState<File | null>(null);
+  const [venueIntroVideo, setVenueIntroVideo] = useState<File | null>(null);
+  const [additionalPhotos, setAdditionalPhotos] = useState<File[]>([]);
   const [items, setItems] = useState<VenueMenuItem[]>([]);
   const [itemPhoto, setItemPhoto] = useState<File | null>(null);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
@@ -407,26 +410,49 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
     }
   };
 
-  const uploadVenuePhoto = async () => {
-    if (!venuePhoto) return;
+  const uploadVenueMedia = async (
+    file: File,
+    kind: "venue_intro_video" | "venue_photo" | "venue_profile_photo"
+  ) => {
     const upload = await venueApi.uploadMedia({
-      contentType: venuePhoto.type,
-      fileName: venuePhoto.name,
-      kind: "venue_photo",
+      contentType: file.type,
+      fileName: file.name,
+      kind,
       locationId: location.id,
     });
     const response = await fetch(upload.uploadUrl, {
-      body: venuePhoto,
-      headers: { "content-type": venuePhoto.type },
+      body: file,
+      headers: { "content-type": file.type },
       method: "PUT",
     });
-    if (!response.ok) throw new Error("Could not upload the venue photo.");
+    if (!response.ok)
+      throw new Error(`Could not upload ${kind.replaceAll("_", " ")}.`);
     await venueApi.saveMedia({
-      kind: "venue_photo",
+      kind,
       locationId: location.id,
       url: upload.mediaUrl,
     });
-    setVenuePhoto(null);
+  };
+
+  const uploadProfileMedia = async () => {
+    const uploads = [
+      venueProfilePhoto
+        ? { file: venueProfilePhoto, kind: "venue_profile_photo" as const }
+        : null,
+      venueIntroVideo
+        ? { file: venueIntroVideo, kind: "venue_intro_video" as const }
+        : null,
+      ...additionalPhotos.map((file) => ({
+        file,
+        kind: "venue_photo" as const,
+      })),
+    ].filter((upload) => upload !== null);
+    await Promise.all(
+      uploads.map(({ file, kind }) => uploadVenueMedia(file, kind))
+    );
+    setVenueProfilePhoto(null);
+    setVenueIntroVideo(null);
+    setAdditionalPhotos([]);
   };
 
   const saveBrand = async (event: FormEvent<HTMLFormElement>) => {
@@ -445,9 +471,10 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
           tagline: brand.tagline,
         },
       });
-      await uploadVenuePhoto();
+      await uploadProfileMedia();
+      setMediaSaved(true);
       setStep(4);
-      toast.success("Brand and venue assets saved. Build the menu next.");
+      toast.success("Profile and venue media saved. Build the menu next.");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not save venue assets."
@@ -554,13 +581,25 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
     }
   };
 
+  const goToStep = (nextStep: VenueSetupStep) => {
+    if (nextStep >= 3 && verification?.status !== "verified") {
+      toast.info("Confirm Stripe Identity before adding venue media.");
+      return;
+    }
+    if (nextStep >= 4 && !mediaSaved) {
+      toast.info("Save your profile media before continuing to the menu.");
+      return;
+    }
+    setStep(nextStep);
+  };
+
   return (
     <div className="mt-6 space-y-5 border-t pt-6 [&_[data-slot=input]]:rounded-xl [&_[data-slot=textarea]]:rounded-xl">
       <div className="grid gap-2 sm:grid-cols-4" aria-label="Venue setup steps">
         {(
           [
-            { label: "Verify", value: 2 },
-            { label: "Brand & photos", value: 3 },
+            { label: "Identity", value: 2 },
+            { label: "Profile & media", value: 3 },
             { label: "Menu", value: 4 },
             { label: "People & launch", value: 5 },
           ] as const
@@ -568,7 +607,7 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
           <button
             className={`rounded-2xl border px-3 py-3 text-left text-xs transition ${step === value ? "border-primary bg-primary/10 text-foreground" : "border-border/70 text-muted-foreground hover:bg-muted/50"}`}
             key={value}
-            onClick={() => setStep(value as VenueSetupStep)}
+            onClick={() => goToStep(value)}
             type="button"
           >
             <span className="block font-semibold">0{value - 1}</span>
@@ -586,9 +625,10 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
                 Verify the venue representative
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Stripe Identity opens a Stripe-hosted document and selfie check.
-                We use the verified name for the representative record and do
-                not handle document images ourselves.
+                Give Stripe permission to verify the venue representative with a
+                Stripe-hosted document and selfie check. We use the verified
+                name for the representative record and never handle document
+                images ourselves.
               </p>
             </div>
           </div>
@@ -620,9 +660,15 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
             <Button onClick={loadVerification} type="button" variant="outline">
               Refresh status
             </Button>
-            <Button onClick={() => setStep(3)} type="button" variant="ghost">
-              Do this later
-            </Button>
+            {verification?.status === "verified" ? (
+              <Button onClick={() => setStep(3)} type="button">
+                Continue to profile & media
+              </Button>
+            ) : (
+              <p className="basis-full text-xs text-muted-foreground">
+                Complete verification to unlock your profile media step.
+              </p>
+            )}
           </div>
         </div>
       ) : null}
@@ -637,8 +683,8 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
               Make the place feel like itself
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Your public brand, store imagery, and venue story live here. Menu
-              item photography belongs with the item in the next step.
+              Identity is confirmed. Now add the profile picture, intro video,
+              and additional photos guests will see before you build the menu.
             </p>
           </div>
           <FormField label="Venue handle">
@@ -690,24 +736,70 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
               onChange={(event) => updateBrand("logoUrl", event.target.value)}
             />
           </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              label="Venue profile picture"
+              description="Use a clear logo, storefront, or hero image."
+              required
+            >
+              <Input
+                accept="image/*"
+                onChange={(event) =>
+                  setVenueProfilePhoto(event.target.files?.[0] ?? null)
+                }
+                required={!venueProfilePhoto}
+                type="file"
+              />
+            </FormField>
+            <FormField
+              label="Venue intro video"
+              description="A short welcome from the venue team helps guests know what to expect."
+              required
+            >
+              <Input
+                accept="video/*"
+                onChange={(event) =>
+                  setVenueIntroVideo(event.target.files?.[0] ?? null)
+                }
+                required={!venueIntroVideo}
+                type="file"
+              />
+            </FormField>
+          </div>
           <FormField
-            label="Storefront photo"
-            description="Upload the front door, interior, or another image that helps guests recognize the venue."
+            label="Additional venue photos"
+            description="Select the interior, patio, dishes, or other photos guests should see."
           >
             <Input
               accept="image/*"
+              multiple
               onChange={(event) =>
-                setVenuePhoto(event.target.files?.[0] ?? null)
+                setAdditionalPhotos(Array.from(event.target.files ?? []))
               }
               type="file"
             />
           </FormField>
+          {venueProfilePhoto ||
+          venueIntroVideo ||
+          additionalPhotos.length > 0 ? (
+            <div className="rounded-2xl bg-primary/5 p-4 text-sm">
+              <p className="font-medium">Media selected</p>
+              <p className="mt-1 text-muted-foreground">
+                {[
+                  venueProfilePhoto ? "profile picture" : null,
+                  venueIntroVideo ? "intro video" : null,
+                  additionalPhotos.length > 0
+                    ? `${additionalPhotos.length} additional photo${additionalPhotos.length === 1 ? "" : "s"}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button disabled={isSaving} type="submit">
-              <Camera className="mr-2 size-4" /> Save brand & photo
-            </Button>
-            <Button onClick={() => setStep(4)} type="button" variant="ghost">
-              Skip for now
+              <Camera className="mr-2 size-4" /> Save profile & media
             </Button>
           </div>
         </form>
@@ -798,7 +890,7 @@ function VenueSetupSteps({ location }: { location: VenueLocation }) {
               />
             ))}
           </div>
-          <Button onClick={() => setStep(5)} type="button" variant="outline">
+          <Button onClick={() => goToStep(5)} type="button" variant="outline">
             Continue to people & launch
           </Button>
         </div>

@@ -320,7 +320,12 @@ export interface VenueWorkspace {
   tables: VenueTable[];
 }
 
-export type VenueMediaKind = "food_photo" | "menu_photo" | "venue_photo";
+export type VenueMediaKind =
+  | "food_photo"
+  | "menu_photo"
+  | "venue_intro_video"
+  | "venue_photo"
+  | "venue_profile_photo";
 
 export interface DateRequestPayload {
   filters: string[];

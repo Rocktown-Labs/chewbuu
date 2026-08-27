@@ -5137,7 +5137,13 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         .object({
           contentType: z.string().trim().min(1),
           fileName: z.string().trim().min(1).max(255),
-          kind: z.enum(["food_photo", "menu_photo", "venue_photo"]),
+          kind: z.enum([
+            "food_photo",
+            "menu_photo",
+            "venue_intro_video",
+            "venue_photo",
+            "venue_profile_photo",
+          ]),
           locationId: z.string().min(1),
         })
         .parse(input);
@@ -5148,8 +5154,16 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         .where("id", "=", body.locationId)
         .executeTakeFirst();
       if (!location) throw new Error("Venue not found");
-      if (!body.contentType.startsWith("image/")) {
-        throw new Error("Venue media must be an image upload.");
+      const expectsVideo = body.kind === "venue_intro_video";
+      const hasExpectedContentType = expectsVideo
+        ? body.contentType.startsWith("video/")
+        : body.contentType.startsWith("image/");
+      if (!hasExpectedContentType) {
+        throw new Error(
+          expectsVideo
+            ? "The venue intro must be a video upload."
+            : "Venue media must be an image upload."
+        );
       }
       const pathname = venueMediaPath(body.locationId, body);
       const uploadUrl = await mediaBucket.putUrl(pathname, {
@@ -5173,7 +5187,13 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
       const sessionUser = await requireSession(context.request.headers);
       const body = z
         .object({
-          kind: z.enum(["food_photo", "menu_photo", "venue_photo"]),
+          kind: z.enum([
+            "food_photo",
+            "menu_photo",
+            "venue_intro_video",
+            "venue_photo",
+            "venue_profile_photo",
+          ]),
           locationId: z.string().min(1),
           url: z.string().min(1),
         })
