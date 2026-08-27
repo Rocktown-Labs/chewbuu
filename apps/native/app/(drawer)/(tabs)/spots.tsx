@@ -1,3 +1,4 @@
+import { api as blocksApi, type VenueSpecial } from "@chewbuu/aws-blocks";
 import * as Haptics from "expo-haptics";
 import {
   Camera,
@@ -9,7 +10,7 @@ import {
   Star,
   UtensilsCrossed,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -77,6 +78,19 @@ export default function SpotsScreen() {
   const insets = useSafeAreaInsets();
   const [activeCategory, setActiveCategory] = useState<string>("Eat");
   const [searchQuery, setSearchQuery] = useState("");
+  const [specials, setSpecials] = useState<VenueSpecial[]>([]);
+
+  useEffect(() => {
+    const loadSpecials = async () => {
+      try {
+        const result = await blocksApi.listPublicVenueSpecials();
+        setSpecials(result.specials);
+      } catch {
+        setSpecials([]);
+      }
+    };
+    void loadSpecials();
+  }, []);
 
   const filteredSpots = MOCK_SPOTS.filter((spot) => {
     const matchesCategory = spot.category === activeCategory;
@@ -166,6 +180,42 @@ export default function SpotsScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
+        {specials.length > 0 && (
+          <View className="gap-3">
+            <Text className="text-lg font-extrabold text-foreground">
+              Live specials
+            </Text>
+            {specials.slice(0, 4).map((special) => (
+              <Card
+                key={special.id}
+                className="border-amber-400/30 bg-amber-500/10"
+              >
+                <View className="flex-row items-start justify-between gap-3 p-4">
+                  <View className="flex-1 gap-1">
+                    <Text className="text-[10px] font-bold uppercase text-amber-500">
+                      {special.category}
+                    </Text>
+                    <Text className="text-base font-bold text-foreground">
+                      {special.title}
+                    </Text>
+                    {special.description ? (
+                      <Text className="text-xs text-muted-foreground">
+                        {special.description}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {special.priceText ? (
+                    <Badge variant="outline" className="px-2">
+                      <Text className="text-xs text-foreground">
+                        {special.priceText}
+                      </Text>
+                    </Badge>
+                  ) : null}
+                </View>
+              </Card>
+            ))}
+          </View>
+        )}
         {filteredSpots.map((spot) => (
           <Card key={spot.id} className="p-0 overflow-hidden border-border/70">
             {/* Spot Image Header */}

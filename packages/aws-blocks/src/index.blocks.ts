@@ -81,10 +81,25 @@ import type {
   VenueMediaUploadInput,
   NotificationChannelClient,
   NotificationsResponse,
+  StripeConnectStatus,
   SyncPricingPlansResponse,
   UpdateCommunityInput,
   UpdateVenueBrandInput,
 } from "./types";
+import {
+  createVenueSpecial,
+  endVenueDiningSession,
+  getVenueAnalytics,
+  getVenuePublicSummary,
+  getVenueTimeline,
+  listPublicVenueSpecials,
+  listVenueSpecials,
+  listVenueTables,
+  recordVenueOperationalEvent,
+  setVenuePublicAnalytics,
+  updateVenueSpecial,
+  upsertVenueTable,
+} from "./venue-analytics";
 import { previewVenueMenu } from "./venue-menu";
 import {
   acceptVenueInvite,
@@ -296,6 +311,26 @@ const betterAuthSecret = AppSetting.fromExisting(scope, "better-auth-secret", {
   name: process.env.BLOCKS_AUTH_SECRET_PARAMETER ?? "/chewbuu-prod-auth-secret",
   secret: true,
 });
+const stripeConnectSecretKey = AppSetting.fromExisting(
+  scope,
+  "stripe-connect-secret-key",
+  {
+    name:
+      process.env.BLOCKS_STRIPE_CONNECT_SECRET_PARAMETER ??
+      "/chewbuu-prod-stripe-connect-secret-key",
+    secret: true,
+  }
+);
+const stripeConnectWebhookSecret = AppSetting.fromExisting(
+  scope,
+  "stripe-connect-webhook-secret",
+  {
+    name:
+      process.env.BLOCKS_STRIPE_CONNECT_WEBHOOK_PARAMETER ??
+      "/chewbuu-prod-stripe-connect-webhook-secret",
+    secret: true,
+  }
+);
 
 const mediaBucket = new FileBucket(scope, "media", {
   corsRules: [
@@ -1138,16 +1173,15 @@ const publishVenueEvent = async (event: {
 
   const db = await getDb();
   const members = await db
-    .selectFrom("venue_member")
+    .selectFrom("member")
     .innerJoin(
       "venue_location",
       "venue_location.organization_id",
-      "venue_member.organization_id"
+      "member.organization_id"
     )
-    .innerJoin("user", "user.id", "venue_member.user_id")
+    .innerJoin("user", "user.id", "member.user_id")
     .select(["user.id", "user.email"])
     .where("venue_location.id", "=", event.locationId)
-    .where("venue_member.status", "=", "active")
     .execute();
 
   const recipients = new Map(
@@ -3136,6 +3170,79 @@ const requireAdmin = (sessionUser: SessionUser) => {
   }
 };
 
+const stripeSecretKeySchema = z
+  .string()
+  .trim()
+  .regex(
+    /^(?:sk|rk)_(?:test|live)_[A-Za-z0-9]+$/,
+    "Enter a valid Stripe secret or restricted key."
+  );
+const stripeWebhookSecretSchema = z
+  .string()
+  .trim()
+  .regex(/^whsec_[A-Za-z0-9]+$/, "Enter a valid Stripe webhook secret.");
+
+const readStripeConnectSecret = async (setting: AppSetting<string>) => {
+  try {
+    const value = await setting.get();
+    return value || null;
+  } catch {
+    return null;
+  }
+};
+
+const configureStripeConnect = async (
+  sessionUser: SessionUser,
+  input: unknown
+): Promise<StripeConnectStatus> => {
+  requireAdmin(sessionUser);
+  const body = z
+    .object({
+      secretKey: stripeSecretKeySchema,
+      webhookSecret: stripeWebhookSecretSchema,
+    })
+    .parse(input);
+  const stripeClient = new Stripe(body.secretKey);
+  await stripeClient.balance.retrieve();
+  await stripeConnectSecretKey.put(body.secretKey);
+  await stripeConnectWebhookSecret.put(body.webhookSecret);
+  return {
+    accountId: null,
+    configured: true,
+    keyLast4: body.secretKey.slice(-4),
+    mode: body.secretKey.includes("_live_") ? "live" : "test",
+    webhookConfigured: true,
+  };
+};
+
+const getStripeConnectStatus = async (
+  sessionUser: SessionUser
+): Promise<StripeConnectStatus> => {
+  requireAdmin(sessionUser);
+  const [secretKey, webhookSecret] = await Promise.all([
+    readStripeConnectSecret(stripeConnectSecretKey),
+    readStripeConnectSecret(stripeConnectWebhookSecret),
+  ]);
+  if (!secretKey) {
+    return {
+      accountId: null,
+      configured: false,
+      keyLast4: null,
+      mode: null,
+      webhookConfigured: Boolean(webhookSecret),
+    };
+  }
+  const stripeClient = new Stripe(secretKey);
+  await stripeClient.balance.retrieve();
+  return {
+    accountId: null,
+    configured: true,
+    keyLast4: secretKey.slice(-4),
+    mode: secretKey.includes("_live_") ? "live" : "test",
+    webhookConfigured: Boolean(webhookSecret),
+  };
+};
+
 const getAccountEntitlements = async (
   sessionUser: SessionUser
 ): Promise<AccountEntitlementsResponse> => {
@@ -3845,16 +3952,15 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     if (!isAdmin) {
       const db = await getDb();
       const member = await db
-        .selectFrom("venue_member")
+        .selectFrom("member")
         .innerJoin(
           "venue_location",
           "venue_location.organization_id",
-          "venue_member.organization_id"
+          "member.organization_id"
         )
-        .select("venue_member.id")
+        .select("member.id")
         .where("venue_location.id", "=", normalizedLocationId)
-        .where("venue_member.user_id", "=", sessionUser.id)
-        .where("venue_member.status", "=", "active")
+        .where("member.user_id", "=", sessionUser.id)
         .executeTakeFirst();
       if (!member) throw new Error("Venue access required");
     }
@@ -4315,10 +4421,155 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   async getVenueWorkspace(locationId: string) {
     return observeOperation("getVenueWorkspace", async () => {
       const sessionUser = await requireSession(context.request.headers);
-      return getVenueWorkspace(
+      const normalizedLocationId = z.string().min(1).parse(locationId);
+      const isAdmin = isConfiguredAdmin(sessionUser);
+      const [workspace, analytics, timeline, specials, tables] =
+        await Promise.all([
+          getVenueWorkspace(sessionUser.id, normalizedLocationId, isAdmin),
+          getVenueAnalytics(sessionUser.id, normalizedLocationId, isAdmin),
+          getVenueTimeline(sessionUser.id, normalizedLocationId, isAdmin),
+          listVenueSpecials(sessionUser.id, normalizedLocationId, isAdmin),
+          listVenueTables(sessionUser.id, normalizedLocationId, isAdmin),
+        ]);
+      return {
+        ...workspace,
+        analytics,
+        events: timeline.events,
+        specials: specials.specials,
+        tables: tables.tables,
+      };
+    });
+  },
+
+  async getVenueAnalytics(
+    locationId: string,
+    input?: { endAt?: string; startAt?: string }
+  ) {
+    return observeOperation("getVenueAnalytics", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getVenueAnalytics(
+        sessionUser.id,
+        z.string().min(1).parse(locationId),
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async getVenueTimeline(locationId: string) {
+    return observeOperation("getVenueTimeline", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getVenueTimeline(
         sessionUser.id,
         z.string().min(1).parse(locationId),
         isConfiguredAdmin(sessionUser)
+      );
+    });
+  },
+
+  async getVenuePublicSummary(locationId: string) {
+    return observeOperation("getVenuePublicSummary", async () =>
+      getVenuePublicSummary(z.string().min(1).parse(locationId))
+    );
+  },
+
+  async listPublicVenueSpecials(input?: {
+    category?: string;
+    locationId?: string;
+  }) {
+    return observeOperation("listPublicVenueSpecials", () =>
+      listPublicVenueSpecials(input)
+    );
+  },
+
+  async listVenueSpecials(locationId: string) {
+    return observeOperation("listVenueSpecials", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return listVenueSpecials(
+        sessionUser.id,
+        z.string().min(1).parse(locationId),
+        isConfiguredAdmin(sessionUser)
+      );
+    });
+  },
+
+  async createVenueSpecial(input: unknown) {
+    return observeOperation("createVenueSpecial", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createVenueSpecial(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async updateVenueSpecial(input: unknown) {
+    return observeOperation("updateVenueSpecial", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return updateVenueSpecial(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async setVenuePublicAnalytics(input: {
+    enabled: boolean;
+    locationId: string;
+    minSamples?: number;
+  }) {
+    return observeOperation("setVenuePublicAnalytics", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return setVenuePublicAnalytics(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async recordVenueOperationalEvent(input: unknown) {
+    return observeOperation("recordVenueOperationalEvent", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return recordVenueOperationalEvent(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async endVenueDiningSession(sessionId: string) {
+    return observeOperation("endVenueDiningSession", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return endVenueDiningSession(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        z.string().min(1).parse(sessionId)
+      );
+    });
+  },
+
+  async listVenueTables(locationId: string) {
+    return observeOperation("listVenueTables", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return listVenueTables(
+        sessionUser.id,
+        z.string().min(1).parse(locationId),
+        isConfiguredAdmin(sessionUser)
+      );
+    });
+  },
+
+  async upsertVenueTable(input: unknown) {
+    return observeOperation("upsertVenueTable", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return upsertVenueTable(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
       );
     });
   },
@@ -4336,6 +4587,27 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         isConfiguredAdmin(sessionUser),
         input
       );
+      const reservationEventType =
+        result.reservation.status === "confirmed"
+          ? "reservation_confirmed"
+          : result.reservation.status === "seated"
+            ? "reservation_seated"
+            : result.reservation.status === "requested"
+              ? "reservation_requested"
+              : undefined;
+      if (reservationEventType) {
+        await recordVenueOperationalEvent(
+          sessionUser.id,
+          isConfiguredAdmin(sessionUser),
+          {
+            eventType: reservationEventType,
+            locationId: result.reservation.locationId,
+            metadata: { status: result.reservation.status },
+            reservationId: result.reservation.id,
+            source: "staff",
+          }
+        );
+      }
       await publishVenueEvent({
         detail: `Reservation ${result.reservation.status}${result.reservation.tableLabel ? ` at table ${result.reservation.tableLabel}` : ""}.`,
         id: result.reservation.id,
@@ -4366,6 +4638,30 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         isConfiguredAdmin(sessionUser),
         input
       );
+      const orderEventType =
+        result.order.status === "preparing"
+          ? "cooking_started"
+          : result.order.status === "served"
+            ? "food_served"
+            : result.order.status === "completed"
+              ? "order_completed"
+              : undefined;
+      if (orderEventType) {
+        await recordVenueOperationalEvent(
+          sessionUser.id,
+          isConfiguredAdmin(sessionUser),
+          {
+            entityId: result.order.id,
+            diningSessionId: result.order.diningSessionId,
+            entityType: "order",
+            eventType: orderEventType,
+            locationId: result.order.locationId,
+            metadata: { status: result.order.status },
+            orderId: result.order.id,
+            source: "staff",
+          }
+        );
+      }
       await publishVenueEvent({
         detail: `Order moved to ${result.order.status}.`,
         id: result.order.id,
@@ -4387,6 +4683,13 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return observeOperation("requestVenueReservation", async () => {
       const sessionUser = await requireSession(context.request.headers);
       const result = await requestVenueReservation(sessionUser.id, input);
+      await recordVenueOperationalEvent(sessionUser.id, false, {
+        eventType: "reservation_requested",
+        locationId: result.reservation.locationId,
+        metadata: { partySize: result.reservation.partySize },
+        reservationId: result.reservation.id,
+        source: "guest",
+      });
       await publishVenueEvent({
         detail: `A party of ${result.reservation.partySize} requested ${new Date(result.reservation.requestedAt).toLocaleString()}.`,
         id: result.reservation.id,
@@ -4412,7 +4715,18 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   }) {
     return observeOperation("startVenueDiningSession", async () => {
       const sessionUser = await requireSession(context.request.headers);
-      return startVenueDiningSession(sessionUser.id, input);
+      const result = await startVenueDiningSession(sessionUser.id, input);
+      await recordVenueOperationalEvent(sessionUser.id, false, {
+        diningSessionId: result.session.id,
+        entityId: result.session.id,
+        entityType: "dining_session",
+        eventType: "arrived",
+        locationId: result.session.locationId,
+        metadata: { tableLabel: result.session.tableLabel ?? null },
+        reservationId: result.session.reservationId,
+        source: "guest",
+      });
+      return result;
     });
   },
 
@@ -4431,6 +4745,17 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return observeOperation("createVenueOrder", async () => {
       const sessionUser = await requireSession(context.request.headers);
       const result = await createVenueOrder(sessionUser.id, input);
+      await recordVenueOperationalEvent(sessionUser.id, false, {
+        diningSessionId: input.diningSessionId,
+        entityId: result.order.id,
+        entityType: "order",
+        eventType: "order_submitted",
+        locationId: result.order.locationId,
+        metadata: { totalCents: result.order.totalCents },
+        orderId: result.order.id,
+        reservationId: input.reservationId,
+        source: "guest",
+      });
       await publishVenueEvent({
         detail: `A new order for $${(result.order.totalCents / 100).toFixed(2)} is ready to review.`,
         id: result.order.id,
@@ -4520,6 +4845,23 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return observeOperation("syncPricingPlans", async () => {
       const sessionUser = await requireSession(context.request.headers);
       return syncPricingPlans(sessionUser);
+    });
+  },
+
+  async configureStripeConnect(input: {
+    secretKey: string;
+    webhookSecret: string;
+  }) {
+    return observeOperation("configureStripeConnect", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return configureStripeConnect(sessionUser, input);
+    });
+  },
+
+  async getStripeConnectStatus() {
+    return observeOperation("getStripeConnectStatus", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getStripeConnectStatus(sessionUser);
     });
   },
 

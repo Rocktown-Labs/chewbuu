@@ -357,6 +357,34 @@ export interface VenueOrganizationTable {
   updated_at: Timestamp;
 }
 
+export interface OrganizationTable {
+  created_at: Timestamp;
+  id: string;
+  logo: string | null;
+  metadata: string | null;
+  name: string;
+  slug: string;
+}
+
+export interface MemberTable {
+  created_at: Timestamp;
+  id: string;
+  organization_id: string;
+  role: string;
+  user_id: string;
+}
+
+export interface InvitationTable {
+  created_at: Timestamp;
+  email: string;
+  expires_at: Timestamp;
+  id: string;
+  inviter_id: string;
+  organization_id: string;
+  role: string | null;
+  status: string;
+}
+
 export interface VenueLocationTable {
   address: string | null;
   claimed_at: Timestamp | null;
@@ -369,6 +397,8 @@ export interface VenueLocationTable {
   name: string;
   organization_id: string;
   phone: string | null;
+  public_analytics_enabled: boolean;
+  public_analytics_min_samples: number;
   status: string;
   style: JsonColumn<Record<string, string>>;
   submitted_by_user_id: string | null;
@@ -555,6 +585,53 @@ export interface VenueTipAllocationTable {
   status: string;
 }
 
+export interface VenueOperationalEventTable {
+  actor_user_id: string | null;
+  created_at: Timestamp;
+  date_request_id: string | null;
+  dining_session_id: string | null;
+  entity_id: string | null;
+  entity_type: string | null;
+  event_type: string;
+  id: string;
+  location_id: string;
+  metadata: JsonColumn<Record<string, unknown>>;
+  occurred_at: Timestamp;
+  order_id: string | null;
+  reservation_id: string | null;
+  source: string;
+  table_id: string | null;
+}
+
+export interface VenueTableTable {
+  capacity: number;
+  created_at: Timestamp;
+  id: string;
+  label: string;
+  location_id: string;
+  section: string | null;
+  status: string;
+  updated_at: Timestamp;
+}
+
+export interface VenueSpecialTable {
+  category: string;
+  created_at: Timestamp;
+  created_by_user_id: string | null;
+  description: string | null;
+  display_order: number;
+  ends_at: Timestamp | null;
+  featured: boolean;
+  id: string;
+  location_id: string;
+  price_text: string | null;
+  published_at: Timestamp | null;
+  starts_at: Timestamp;
+  status: string;
+  title: string;
+  updated_at: Timestamp;
+}
+
 export interface BlocksDatabase {
   circle: CircleTable;
   circle_member: CircleMemberTable;
@@ -572,6 +649,9 @@ export interface BlocksDatabase {
   friend_invite: FriendInviteTable;
   friendship: FriendshipTable;
   membership_plan: MembershipPlanTable;
+  member: MemberTable;
+  organization: OrganizationTable;
+  invitation: InvitationTable;
   notification: NotificationTable;
   subscription: SubscriptionTable;
   sync_subscription: SyncSubscriptionTable;
@@ -589,6 +669,7 @@ export interface BlocksDatabase {
   venue_member: VenueMemberTable;
   venue_member_invite: VenueMemberInviteTable;
   venue_menu: VenueMenuTable;
+  venue_operational_event: VenueOperationalEventTable;
   venue_order: VenueOrderTable;
   venue_order_item: VenueOrderItemTable;
   venue_organization: VenueOrganizationTable;
@@ -596,6 +677,8 @@ export interface BlocksDatabase {
   venue_reservation: VenueReservationTable;
   venue_shift: VenueShiftTable;
   venue_shift_swap: VenueShiftSwapTable;
+  venue_special: VenueSpecialTable;
+  venue_table: VenueTableTable;
   venue_tip_allocation: VenueTipAllocationTable;
 }
 

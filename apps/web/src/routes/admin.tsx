@@ -44,7 +44,13 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
-import { datingApi, pricingApi, type MembershipPlan } from "@/lib/dating-api";
+import {
+  connectApi,
+  datingApi,
+  pricingApi,
+  type MembershipPlan,
+  type StripeConnectStatus,
+} from "@/lib/dating-api";
 
 interface AdminUser {
   banExpires?: string | Date | null;
@@ -111,6 +117,13 @@ const RouteComponent = () => {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [runningJob, setRunningJob] = useState(false);
+  const [connectStatus, setConnectStatus] =
+    useState<StripeConnectStatus | null>(null);
+  const [connectForm, setConnectForm] = useState({
+    secretKey: "",
+    webhookSecret: "",
+  });
+  const [savingConnect, setSavingConnect] = useState(false);
 
   // Users state
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -155,8 +168,16 @@ const RouteComponent = () => {
     if (!isAdmin) {
       return;
     }
+    const loadConnectStatus = async () => {
+      try {
+        setConnectStatus(await connectApi.getStatus());
+      } catch {
+        setConnectStatus(null);
+      }
+    };
     void loadPlans();
     void loadUsers();
+    void loadConnectStatus();
   }, [isAdmin]);
 
   const handleSetRole = async (userId: string, currentRole?: string | null) => {
@@ -840,6 +861,105 @@ const RouteComponent = () => {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader>
+                <Badge className="mb-2 w-fit rounded-full" variant="secondary">
+                  Stripe Connect
+                </Badge>
+                <CardTitle className="text-xl">Platform connection</CardTitle>
+                <CardDescription>
+                  Store the platform key and webhook secret in AWS SSM
+                  SecureString, then verify the connection from this control
+                  room. Keys never return to the browser after saving.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2 text-sm">
+                  <Badge
+                    variant={connectStatus?.configured ? "default" : "outline"}
+                  >
+                    {connectStatus?.configured
+                      ? `${connectStatus.mode} key ····${connectStatus.keyLast4}`
+                      : "Not configured"}
+                  </Badge>
+                  <Badge
+                    variant={
+                      connectStatus?.webhookConfigured ? "default" : "outline"
+                    }
+                  >
+                    {connectStatus?.webhookConfigured
+                      ? "Webhook secret saved"
+                      : "Webhook secret missing"}
+                  </Badge>
+                </div>
+                <form
+                  className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    setSavingConnect(true);
+                    try {
+                      const result = await connectApi.configure(connectForm);
+                      setConnectStatus(result);
+                      setConnectForm({ secretKey: "", webhookSecret: "" });
+                      toast.success(
+                        "Stripe Connect credentials verified and stored."
+                      );
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Could not configure Stripe Connect."
+                      );
+                    } finally {
+                      setSavingConnect(false);
+                    }
+                  }}
+                >
+                  <label className="space-y-2 text-sm font-medium">
+                    <span>Restricted or secret platform key</span>
+                    <Input
+                      autoComplete="off"
+                      onChange={(event) =>
+                        setConnectForm((current) => ({
+                          ...current,
+                          secretKey: event.target.value,
+                        }))
+                      }
+                      placeholder="rk_test_…"
+                      required
+                      type="password"
+                      value={connectForm.secretKey}
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium">
+                    <span>Connect webhook secret</span>
+                    <Input
+                      autoComplete="off"
+                      onChange={(event) =>
+                        setConnectForm((current) => ({
+                          ...current,
+                          webhookSecret: event.target.value,
+                        }))
+                      }
+                      placeholder="whsec_…"
+                      required
+                      type="password"
+                      value={connectForm.webhookSecret}
+                    />
+                  </label>
+                  <Button disabled={savingConnect} type="submit">
+                    {savingConnect ? "Verifying…" : "Save & verify"}
+                  </Button>
+                </form>
+                <p className="text-xs text-muted-foreground">
+                  This config only verifies access and stores credentials.
+                  Connected-account creation, onboarding, charges, payouts,
+                  refunds, and disputes stay capability-gated until the platform
+                  country, venue country, responsibility model, and charge
+                  pattern are approved.
+                </p>
               </CardContent>
             </Card>
           </TabsContent>

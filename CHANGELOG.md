@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added venue operational timeline events for arrival, cooking start, food served, date ended, order/reservation stages, deterministic venue analytics, public aggregate metrics with sample gating, filterable specials, public spot detail pages, and native specials discovery.
+- Added Better Auth Organizations as the canonical venue organization boundary with a non-destructive bridge from existing venue memberships.
+- Added admin Stripe Connect credential verification with SSM SecureString storage; connected-account creation and money movement remain capability-gated pending policy decisions.
 - Added branded Chewbuu Sync venue and Crew workflows with admin Sugar/Sync test entitlements, reserved brand handles, styled community metadata, people invitations, venue staff invitations, lifecycle emails, venue operations pages, and the branded-community migration.
 - Added full-featured mobile authentication and multi-step onboarding in \`apps/native\` with **Basics**, **Device Permissions**, **Media Check**, **Dating Preferences**, and **Interests & Category Spots**, plus an explicit **Save for Later** action that persists drafts via \`expo-secure-store\` and enables immediate home tab exploration with top-feed resumption banners.
 - Built branded liquid glass mobile Login and Sign-Up screens (\`apps/native/app/auth/login.tsx\`, \`apps/native/app/auth/sign-up.tsx\`) and connected them to Better Auth and onboarding navigation.

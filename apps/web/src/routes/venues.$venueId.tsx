@@ -7,21 +7,32 @@ import {
   CardHeader,
   CardTitle,
 } from "@chewbuu/ui/components/card";
+import { Input } from "@chewbuu/ui/components/input";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import {
   ArrowRight,
+  BarChart3,
   Bell,
   CalendarClock,
   CheckCircle2,
+  Clock,
   ClipboardList,
   LoaderCircle,
   Menu,
   RefreshCw,
   Store,
+  Tag,
+  Table2,
   Users,
   Utensils,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { venueApi, type VenueWorkspace } from "@/lib/dating-api";
@@ -52,6 +63,14 @@ function VenueWorkspacePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDemoLoading, setIsDemoLoading] = useState(false);
+  const [isPublicAnalyticsEnabled, setIsPublicAnalyticsEnabled] =
+    useState(false);
+  const [specialForm, setSpecialForm] = useState({
+    category: "date night",
+    description: "",
+    priceText: "",
+    title: "",
+  });
 
   const refresh = useCallback(
     async (showSpinner = false) => {
@@ -164,6 +183,70 @@ function VenueWorkspacePage() {
     }
   };
 
+  const createSpecial = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      await venueApi.createSpecial({
+        ...specialForm,
+        locationId: venueId,
+      });
+      setSpecialForm({
+        category: "date night",
+        description: "",
+        priceText: "",
+        title: "",
+      });
+      toast.success("Draft special created.");
+      await refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not create special."
+      );
+    }
+  };
+
+  const enablePublicAnalytics = async () => {
+    try {
+      await venueApi.setPublicAnalytics({
+        enabled: true,
+        locationId: venueId,
+        minSamples: 5,
+      });
+      setIsPublicAnalyticsEnabled(true);
+      toast.success("Public venue metrics enabled.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not enable public metrics."
+      );
+    }
+  };
+
+  const publishSpecial = async (id: string) => {
+    try {
+      await venueApi.updateSpecial({ id, status: "published" });
+      toast.success("Special published.");
+      await refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not publish special."
+      );
+    }
+  };
+
+  const endDiningSession = async (sessionId: string) => {
+    try {
+      await venueApi.endDiningSession(sessionId);
+      toast.success("Date end time recorded.");
+      await refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not end this session."
+      );
+    }
+  };
+
   if (isLoading) {
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
@@ -226,6 +309,16 @@ function VenueWorkspacePage() {
                 href="#staff"
                 icon={<Users className="size-4" />}
                 label="Staff & shifts"
+              />
+              <WorkspaceNavLink
+                href="#analytics"
+                icon={<BarChart3 className="size-4" />}
+                label="Analytics"
+              />
+              <WorkspaceNavLink
+                href="#specials"
+                icon={<Tag className="size-4" />}
+                label="Specials"
               />
             </nav>
           </div>
@@ -291,9 +384,22 @@ function VenueWorkspacePage() {
               icon={<Users className="size-4" />}
               label="Staff"
             />
+            <WorkspaceNavLink
+              href="#analytics"
+              icon={<BarChart3 className="size-4" />}
+              label="Analytics"
+            />
+            <WorkspaceNavLink
+              href="#specials"
+              icon={<Tag className="size-4" />}
+              label="Specials"
+            />
           </div>
 
-          <section className="grid gap-4 sm:grid-cols-3" id="overview">
+          <section
+            className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6"
+            id="overview"
+          >
             <MetricCard
               label="Open reservations"
               value={
@@ -318,6 +424,25 @@ function VenueWorkspacePage() {
             <MetricCard
               label="Staff access"
               value="Unlimited"
+              icon={<Users className="size-4" />}
+            />
+            <MetricCard
+              label="Avg food wait"
+              value={
+                workspace.analytics.averageFoodWaitMinutes === null
+                  ? "—"
+                  : `${workspace.analytics.averageFoodWaitMinutes}m`
+              }
+              icon={<Clock className="size-4" />}
+            />
+            <MetricCard
+              label="Tips recorded"
+              value={`$${(workspace.analytics.tipCents / 100).toFixed(2)}`}
+              icon={<Tag className="size-4" />}
+            />
+            <MetricCard
+              label="Covers"
+              value={workspace.analytics.totalCovers}
               icon={<Users className="size-4" />}
             />
           </section>
@@ -436,6 +561,288 @@ function VenueWorkspacePage() {
             </OperationCard>
           </section>
 
+          <section className="mt-6 grid gap-6 xl:grid-cols-2" id="analytics">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <BarChart3 className="size-5 text-primary" />
+                  <div>
+                    <CardTitle>Venue analytics</CardTitle>
+                    <CardDescription>
+                      Based on recorded operational events and completed orders.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2">
+                <MetricLine
+                  label="Average kitchen time"
+                  value={formatMinutes(
+                    workspace.analytics.averageKitchenMinutes
+                  )}
+                />
+                <MetricLine
+                  label="Average date duration"
+                  value={formatMinutes(workspace.analytics.averageDateMinutes)}
+                />
+                <MetricLine
+                  label="Average completed order"
+                  value={formatCents(workspace.analytics.averageCostCents)}
+                />
+                <MetricLine
+                  label="Timeline events"
+                  value={workspace.analytics.eventCount.toString()}
+                />
+                <div className="rounded-xl border border-dashed p-3 sm:col-span-2">
+                  <p className="text-xs text-muted-foreground">
+                    Public metrics show only after opt-in and five
+                    completed-order samples.
+                  </p>
+                  <Button
+                    className="mt-2"
+                    disabled={isPublicAnalyticsEnabled}
+                    onClick={() => void enablePublicAnalytics()}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {isPublicAnalyticsEnabled
+                      ? "Public metrics enabled"
+                      : "Enable public metrics"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            <Card id="specials">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <Tag className="size-5 text-primary" />
+                  <div>
+                    <CardTitle>Specials</CardTitle>
+                    <CardDescription>
+                      Publish offers that appear in public spots and date
+                      discovery.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <form
+                  className="grid gap-2 rounded-xl border bg-muted/20 p-3"
+                  onSubmit={createSpecial}
+                >
+                  <Input
+                    aria-label="Special title"
+                    onChange={(event) =>
+                      setSpecialForm((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
+                    }
+                    placeholder="Special title"
+                    required
+                    value={specialForm.title}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input
+                      aria-label="Special category"
+                      onChange={(event) =>
+                        setSpecialForm((current) => ({
+                          ...current,
+                          category: event.target.value,
+                        }))
+                      }
+                      placeholder="Category"
+                      value={specialForm.category}
+                    />
+                    <Input
+                      aria-label="Special price"
+                      onChange={(event) =>
+                        setSpecialForm((current) => ({
+                          ...current,
+                          priceText: event.target.value,
+                        }))
+                      }
+                      placeholder="$25 for two"
+                      value={specialForm.priceText}
+                    />
+                  </div>
+                  <Input
+                    aria-label="Special description"
+                    onChange={(event) =>
+                      setSpecialForm((current) => ({
+                        ...current,
+                        description: event.target.value,
+                      }))
+                    }
+                    placeholder="Describe the offer"
+                    value={specialForm.description}
+                  />
+                  <Button
+                    className="justify-self-start"
+                    size="sm"
+                    type="submit"
+                  >
+                    Create draft
+                  </Button>
+                </form>
+                {workspace.specials.length === 0 ? (
+                  <EmptyOperation label="No specials created yet." />
+                ) : (
+                  workspace.specials.slice(0, 5).map((special) => (
+                    <div
+                      className="flex items-center justify-between gap-3 rounded-xl border p-3"
+                      key={special.id}
+                    >
+                      <div>
+                        <p className="font-medium">{special.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {special.category}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={special.status} />
+                        {special.status === "draft" ? (
+                          <Button
+                            onClick={() => void publishSpecial(special.id)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            Publish
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+                <Link
+                  className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                  to="/specials"
+                >
+                  Preview public specials →
+                </Link>
+              </CardContent>
+            </Card>
+          </section>
+
+          <section className="mt-6 grid gap-6 xl:grid-cols-2" id="tables">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <Table2 className="size-5 text-primary" />
+                  <div>
+                    <CardTitle>Tables</CardTitle>
+                    <CardDescription>
+                      Keep the floor plan and table status visible to every
+                      shift.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-2 sm:grid-cols-2">
+                {workspace.tables.length === 0 ? (
+                  <EmptyOperation label="No tables configured yet." />
+                ) : (
+                  workspace.tables.map((table) => (
+                    <div
+                      className="flex items-center justify-between rounded-xl border p-3 text-sm"
+                      key={table.id}
+                    >
+                      <span>
+                        Table {table.label} · {table.capacity} seats
+                      </span>
+                      <StatusBadge status={table.status} />
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <Clock className="size-5 text-primary" />
+                  <div>
+                    <CardTitle>Recent timeline</CardTitle>
+                    <CardDescription>
+                      Every timing checkpoint is auditable and attributed.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {workspace.events.length === 0 ? (
+                  <EmptyOperation label="No timing events recorded yet." />
+                ) : (
+                  workspace.events.slice(0, 8).map((event) => (
+                    <div
+                      className="flex items-center justify-between gap-3 rounded-xl border p-3 text-sm"
+                      key={event.id}
+                    >
+                      <span className="capitalize">
+                        {event.eventType.replaceAll("_", " ")}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDate(event.occurredAt)}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </section>
+
+          <section className="mt-6" id="sessions">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <Clock className="size-5 text-primary" />
+                  <div>
+                    <CardTitle>Dining sessions</CardTitle>
+                    <CardDescription>
+                      Record when guests arrive and when the date ends.
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {workspace.sessions.length === 0 ? (
+                  <EmptyOperation label="No dining sessions yet." />
+                ) : (
+                  workspace.sessions.slice(0, 10).map((session) => (
+                    <div
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3"
+                      key={session.id}
+                    >
+                      <div className="text-sm">
+                        <p className="font-medium">
+                          {session.tableLabel
+                            ? `Table ${session.tableLabel}`
+                            : "Unassigned table"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Arrived {formatDate(session.startedAt)}
+                          {session.endedAt
+                            ? ` · Ended ${formatDate(session.endedAt)}`
+                            : ""}
+                        </p>
+                      </div>
+                      {session.endedAt ? (
+                        <StatusBadge status="completed" />
+                      ) : (
+                        <Button
+                          onClick={() => void endDiningSession(session.id)}
+                          size="sm"
+                          variant="outline"
+                        >
+                          Record date ended
+                        </Button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </section>
+
           <section className="mt-6" id="staff">
             <Card>
               <CardHeader>
@@ -463,6 +870,27 @@ function VenueWorkspacePage() {
                   icon={<CheckCircle2 className="size-4" />}
                   label="Review swaps"
                 />
+                <div className="space-y-2 sm:col-span-3">
+                  <p className="text-sm font-semibold">Upcoming shifts</p>
+                  {workspace.shifts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No shifts scheduled.
+                    </p>
+                  ) : (
+                    workspace.shifts.slice(0, 6).map((shift) => (
+                      <div
+                        className="flex items-center justify-between rounded-xl border p-3 text-sm"
+                        key={shift.id}
+                      >
+                        <span className="capitalize">{shift.role}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(shift.startAt)} –{" "}
+                          {formatDate(shift.endAt)}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </CardContent>
             </Card>
           </section>
@@ -574,6 +1002,21 @@ function OperationCard({
     </Card>
   );
 }
+
+function MetricLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border bg-muted/20 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 font-semibold">{value}</p>
+    </div>
+  );
+}
+
+const formatMinutes = (value: number | null) =>
+  value === null ? "Not enough data" : `${value} minutes`;
+
+const formatCents = (value: number | null) =>
+  value === null ? "Not enough data" : `$${(value / 100).toFixed(2)}`;
 
 function EmptyOperation({ label }: { label: string }) {
   return (

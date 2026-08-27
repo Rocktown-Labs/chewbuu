@@ -34,6 +34,18 @@ describe("AWS Blocks API surface", () => {
       "getVapidPublicKey",
       "getVenueLocations",
       "getVenueWorkspace",
+      "getVenueAnalytics",
+      "getVenueTimeline",
+      "getVenuePublicSummary",
+      "listPublicVenueSpecials",
+      "listVenueSpecials",
+      "createVenueSpecial",
+      "updateVenueSpecial",
+      "setVenuePublicAnalytics",
+      "recordVenueOperationalEvent",
+      "endVenueDiningSession",
+      "listVenueTables",
+      "upsertVenueTable",
       "createVenueLocation",
       "createVenueMediaUpload",
       "createVenueReferral",
@@ -64,6 +76,8 @@ describe("AWS Blocks API surface", () => {
       "subscribeVenueEvents",
       "suggestPlaces",
       "syncPricingPlans",
+      "configureStripeConnect",
+      "getStripeConnectStatus",
       "updateCircle",
       "updatePricingPlans",
       "updateVenueBrand",
@@ -74,7 +88,7 @@ describe("AWS Blocks API surface", () => {
       "inviteVenueMembers",
     ];
 
-    expect(methodNames).toHaveLength(67);
+    expect(methodNames).toHaveLength(81);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {

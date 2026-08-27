@@ -55,6 +55,8 @@ The preview is useful for date planning and can expire. Once the venue claims th
 
 ## Venue operations
 
+Better Auth Organizations is the canonical organization boundary. Venue locations remain the location-level resource, while `member` provides organization membership and `venue_member` retains location role metadata during the non-destructive bridge. This supports independent restaurants and enterprise groups without allowing a member of one organization to see another.
+
 The first operational workflow should cover:
 
 - organization and location records
@@ -66,8 +68,19 @@ The first operational workflow should cover:
 - pickup and dine-in order states
 - venue follows and specials
 - public feedback plus operational feedback for the venue
+- immutable timing checkpoints for arrival, cooking start, food served, date ended, reservation stages, and order stages
+- deterministic venue analytics from PostgreSQL event timestamps
+- venue-published specials with public filtering
 
 Location tracking must be explicit and opt-in. The product should support “I’m dining here” without requiring a date reservation.
+
+## Timing and analytics
+
+`venue_operational_event` is an append-only PostgreSQL ledger. Every checkpoint stores its location, optional entity references, actor, source, timestamp, and non-PII metadata. The Sync dashboard derives average arrival-to-food wait, kitchen time, date duration, completed-order cost, covers, tips, and event counts from the ledger.
+
+Public metrics are disabled by default. A venue must opt in and meet its minimum sample threshold before average wait or cost is shown. Raw events, guest identity, staff identity, and small cohorts remain private.
+
+Embeddings are deliberately not used for timestamp or cost analytics. A future qualitative feedback search can use a governed Postgres/vector index for redacted text themes; Upstash is not part of the architecture.
 
 ## Payments and tips
 
@@ -124,5 +137,6 @@ Invitations are email-backed, tokenized, and email-matched on acceptance. Existi
 1. Venue discovery, contribution, temporary menu preview, claim request, referral tracking.
 2. Venue workspace with menu, media, hours, staff, shifts, and shift swaps.
 3. Reservations, dine-now sessions, table labels, feedback, and specials.
-4. Stripe Connect onboarding, ordering, tips ledger, refunds, and payouts.
-5. Multi-location enterprise controls, integrations, featured listings, and Crew events.
+4. Timing event capture, operational analytics, and public metrics.
+5. Stripe Connect onboarding, ordering, tips ledger, refunds, and payouts.
+6. Multi-location enterprise controls, integrations, featured listings, and Crew events.

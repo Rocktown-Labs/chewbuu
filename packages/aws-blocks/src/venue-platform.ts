@@ -10,10 +10,12 @@ import type {
   BrandStyle,
   CommunityInviteResponse,
   InviteVenueMembersInput,
+  VenueDiningSession,
   VenueLocation,
   VenueOrder,
   VenueReferral,
   VenueReservation,
+  VenueShift,
   UpdateVenueBrandInput,
   VenueWorkspace,
 } from "./types";
@@ -106,6 +108,7 @@ const toVenueReferral = (referral: {
 const toVenueOrder = (order: {
   assigned_staff_user_id: string | null;
   currency: string;
+  dining_session_id?: string | null;
   id: string;
   location_id: string;
   payment_status: string;
@@ -118,6 +121,9 @@ const toVenueOrder = (order: {
     ? { assignedStaffUserId: order.assigned_staff_user_id }
     : {}),
   currency: order.currency,
+  ...(order.dining_session_id
+    ? { diningSessionId: order.dining_session_id }
+    : {}),
   id: order.id,
   locationId: order.location_id,
   paymentStatus: order.payment_status,
@@ -286,6 +292,17 @@ export const createVenueLocation = async (
         })
         .execute();
       await transaction
+        .insertInto("organization")
+        .values({
+          created_at: new Date(),
+          id: organizationId,
+          logo: null,
+          metadata: null,
+          name: parsed.organizationName ?? parsed.name,
+          slug,
+        })
+        .execute();
+      await transaction
         .insertInto("sync_subscription")
         .values({
           created_at: new Date(),
@@ -311,6 +328,8 @@ export const createVenueLocation = async (
           name: parsed.name,
           organization_id: organizationId,
           phone: parsed.phone,
+          public_analytics_enabled: false,
+          public_analytics_min_samples: 5,
           status: "unclaimed",
           style: jsonb(parsed.style),
           submitted_by_user_id: userId,
@@ -539,6 +558,19 @@ export const inviteVenueMembers = async (
             .doUpdateSet({ role: member.role, status: "active" })
         )
         .execute();
+      await db
+        .insertInto("member")
+        .values({
+          created_at: new Date(),
+          id: randomUUID(),
+          organization_id: location.organization_id,
+          role: "member",
+          user_id: existingUser.id,
+        })
+        .onConflict((conflict) =>
+          conflict.columns(["organization_id", "user_id"]).doNothing()
+        )
+        .execute();
     }
     invites.push({
       email,
@@ -587,6 +619,19 @@ export const acceptVenueInvite = async (
       )
       .execute();
     await tx
+      .insertInto("member")
+      .values({
+        created_at: new Date(),
+        id: randomUUID(),
+        organization_id: invite.organization_id,
+        role: "member",
+        user_id: userId,
+      })
+      .onConflict((conflict) =>
+        conflict.columns(["organization_id", "user_id"]).doNothing()
+      )
+      .execute();
+    await tx
       .updateTable("venue_member_invite")
       .set({ status: "joined" })
       .where("id", "=", invite.id)
@@ -617,8 +662,8 @@ export const getVenueLocations = async (userId: string, isAdmin: boolean) => {
     : await db
         .selectFrom("venue_location")
         .innerJoin(
-          "venue_member",
-          "venue_member.organization_id",
+          "member",
+          "member.organization_id",
           "venue_location.organization_id"
         )
         .select([
@@ -633,8 +678,7 @@ export const getVenueLocations = async (userId: string, isAdmin: boolean) => {
           "venue_location.style as style",
           "venue_location.website_url as website_url",
         ])
-        .where("venue_member.user_id", "=", userId)
-        .where("venue_member.status", "=", "active")
+        .where("member.user_id", "=", userId)
         .orderBy("venue_location.created_at", "desc")
         .execute();
   return { locations: locations.map(toVenueLocation) };
@@ -725,7 +769,7 @@ export const requestVenueClaim = async (
   return { status: "requested" as const };
 };
 
-const venueAccess = async (
+export const venueAccess = async (
   userId: string,
   locationId: string,
   isAdmin: boolean
@@ -733,16 +777,15 @@ const venueAccess = async (
   if (isAdmin) return true;
   const db = await getDb();
   const member = await db
-    .selectFrom("venue_member")
+    .selectFrom("member")
     .innerJoin(
       "venue_location",
       "venue_location.organization_id",
-      "venue_member.organization_id"
+      "member.organization_id"
     )
-    .select("venue_member.id")
+    .select("member.id")
     .where("venue_location.id", "=", locationId)
-    .where("venue_member.user_id", "=", userId)
-    .where("venue_member.status", "=", "active")
+    .where("member.user_id", "=", userId)
     .executeTakeFirst();
   return Boolean(member);
 };
@@ -828,6 +871,19 @@ export const approveVenueClaim = async (
         })
       )
       .execute();
+    await transaction
+      .insertInto("member")
+      .values({
+        created_at: new Date(),
+        id: randomUUID(),
+        organization_id: location.organization_id,
+        role: "owner",
+        user_id: claim.submitted_by_user_id,
+      })
+      .onConflict((conflict) =>
+        conflict.columns(["organization_id", "user_id"]).doNothing()
+      )
+      .execute();
   });
   return {
     ownerUserId: claim.submitted_by_user_id,
@@ -862,7 +918,7 @@ export const getVenueWorkspace = async (
     .executeTakeFirst();
   if (!location) throw new Error("Venue not found");
 
-  const [reservations, orders] = await Promise.all([
+  const [reservations, orders, shifts, sessions] = await Promise.all([
     db
       .selectFrom("venue_reservation")
       .select([
@@ -884,6 +940,7 @@ export const getVenueWorkspace = async (
       .select([
         "assigned_staff_user_id",
         "currency",
+        "dining_session_id",
         "id",
         "location_id",
         "payment_status",
@@ -896,12 +953,83 @@ export const getVenueWorkspace = async (
       .orderBy("created_at", "desc")
       .limit(100)
       .execute(),
+    db
+      .selectFrom("venue_shift")
+      .select([
+        "end_at",
+        "id",
+        "location_id",
+        "role",
+        "start_at",
+        "status",
+        "user_id",
+      ])
+      .where("location_id", "=", locationId)
+      .where("end_at", ">=", new Date())
+      .orderBy("start_at", "asc")
+      .limit(100)
+      .execute(),
+    db
+      .selectFrom("venue_dining_session")
+      .select([
+        "ended_at",
+        "id",
+        "location_id",
+        "reservation_id",
+        "started_at",
+        "table_label",
+      ])
+      .where("location_id", "=", locationId)
+      .orderBy("started_at", "desc")
+      .limit(100)
+      .execute(),
   ]);
 
   return {
+    analytics: {
+      averageCostCents: null,
+      averageDateMinutes: null,
+      averageFoodWaitMinutes: null,
+      averageKitchenMinutes: null,
+      completedOrders: 0,
+      eventCount: 0,
+      orderCount: orders.length,
+      reservationCount: reservations.length,
+      sampleSizes: { cost: 0, dateDuration: 0, foodWait: 0, kitchen: 0 },
+      tipCents: 0,
+      totalCovers: reservations.reduce((sum, item) => sum + item.party_size, 0),
+    },
+    events: [],
     location: toVenueLocation(location),
     orders: orders.map(toVenueOrder),
     reservations: reservations.map(toReservation),
+    sessions: sessions.map(
+      (session): VenueDiningSession => ({
+        ...(session.ended_at
+          ? { endedAt: new Date(session.ended_at).toISOString() }
+          : {}),
+        id: session.id,
+        locationId: session.location_id,
+        ...(session.reservation_id
+          ? { reservationId: session.reservation_id }
+          : {}),
+        startedAt: new Date(session.started_at).toISOString(),
+        ...(session.table_label ? { tableLabel: session.table_label } : {}),
+      })
+    ),
+    shifts: shifts.map(
+      (shift): VenueShift => ({
+        endAt: new Date(shift.end_at).toISOString(),
+        id: shift.id,
+        locationId: shift.location_id,
+        role: shift.role,
+        startAt: new Date(shift.start_at).toISOString(),
+        status: shift.status,
+        userId: shift.user_id,
+      })
+    ),
+    specials: [],
+    tables: [],
   };
 };
 
@@ -952,6 +1080,7 @@ export const updateVenueOrder = async (
     .returning([
       "assigned_staff_user_id",
       "currency",
+      "dining_session_id",
       "id",
       "location_id",
       "payment_status",
@@ -1211,6 +1340,7 @@ export const createVenueOrder = async (userId: string, input: unknown) => {
       paymentStatus: "unpaid",
       status: "submitted",
       subtotalCents,
+      diningSessionId: orderInput.diningSessionId,
       tipCents: orderInput.tipCents,
       totalCents,
     },
