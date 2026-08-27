@@ -15,13 +15,17 @@ import {
 } from "@chewbuu/ui/components/dropdown-menu";
 import { Skeleton } from "@chewbuu/ui/components/skeleton";
 import { useNavigate } from "@tanstack/react-router";
-import { User } from "lucide-react";
+import { ShieldCheck, User } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { datingApi, type DatingProfilePayload } from "@/lib/dating-api";
 
-export default function UserMenu() {
+interface UserMenuProps {
+  isAdmin: boolean;
+}
+
+export default function UserMenu({ isAdmin }: UserMenuProps) {
   const navigate = useNavigate();
   const { data: session, isPending } = authClient.useSession();
   const [profile, setProfile] = useState<DatingProfilePayload | null>(null);
@@ -111,6 +115,17 @@ export default function UserMenu() {
             <User className="size-4 text-primary" />
             My Profile Settings
           </DropdownMenuItem>
+          {isAdmin && (
+            <DropdownMenuItem
+              className="cursor-pointer rounded-xl font-semibold gap-2 py-2"
+              onClick={() => {
+                void navigate({ to: "/admin" });
+              }}
+            >
+              <ShieldCheck className="size-4 text-primary" />
+              Admin Control Room
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="cursor-pointer rounded-xl font-semibold gap-2 py-2 text-red-500 hover:text-red-600"

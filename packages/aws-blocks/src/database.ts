@@ -74,6 +74,7 @@ export interface UserTable {
   id: string;
   membership_tier: string;
   name: string;
+  role: string;
   username: string | null;
 }
 

@@ -51,6 +51,7 @@ import {
   type MembershipPlan,
   type StripeConnectStatus,
 } from "@/lib/dating-api";
+import { useAdminStatus } from "@/lib/use-admin-status";
 
 interface AdminUser {
   banExpires?: string | Date | null;
@@ -108,9 +109,10 @@ const textToList = (value: string) =>
 
 const RouteComponent = () => {
   const { data: session, isPending } = authClient.useSession();
-  const role = session?.user.role;
+  const { isAdmin, isPending: isAdminStatusPending } = useAdminStatus(
+    Boolean(session)
+  );
   const membershipTier = session?.user.membershipTier ?? "social";
-  const isAdmin = role === "admin";
 
   const [activeTab, setActiveTab] = useState<string>("users");
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
@@ -279,7 +281,7 @@ const RouteComponent = () => {
     );
   });
 
-  if (isPending) {
+  if (isPending || isAdminStatusPending) {
     return (
       <main className="mx-auto grid min-h-full w-full max-w-5xl place-items-center px-4 py-10">
         <p className="text-muted-foreground">Loading admin control room...</p>

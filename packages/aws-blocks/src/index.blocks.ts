@@ -571,7 +571,11 @@ const provisionAdminTestEntitlements = async (user: {
   await db.transaction().execute(async (tx) => {
     await tx
       .updateTable("user")
-      .set({ daily_date_limit: 24, membership_tier: "sugar" })
+      .set({
+        daily_date_limit: 24,
+        membership_tier: "sugar",
+        role: "admin",
+      })
       .where("id", "=", user.id)
       .execute();
 
