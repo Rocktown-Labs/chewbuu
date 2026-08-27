@@ -38,6 +38,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added a bottom-anchored `Sheet` drawer component (`packages/ui/src/components/sheet.tsx`) built on the Base UI dialog primitive with slide-up/down animation, a drag handle, and a scrollable body.
 - Added AWS Blocks observability with structured backend logs, CloudWatch EMF metrics, X-Ray tracing, API and SSR dashboards, and an admin dashboard link.
 
+### Fixed
+
+- Added the missing `venue_location.style` migration, required venue contact details in the venue portal, and removed the ordinary-member Chewbuu Sync brand shortcut. The portal now explains that any signed-in member can submit a venue, while venue operations require an approved claim, team invitation, or admin access.
+
 ### Changed
 
 - Added a Stripe Identity tab and verification gate to personal onboarding, surfaced identity in the home readiness rail, and replaced fabricated dashboard cards with real counts or honest empty states.

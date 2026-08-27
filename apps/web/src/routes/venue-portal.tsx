@@ -18,7 +18,6 @@ import {
   LoaderCircle,
   Plus,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -75,31 +74,19 @@ function VenuePortalPage() {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
-  const useChewbuuSyncBrand = () => {
-    setForm((current) => ({
-      ...current,
-      name: "Chewbuu Sync",
-      organizationName: "Chewbuu Sync",
-      websiteUrl: "https://chewbuu.com",
-    }));
-    toast.info(
-      "Chewbuu Sync defaults loaded. Save the identity after creation."
-    );
-  };
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSubmitting(true);
     try {
       const result = await venueApi.createLocation({
-        address: form.address || undefined,
+        address: form.address,
         description: form.description || undefined,
         menuUrl: form.menuUrl || undefined,
         name: form.name,
         organizationName: form.organizationName || undefined,
-        phone: form.phone || undefined,
+        phone: form.phone,
         venueRole: isOwner ? "owner" : "referrer",
-        websiteUrl: form.websiteUrl || undefined,
+        websiteUrl: form.websiteUrl,
       });
       setLocation(result.location);
       setReferral(result.referral);
@@ -162,36 +149,24 @@ function VenuePortalPage() {
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-6 py-12">
       <div className="mx-auto max-w-2xl">
-        <Badge variant="secondary">
-          <Sparkles className="mr-1 size-3" /> Chewbuu Sync
-        </Badge>
+        <Badge variant="secondary">Chewbuu Sync</Badge>
         <h1 className="mt-4 text-4xl font-semibold tracking-tight">
           Put your venue on the date map.
         </h1>
         <p className="mt-3 text-muted-foreground">
           Claim a spot, or help a favorite restaurant get ready for
-          reservations, dining, ordering, and specials. Anything found online is
-          marked unverified until the venue confirms it.
+          reservations, dining, ordering, and specials. Anyone can view this
+          page, but you must sign in to submit a venue. Venue operations open
+          after a claim is approved or a team invitation is accepted.
         </p>
 
         <Card className="mt-8 overflow-hidden rounded-3xl border-primary/15 shadow-xl shadow-primary/5 [&_[data-slot=input]]:rounded-xl [&_[data-slot=textarea]]:rounded-xl">
           <CardHeader className="bg-primary/5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <CardTitle>Start with the basics</CardTitle>
-                <CardDescription>
-                  You can add tables, staff, shifts, and payments after the
-                  venue is claimed.
-                </CardDescription>
-              </div>
-              <Button
-                onClick={useChewbuuSyncBrand}
-                type="button"
-                variant="outline"
-              >
-                Use Chewbuu Sync brand
-              </Button>
-            </div>
+            <CardTitle>Start with the basics</CardTitle>
+            <CardDescription>
+              You can add tables, staff, shifts, and payments after the venue is
+              claimed.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form className="space-y-5" onSubmit={handleSubmit}>
@@ -222,8 +197,9 @@ function VenuePortalPage() {
                   rows={3}
                 />
               </FormField>
-              <FormField label="Address">
+              <FormField label="Address" required>
                 <Input
+                  required
                   value={form.address}
                   onChange={(event) =>
                     updateField("address", event.target.value)
@@ -232,8 +208,9 @@ function VenuePortalPage() {
                 />
               </FormField>
               <div className="grid gap-5 sm:grid-cols-2">
-                <FormField label="Phone">
+                <FormField label="Phone" required>
                   <Input
+                    required
                     type="tel"
                     value={form.phone}
                     onChange={(event) =>
@@ -241,8 +218,9 @@ function VenuePortalPage() {
                     }
                   />
                 </FormField>
-                <FormField label="Official website">
+                <FormField label="Official website" required>
                   <Input
+                    required
                     type="url"
                     value={form.websiteUrl}
                     onChange={(event) =>
@@ -254,7 +232,7 @@ function VenuePortalPage() {
               </div>
               <FormField
                 label="Menu URL"
-                description="We’ll try to create a temporary menu preview from this official page."
+                description="Optional. We’ll try to create a temporary menu preview from this official page."
               >
                 <Input
                   type="url"

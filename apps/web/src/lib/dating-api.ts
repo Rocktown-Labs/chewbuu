@@ -628,18 +628,18 @@ export const venueApi = {
       option: VenueMenuModifierOption;
     }>,
   createLocation: (input: {
-    address?: string;
+    address: string;
     description?: string;
     discoveryPlaceId?: string;
     handle?: string;
     menuUrl?: string;
     name: string;
     organizationName?: string;
-    phone?: string;
+    phone: string;
     referralCode?: string;
     style?: BrandStyle;
     venueRole?: "owner" | "referrer";
-    websiteUrl?: string;
+    websiteUrl: string;
   }) =>
     blocksApi.createVenueLocation(input) as unknown as Promise<{
       location: VenueLocation;
