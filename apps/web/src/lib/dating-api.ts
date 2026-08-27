@@ -29,8 +29,29 @@ export interface FavoritePlace {
   types: string[];
 }
 
+export interface IdentityVerificationSession {
+  id: string;
+  status:
+    | "not_started"
+    | "requires_input"
+    | "processing"
+    | "verified"
+    | "failed";
+  url: string;
+  verifiedName?: string;
+}
+
+export interface UsernameChangeRequest {
+  createdAt: string;
+  id: string;
+  requestedUsername: string;
+  status: "approved" | "pending_approval" | "pending_verification" | "rejected";
+}
+
 export interface DatingProfilePayload {
   ageRangeMax?: number;
+  identityStatus?: IdentityVerificationSession["status"];
+  identityVerifiedName?: string;
   ageRangeMin?: number;
   distanceMiles?: number;
   area: string;
@@ -359,6 +380,7 @@ export interface DatingSummary {
   membershipTier: MembershipTier;
   readiness: {
     canDate: boolean;
+    identityVerified: boolean;
     onboarded: boolean;
     pendingReviews: number;
   };
@@ -745,6 +767,22 @@ export const datingApi = {
     (await blocksApi.getProfile()) as {
       profile: DatingProfilePayload | null;
     },
+  createIdentityVerificationSession: () =>
+    blocksApi.createIdentityVerificationSession() as Promise<IdentityVerificationSession>,
+  getIdentityVerificationStatus: () =>
+    blocksApi.getIdentityVerificationStatus() as Promise<IdentityVerificationSession>,
+  requestUsernameChange: (input: { username: string }) =>
+    blocksApi.requestUsernameChange(input) as Promise<{
+      request: UsernameChangeRequest;
+    }>,
+  getUsernameChangeStatus: () =>
+    blocksApi.getUsernameChangeStatus() as Promise<{
+      request: UsernameChangeRequest | null;
+    }>,
+  verifyUsernameChange: (token: string) =>
+    blocksApi.verifyUsernameChange(token) as Promise<{
+      request: UsernameChangeRequest;
+    }>,
   getSummary: async () => (await blocksApi.getDatingSummary()) as DatingSummary,
   saveProfile: (body: DatingProfilePayload) =>
     blocksApi.saveProfile(body) as unknown as Promise<{
@@ -777,6 +815,24 @@ export const datingApi = {
 
 export const chimeApi = {
   getMeeting: (requestId: string) => blocksApi.getDateMeeting(requestId),
+};
+
+export const usernameApi = {
+  listRequests: () =>
+    blocksApi.listUsernameChangeRequests() as Promise<{
+      requests: (UsernameChangeRequest & {
+        email: string;
+        name: string;
+      })[];
+    }>,
+  approveRequest: (requestId: string) =>
+    blocksApi.approveUsernameChange({ requestId }) as Promise<{
+      request: UsernameChangeRequest;
+    }>,
+  verify: (token: string) =>
+    blocksApi.verifyUsernameChange(token) as Promise<{
+      request: UsernameChangeRequest;
+    }>,
 };
 
 export const connectApi = {

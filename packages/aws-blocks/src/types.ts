@@ -171,6 +171,18 @@ export interface VenueMenuItem {
   modifierGroups: VenueMenuModifierGroup[];
 }
 
+export interface IdentityVerificationSession {
+  id: string;
+  status:
+    | "not_started"
+    | "requires_input"
+    | "processing"
+    | "verified"
+    | "failed";
+  url: string;
+  verifiedName?: string;
+}
+
 export interface VenueIdentityVerificationSession {
   id: string;
   status:
@@ -181,6 +193,19 @@ export interface VenueIdentityVerificationSession {
     | "failed";
   url: string;
   verifiedName?: string;
+}
+
+export type UsernameChangeRequestStatus =
+  | "approved"
+  | "pending_approval"
+  | "pending_verification"
+  | "rejected";
+
+export interface UsernameChangeRequest {
+  createdAt: string;
+  id: string;
+  requestedUsername: string;
+  status: UsernameChangeRequestStatus;
 }
 
 export interface VenueReferral {
@@ -349,6 +374,26 @@ export interface AwsBlocksApi {
   publishTyping: (roomId: string, isTyping: boolean) => Promise<{ ok: true }>;
   getDatingSummary: () => Promise<DatingSummaryResponse>;
   getProfile: () => Promise<{ profile: DatingProfileResponse | null }>;
+  createIdentityVerificationSession: () => Promise<IdentityVerificationSession>;
+  getIdentityVerificationStatus: () => Promise<IdentityVerificationSession>;
+  requestUsernameChange: (input: { username: string }) => Promise<{
+    request: UsernameChangeRequest;
+  }>;
+  getUsernameChangeStatus: () => Promise<{
+    request: UsernameChangeRequest | null;
+  }>;
+  verifyUsernameChange: (token: string) => Promise<{
+    request: UsernameChangeRequest;
+  }>;
+  listUsernameChangeRequests: () => Promise<{
+    requests: (UsernameChangeRequest & {
+      email: string;
+      name: string;
+    })[];
+  }>;
+  approveUsernameChange: (input: { requestId: string }) => Promise<{
+    request: UsernameChangeRequest;
+  }>;
   getPendingReviews: () => Promise<{ reviews: PendingReviewResponse[] }>;
   getNotifications: () => Promise<NotificationsResponse>;
   markNotificationsRead: (notificationIds: string[]) => Promise<{
@@ -870,6 +915,7 @@ export interface RecapResponse extends PublishRecapInput {
 
 export interface DatingReadiness {
   canDate: boolean;
+  identityVerified: boolean;
   onboarded: boolean;
   pendingReviews: number;
 }
@@ -900,6 +946,7 @@ export interface DatingSummaryResponse {
   pendingReviews: number;
   readiness: {
     canDate: boolean;
+    identityVerified: boolean;
     onboarded: boolean;
     pendingReviews: number;
   };

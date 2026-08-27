@@ -66,6 +66,10 @@ export interface ChatReadStateTable {
 
 export interface UserTable {
   daily_date_limit: number;
+  identity_status: string;
+  identity_verification_session_id: string | null;
+  identity_verified_at: Timestamp | null;
+  identity_verified_name: string | null;
   display_username: string | null;
   email: string;
   has_completed_onboarding: boolean;
@@ -158,6 +162,19 @@ export interface ProfileTable {
   marital_status: string | null;
   politics: string | null;
   religion: string | null;
+}
+
+export interface UsernameChangeRequestTable {
+  approved_at: Timestamp | null;
+  created_at: Timestamp;
+  expires_at: Timestamp;
+  id: string;
+  requested_username: string;
+  status: string;
+  updated_at: Timestamp;
+  user_id: string;
+  verification_token_hash: string;
+  verified_at: Timestamp | null;
 }
 
 export interface ProfileMediaTable {
@@ -705,6 +722,7 @@ export interface BlocksDatabase {
   referral: ReferralTable;
   trusted_contact: TrustedContactTable;
   user: UserTable;
+  username_change_request: UsernameChangeRequestTable;
   venue_contribution: VenueContributionTable;
   venue_dining_session: VenueDiningSessionTable;
   venue_follow: VenueFollowTable;

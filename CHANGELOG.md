@@ -40,6 +40,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Added a Stripe Identity tab and verification gate to personal onboarding, surfaced identity in the home readiness rail, and replaced fabricated dashboard cards with real counts or honest empty states.
+- Reworked completed-user profile editing into closed-by-default accordions with independently dirty-only saves, persisted media previews/playback, and the same age-range slider rules used by onboarding.
+- Made existing usernames read-only and added a bloom-filter-assisted, email-verified, rate-limited username change queue with admin approval and notification emails.
 - Made Stripe Identity a required gate in venue onboarding before profile media, and added venue profile picture, intro video, and multi-select additional photo uploads to the media step.
 - Compacted onboarding step navigation pills to dynamic fit-to-text widths across mobile and desktop, removing empty spacing and checkmark icons while styling completed steps with a clean green accent.
 - Redesigned onboarding Basics step into a 2-column mobile layout with 3 expandable accordion sections (Contact & Handle, Personal Details & Location, Identity & Bio) and embedded navigation.

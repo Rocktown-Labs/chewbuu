@@ -7,6 +7,8 @@ import { OnboardingForm } from "./onboarding-form";
 import { useOnboardingStore } from "./onboarding-store";
 
 const mocks = vi.hoisted(() => ({
+  createIdentityVerificationSession: vi.fn(),
+  getIdentityVerificationStatus: vi.fn(),
   getProfile: vi.fn(),
   getPlans: vi.fn(),
   navigate: vi.fn(),
@@ -51,6 +53,8 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@/lib/dating-api", () => ({
   datingApi: {
+    createIdentityVerificationSession: mocks.createIdentityVerificationSession,
+    getIdentityVerificationStatus: mocks.getIdentityVerificationStatus,
     getProfile: mocks.getProfile,
     saveProfile: mocks.saveProfile,
     saveProfileDraft: mocks.saveProfileDraft,
@@ -90,9 +94,15 @@ describe("OnboardingForm", () => {
     }
     localStorage.clear();
     useOnboardingStore.getState().clear();
-    mocks.getProfile.mockResolvedValue(null);
-    mocks.getPlans.mockResolvedValue({ plans: [] });
+    mocks.createIdentityVerificationSession.mockReset();
+    mocks.getIdentityVerificationStatus.mockReset();
+    mocks.getIdentityVerificationStatus.mockResolvedValue({
+      id: "",
+      status: "verified",
+      url: "",
+    });
     mocks.getProfile.mockResolvedValue({ profile: null });
+    mocks.getPlans.mockResolvedValue({ plans: [] });
     mocks.navigate.mockReset();
     mocks.routerInvalidate.mockReset();
     mocks.saveProfile.mockReset();
@@ -148,6 +158,31 @@ describe("OnboardingForm", () => {
     ).toBeVisible();
   });
 
+  it("requires identity confirmation before opening media", async () => {
+    const user = userEvent.setup();
+    mocks.getIdentityVerificationStatus.mockResolvedValue({
+      id: "",
+      status: "not_started",
+      url: "",
+    });
+
+    render(<OnboardingForm />);
+    await screen.findByRole("heading", {
+      name: /tell chewbuu who is going out/i,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Identity" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: /confirm you’re a real person/i,
+      })
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Media" }));
+    expect(
+      screen.getByRole("heading", { name: /confirm you’re a real person/i })
+    ).toBeVisible();
+  });
+
   it("can move to the media step with live capture and record actions", async () => {
     const user = userEvent.setup();
 
@@ -194,7 +229,12 @@ describe("OnboardingForm", () => {
     const user = userEvent.setup();
     mocks.saveProfileDraft.mockResolvedValue({
       profile: null,
-      readiness: { canDate: false, onboarded: false, pendingReviews: 0 },
+      readiness: {
+        canDate: false,
+        identityVerified: false,
+        onboarded: false,
+        pendingReviews: 0,
+      },
     });
 
     render(<OnboardingForm />);

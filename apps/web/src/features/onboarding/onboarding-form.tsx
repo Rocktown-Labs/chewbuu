@@ -93,6 +93,7 @@ import { WatchAutocomplete, type WatchSearchResult } from "./watch-search";
 const steps = [
   "Basics",
   "Permissions",
+  "Identity",
   "Media",
   "Preferences",
   "Interests",
@@ -544,7 +545,40 @@ export function OnboardingForm() {
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [underageBirthday, setUnderageBirthday] = useState("");
   const [isLeavingOnboarding, setIsLeavingOnboarding] = useState(false);
+  const [identityStatus, setIdentityStatus] =
+    useState<DatingProfilePayload["identityStatus"]>("not_started");
+  const [identityVerifiedName, setIdentityVerifiedName] = useState("");
   const { data: session } = authClient.useSession();
+
+  const loadIdentityStatus = useCallback(async () => {
+    try {
+      const result = await datingApi.getIdentityVerificationStatus();
+      setIdentityStatus(result.status);
+      setIdentityVerifiedName(result.verifiedName ?? "");
+    } catch {
+      setIdentityStatus("not_started");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadIdentityStatus();
+  }, [loadIdentityStatus]);
+
+  const startIdentityVerification = async () => {
+    try {
+      const result = await datingApi.createIdentityVerificationSession();
+      if (!result.url) {
+        throw new Error("Stripe did not return an identity verification URL.");
+      }
+      window.location.assign(result.url);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not start identity verification."
+      );
+    }
+  };
 
   const leaveOnboarding = useCallback(
     async (to: "/me") => {
@@ -559,6 +593,12 @@ export function OnboardingForm() {
   const form = useForm({
     defaultValues,
     onSubmit: async ({ value }) => {
+      if (identityStatus !== "verified") {
+        toast.error("Confirm your identity before finishing onboarding.");
+        updateStep(2);
+        return;
+      }
+
       const media = value.media.filter((item) => item.url);
 
       if (!media.some((item) => item.kind === "profile_photo")) {
@@ -808,7 +848,12 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 2) {
+    if (step === 2 && identityStatus !== "verified") {
+      toast.error("Confirm your identity before adding media.");
+      return;
+    }
+
+    if (step === 3) {
       const { media } = values;
       if (!media.some((item) => item.kind === "profile_photo" && item.url)) {
         toast.error("Profile photo is required. Capture one live.");
@@ -820,7 +865,7 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 3) {
+    if (step === 4) {
       const age = getAge(values.birthday);
       const maxAllowedAge =
         age !== null && age < 21 ? UNDER_21_MATCH_MAX_AGE : MAXIMUM_MATCH_AGE;
@@ -865,7 +910,7 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 4) {
+    if (step === 5) {
       const details = values.interestDetails || {};
       const age = getAge(values.birthday);
       const categories =
@@ -882,7 +927,7 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 5) {
+    if (step === 6) {
       if (!values.politics) {
         toast.error("Politics is required. You can choose Prefer Not to Say.");
         return;
@@ -897,7 +942,7 @@ export function OnboardingForm() {
       }
     }
 
-    if (step === 6) {
+    if (step === 7) {
       const contacts = values.trustedContacts || [];
       if (contacts.length === 0) {
         toast.error("At least one safety contact is required.");
@@ -955,7 +1000,7 @@ export function OnboardingForm() {
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-7 px-4 py-8">
       <NavigationBlocker
         description="You have onboarding setup in progress. If you leave now, you will lose unsaved step entries."
-        shouldBlock={!isLeavingOnboarding && step > 0 && step < 4}
+        shouldBlock={!isLeavingOnboarding && step > 0 && step < 5}
         title="Unsaved Onboarding Progress"
       />
       <header className="grid gap-5 lg:grid-cols-[1fr_320px] lg:items-end">
@@ -1011,7 +1056,13 @@ export function OnboardingForm() {
                       : "border-border/80 bg-card/60 text-muted-foreground hover:text-foreground hover:border-border-hover"
                 )}
                 key={label}
-                onClick={() => updateStep(index)}
+                onClick={() => {
+                  if (index > 2 && identityStatus !== "verified") {
+                    toast.info("Complete Identity before continuing to media.");
+                    return;
+                  }
+                  updateStep(index);
+                }}
                 type="button"
               >
                 <span>{label}</span>
@@ -1031,12 +1082,20 @@ export function OnboardingForm() {
           <section className="min-h-[420px] rounded-3xl border bg-card p-6 shadow-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-2 md:p-8">
             {step === 0 && <BasicsStep form={form} onNextStep={goNext} />}
             {step === 1 && <PermissionsStep form={form} />}
-            {step === 2 && <MediaStep form={form} />}
-            {step === 3 && <PreferencesStep form={form} />}
-            {step === 4 && <InterestsStep form={form} />}
-            {step === 5 && <ValuesStep form={form} />}
-            {step === 6 && <FriendsStep form={form} />}
-            {step === 7 && (
+            {step === 2 && (
+              <IdentityStep
+                identityStatus={identityStatus ?? "not_started"}
+                identityVerifiedName={identityVerifiedName}
+                onRefresh={loadIdentityStatus}
+                onStart={startIdentityVerification}
+              />
+            )}
+            {step === 3 && <MediaStep form={form} />}
+            {step === 4 && <PreferencesStep form={form} />}
+            {step === 5 && <InterestsStep form={form} />}
+            {step === 6 && <ValuesStep form={form} />}
+            {step === 7 && <FriendsStep form={form} />}
+            {step === 8 && (
               <PremiumStep
                 plans={plans}
                 form={form}
@@ -1672,6 +1731,75 @@ function BasicsStep({
   );
 }
 
+function IdentityStep({
+  identityStatus,
+  identityVerifiedName,
+  onRefresh,
+  onStart,
+}: {
+  identityStatus: NonNullable<DatingProfilePayload["identityStatus"]>;
+  identityVerifiedName: string;
+  onRefresh: () => Promise<void>;
+  onStart: () => Promise<void>;
+}) {
+  const isVerified = identityStatus === "verified";
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <Badge className="mb-3 rounded-full" variant="secondary">
+          <ShieldCheck className="mr-1 size-3" /> Identity
+        </Badge>
+        <h2 className="text-2xl font-semibold tracking-tight">
+          Confirm you’re a real person
+        </h2>
+        <p className="mt-2 max-w-2xl text-muted-foreground text-sm">
+          Before adding your profile media, give Stripe permission to verify
+          your identity with a live document and matching selfie. Chewbuu never
+          receives or stores your identity documents.
+        </p>
+      </div>
+
+      <div className="rounded-3xl border border-primary/20 bg-primary/5 p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge variant={isVerified ? "default" : "secondary"}>
+            {identityStatus.replaceAll("_", " ")}
+          </Badge>
+          {identityVerifiedName ? (
+            <span className="text-sm text-muted-foreground">
+              Verified as {identityVerifiedName}
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {!isVerified ? (
+            <Button onClick={() => void onStart()} type="button">
+              <ShieldCheck className="mr-2 size-4" /> Verify with Stripe
+              Identity
+            </Button>
+          ) : (
+            <Button type="button">
+              <CheckCircle2 className="mr-2 size-4" /> Identity confirmed
+            </Button>
+          )}
+          <Button
+            onClick={() => void onRefresh()}
+            type="button"
+            variant="outline"
+          >
+            Refresh status
+          </Button>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Your next step is profile media: a live profile photo, intro video, and
+        any additional photos you want to share.
+      </p>
+    </div>
+  );
+}
+
 function MediaStep({ form }: { form: OnboardingFormApi }) {
   const [openSection, setOpenSection] = useState<"photo" | "video" | "extras">(
     "photo"
@@ -2007,7 +2135,7 @@ function PermissionsStep({ form }: { form: OnboardingFormApi }) {
             className="bg-primary/10 text-primary border-primary/20"
             variant="outline"
           >
-            Step 2 of {steps.length}
+            Step 3 of {steps.length}
           </Badge>
           <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
             Device Permissions & Alerts
