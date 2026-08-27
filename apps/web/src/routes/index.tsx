@@ -360,6 +360,9 @@ const HomeComponent = () => {
             <a className="hover:text-foreground" href="/#pricing">
               Pricing
             </a>
+            <Link className="hover:text-foreground" to="/specials">
+              Specials
+            </Link>
             <Link className="hover:text-foreground" to="/privacy">
               Privacy
             </Link>

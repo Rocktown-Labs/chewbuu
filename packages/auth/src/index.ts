@@ -5,6 +5,7 @@ import { createDb } from "@chewbuu/db";
 import { env } from "@chewbuu/env/server";
 import { betterAuth } from "better-auth";
 import { admin } from "better-auth/plugins/admin";
+import { organization } from "better-auth/plugins/organization";
 import { username } from "better-auth/plugins/username";
 import Stripe from "stripe";
 
@@ -209,6 +210,10 @@ export const createAuth = () => {
             },
           },
         },
+      }),
+      organization({
+        allowUserToCreateOrganization: false,
+        requireEmailVerificationOnInvitation: true,
       }),
       admin({
         adminRoles: ["admin"],

@@ -114,11 +114,13 @@ import {
   datingApi,
   dateMediaApi,
   getApiUrl,
+  venueApi,
   type DatePlace,
   type DatingMedia,
   type DatingProfilePayload,
   type DatingSummary,
   type PendingReview,
+  type VenueSpecial,
 } from "@/lib/dating-api";
 import { syncDatingSummaryToDb, syncPlacesToDb } from "@/lib/db";
 import {
@@ -1116,6 +1118,7 @@ export function MePage({
   const [spots, setSpots] = useState<DatePlace[]>([]);
   const [spotsQuery, setSpotsQuery] = useState("");
   const [isLoadingSpots, setIsLoadingSpots] = useState(false);
+  const [publicSpecials, setPublicSpecials] = useState<VenueSpecial[]>([]);
   const [readRequestIds, setReadRequestIds] = useState<string[]>([]);
   const [receivingDateRequests, setReceivingDateRequests] = useState(true);
   const [selectedDateHistoryId, setSelectedDateHistoryId] = useState<
@@ -1611,6 +1614,19 @@ export function MePage({
     });
     toast.success("Date recap uploaded to your feed!");
   };
+
+  useEffect(() => {
+    if (activeTab !== "spots") return;
+    const loadSpecials = async () => {
+      try {
+        const result = await venueApi.getPublicSpecials();
+        setPublicSpecials(result.specials);
+      } catch {
+        setPublicSpecials([]);
+      }
+    };
+    void loadSpecials();
+  }, [activeTab]);
 
   useEffect(() => {
     if (!profile?.area) {
@@ -2310,6 +2326,29 @@ export function MePage({
               </div>
 
               <div className="p-5 flex flex-col gap-8">
+                {publicSpecials.length > 0 ? (
+                  <section className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="font-bold text-lg">Live specials</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Venue-published offers near your next date.
+                        </p>
+                      </div>
+                      <Link
+                        className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                        to="/specials"
+                      >
+                        View all
+                      </Link>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {publicSpecials.slice(0, 4).map((special) => (
+                        <SpecialCard key={special.id} special={special} />
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
                 {isLoadingSpots ? (
                   <p className="text-sm text-muted-foreground">
                     Finding nearby date spots...
@@ -6190,6 +6229,29 @@ function SpotSection({
         ))}
       </div>
     </section>
+  );
+}
+
+function SpecialCard({ special }: { special: VenueSpecial }) {
+  return (
+    <article className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-primary">
+            {special.category}
+          </p>
+          <h4 className="mt-1 font-bold">{special.title}</h4>
+        </div>
+        {special.priceText ? (
+          <Badge variant="secondary">{special.priceText}</Badge>
+        ) : null}
+      </div>
+      {special.description ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {special.description}
+        </p>
+      ) : null}
+    </article>
   );
 }
 

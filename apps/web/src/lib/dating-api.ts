@@ -121,6 +121,8 @@ export interface VenueLocation {
   menuUrl?: string;
   name: string;
   organizationId: string;
+  publicAnalyticsEnabled?: boolean;
+  publicAnalyticsMinSamples?: number;
   status: string;
   style?: BrandStyle;
   websiteUrl?: string;
@@ -157,6 +159,7 @@ export interface VenueReservation {
 export interface VenueOrder {
   assignedStaffUserId?: string;
   currency: string;
+  diningSessionId?: string;
   id: string;
   locationId: string;
   paymentStatus: string;
@@ -166,10 +169,113 @@ export interface VenueOrder {
   totalCents: number;
 }
 
+export type VenueOperationalEventType =
+  | "arrived"
+  | "cooking_started"
+  | "date_ended"
+  | "food_served"
+  | "left"
+  | "order_completed"
+  | "order_submitted"
+  | "reservation_confirmed"
+  | "reservation_requested"
+  | "reservation_seated";
+
+export interface VenueOperationalEvent {
+  actorUserId?: string;
+  diningSessionId?: string;
+  eventType: VenueOperationalEventType;
+  id: string;
+  locationId: string;
+  metadata: Record<string, unknown>;
+  occurredAt: string;
+  orderId?: string;
+  reservationId?: string;
+  source: string;
+}
+
+export interface VenueTable {
+  capacity: number;
+  id: string;
+  label: string;
+  locationId: string;
+  section?: string;
+  status: string;
+}
+
+export interface VenueShift {
+  endAt: string;
+  id: string;
+  locationId: string;
+  role: string;
+  startAt: string;
+  status: string;
+  userId: string;
+}
+
+export interface VenueSpecial {
+  category: string;
+  description?: string;
+  displayOrder: number;
+  endsAt?: string;
+  featured: boolean;
+  id: string;
+  locationId: string;
+  priceText?: string;
+  publishedAt?: string;
+  startsAt: string;
+  status: "archived" | "draft" | "published";
+  title: string;
+}
+
+export interface VenueAnalytics {
+  averageCostCents: number | null;
+  averageDateMinutes: number | null;
+  averageFoodWaitMinutes: number | null;
+  averageKitchenMinutes: number | null;
+  completedOrders: number;
+  eventCount: number;
+  orderCount: number;
+  reservationCount: number;
+  sampleSizes: {
+    cost: number;
+    dateDuration: number;
+    foodWait: number;
+    kitchen: number;
+  };
+  tipCents: number;
+  totalCovers: number;
+}
+
+export interface VenuePublicSummary {
+  address?: string;
+  averageCostCents: number | null;
+  averageFoodWaitMinutes: number | null;
+  locationId: string;
+  name: string;
+  sampleSize: number;
+  specials: VenueSpecial[];
+}
+
+export interface VenueDiningSession {
+  endedAt?: string;
+  id: string;
+  locationId: string;
+  reservationId?: string;
+  startedAt: string;
+  tableLabel?: string;
+}
+
 export interface VenueWorkspace {
+  analytics: VenueAnalytics;
+  events: VenueOperationalEvent[];
   location: VenueLocation;
   orders: VenueOrder[];
   reservations: VenueReservation[];
+  sessions: VenueDiningSession[];
+  shifts: VenueShift[];
+  specials: VenueSpecial[];
+  tables: VenueTable[];
 }
 
 export type VenueMediaKind = "food_photo" | "menu_photo" | "venue_photo";
@@ -367,6 +473,14 @@ export interface AccountEntitlements {
   sync: { plan: string; status: string };
 }
 
+export interface StripeConnectStatus {
+  accountId: string | null;
+  configured: boolean;
+  keyLast4: string | null;
+  mode: "live" | "test" | null;
+  webhookConfigured: boolean;
+}
+
 export interface MembershipPlan {
   active: boolean;
   annualPriceCents: number;
@@ -426,6 +540,41 @@ export const venueApi = {
   }) => blocksApi.inviteVenueMembers(input),
   getWorkspace: (locationId: string) =>
     blocksApi.getVenueWorkspace(locationId) as Promise<VenueWorkspace>,
+  getAnalytics: (
+    locationId: string,
+    input?: { endAt?: string; startAt?: string }
+  ) =>
+    blocksApi.getVenueAnalytics(locationId, input) as Promise<VenueAnalytics>,
+  getTimeline: (locationId: string) =>
+    blocksApi.getVenueTimeline(locationId) as Promise<{
+      events: VenueOperationalEvent[];
+    }>,
+  getPublicSummary: (locationId: string) =>
+    blocksApi.getVenuePublicSummary(locationId) as Promise<VenuePublicSummary>,
+  getPublicSpecials: (input?: { category?: string; locationId?: string }) =>
+    blocksApi.listPublicVenueSpecials(input) as Promise<{
+      specials: VenueSpecial[];
+    }>,
+  getSpecials: (locationId: string) =>
+    blocksApi.listVenueSpecials(locationId) as Promise<{
+      specials: VenueSpecial[];
+    }>,
+  createSpecial: (input: unknown) =>
+    blocksApi.createVenueSpecial(input) as Promise<{ special: VenueSpecial }>,
+  updateSpecial: (input: unknown) =>
+    blocksApi.updateVenueSpecial(input) as Promise<{ special: VenueSpecial }>,
+  setPublicAnalytics: (input: {
+    enabled: boolean;
+    locationId: string;
+    minSamples?: number;
+  }) => blocksApi.setVenuePublicAnalytics(input),
+  recordEvent: (input: unknown) => blocksApi.recordVenueOperationalEvent(input),
+  endDiningSession: (sessionId: string) =>
+    blocksApi.endVenueDiningSession(sessionId),
+  listTables: (locationId: string) =>
+    blocksApi.listVenueTables(locationId) as Promise<{ tables: VenueTable[] }>,
+  upsertTable: (input: unknown) =>
+    blocksApi.upsertVenueTable(input) as Promise<{ table: VenueTable }>,
   previewMenu: (url: string) =>
     blocksApi.previewVenueMenu({ url }) as Promise<{
       preview: VenueMenuPreview | null;
@@ -529,6 +678,12 @@ export const datingApi = {
 
 export const chimeApi = {
   getMeeting: (requestId: string) => blocksApi.getDateMeeting(requestId),
+};
+
+export const connectApi = {
+  configure: (input: { secretKey: string; webhookSecret: string }) =>
+    blocksApi.configureStripeConnect(input),
+  getStatus: () => blocksApi.getStripeConnectStatus(),
 };
 
 export const pricingApi = {

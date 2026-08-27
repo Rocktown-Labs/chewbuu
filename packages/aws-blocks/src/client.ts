@@ -39,8 +39,10 @@ export type {
   ReviewResponse,
   SendChatMessageInput,
   SendChatMessageResponse,
+  StripeConnectStatus,
   SyncPricingPlansResponse,
   UploadDateMediaInput,
+  VenueAnalytics,
   VenueMediaKind,
   VenueMediaUploadInput,
   VenueLocation,
@@ -55,6 +57,12 @@ export type {
   VenueDiningSession,
   VenueEvent,
   VenueOrder,
+  VenueOperationalEvent,
+  VenueOperationalEventType,
+  VenuePublicSummary,
+  VenueShift,
+  VenueSpecial,
+  VenueTable,
 } from "./types";
 
 export type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middleware";
@@ -63,11 +71,20 @@ export type {
   DateLifecycleStatus,
 } from "./date-lifecycle";
 
-const apiUrl = (
-  import.meta as ImportMeta & {
-    env?: { VITE_BLOCKS_API_URL?: string };
-  }
-).env?.VITE_BLOCKS_API_URL;
+const apiUrl =
+  (
+    import.meta as ImportMeta & {
+      env?: {
+        EXPO_PUBLIC_BLOCKS_API_URL?: string;
+        VITE_BLOCKS_API_URL?: string;
+      };
+    }
+  ).env?.VITE_BLOCKS_API_URL ??
+  (
+    import.meta as ImportMeta & {
+      env?: { EXPO_PUBLIC_BLOCKS_API_URL?: string };
+    }
+  ).env?.EXPO_PUBLIC_BLOCKS_API_URL;
 
 export const api = ApiNamespaceClient<AwsBlocksApi>("api", {
   url: apiUrl,

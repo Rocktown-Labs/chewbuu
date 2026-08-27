@@ -52,6 +52,11 @@ These production variables are optional but should be deliberately reviewed:
 - `DATABASE_CA_CERT` — optional PEM or certificate path for verified PlanetScale migration connections; the workflow falls back to the GitHub runner system CA bundle
 - `VENUE_EMAIL_FROM` — verified SES sender used by AWS Blocks venue notification jobs
 - `VENUE_APP_URL` — base URL used for clickable venue notification links; defaults to `https://chewbuu.com`
+- `BLOCKS_STRIPE_CONNECT_SECRET_PARAMETER` — optional SSM SecureString path for the admin-configured Stripe restricted/secret platform key; defaults to `/chewbuu-prod-stripe-connect-secret-key`
+- `BLOCKS_STRIPE_CONNECT_WEBHOOK_PARAMETER` — optional SSM SecureString path for the admin-configured Stripe Connect webhook secret; defaults to `/chewbuu-prod-stripe-connect-webhook-secret`
+
+Stripe Connect credentials can be entered from the admin Billing & Plans control room. The server verifies the key and stores both values in SSM SecureString; raw values are never returned or logged. Account creation, charges, transfers, payouts, refunds, disputes, and webhook fulfillment remain disabled until the platform/venue countries and Connect responsibility and charge-pattern decisions are approved.
+
 - `R2_PUBLIC_URL`
 - `CORS_ALLOWED_ORIGINS`
 - `ADMIN_EMAILS`

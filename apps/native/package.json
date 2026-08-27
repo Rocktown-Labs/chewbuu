@@ -15,6 +15,7 @@
   "dependencies": {
     "@ai-sdk/react": "catalog:",
     "@better-auth/expo": "catalog:",
+    "@chewbuu/aws-blocks": "workspace:*",
     "@chewbuu/env": "workspace:*",
     "@expo/metro-runtime": "~57.0.2",
     "@expo/vector-icons": "^15.1.1",
