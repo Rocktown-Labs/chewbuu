@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import {
   Bell,
   HeartHandshake,
+  LayoutDashboard,
   Monitor,
   Moon,
   ShieldCheck,
@@ -94,6 +95,16 @@ export default function Header() {
             >
               <HeartHandshake aria-hidden="true" className="size-4" />
               Create Profile
+            </Link>
+          )}
+          {session && (
+            <Link
+              aria-label="Sync service desk"
+              className="hidden items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-2 font-medium text-primary text-sm transition hover:bg-primary/20 md:inline-flex"
+              to="/sync"
+            >
+              <LayoutDashboard aria-hidden="true" className="size-4" />
+              Sync
             </Link>
           )}
           {session && isAdmin && (

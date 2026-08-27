@@ -92,6 +92,8 @@ export const toChatThread = (
 
 export const chatApi = {
   getRooms: (): Promise<ChatRoomsResponse> => api.getRooms(),
+  getMessages: (roomId: string): Promise<{ messages: ApiChatMessage[] }> =>
+    api.getMessages(roomId),
   sendMessage: (
     roomId: string,
     body: SendChatMessageInput
