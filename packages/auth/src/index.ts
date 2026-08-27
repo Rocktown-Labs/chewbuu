@@ -22,6 +22,27 @@ const RESERVED_USERNAMES = new Set(["chewbuu", "chewbuusync"]);
 export const isReservedUsername = (value: string) =>
   RESERVED_USERNAMES.has(value.trim().replace(/^@/, "").toLowerCase());
 
+const promoteConfiguredAdmin = async (
+  db: ReturnType<typeof createDb>,
+  adminEmails: Set<string>,
+  userId: string,
+  email: string
+) => {
+  if (!adminEmails.has(email.trim().toLowerCase())) {
+    return;
+  }
+
+  await db
+    .updateTable("user")
+    .set({
+      daily_date_limit: ADMIN_MEMBERSHIP_TIER.dailyDateLimit,
+      membership_tier: ADMIN_MEMBERSHIP_TIER.id,
+      role: "admin",
+    })
+    .where("id", "=", userId)
+    .execute();
+};
+
 export const buildStripePlans = async (db?: ReturnType<typeof createDb>) => {
   const executor = db ?? createDb();
   try {
@@ -88,7 +109,11 @@ export const buildStripePlans = async (db?: ReturnType<typeof createDb>) => {
 
 export const createAuth = () => {
   const db = createDb();
-  const adminEmails = parseAdminEmails(env.BETTER_AUTH_ADMIN_EMAILS);
+  const adminEmails = parseAdminEmails(
+    process.env.BETTER_AUTH_ADMIN_EMAILS ??
+      process.env.ADMIN_EMAILS ??
+      env.BETTER_AUTH_ADMIN_EMAILS
+  );
   const stripeEnabled = Boolean(
     env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET
   );
@@ -153,22 +178,29 @@ export const createAuth = () => {
       },
     },
     databaseHooks: {
+      session: {
+        create: {
+          after: async (session) => {
+            const user = await db
+              .selectFrom("user")
+              .select("email")
+              .where("id", "=", session.userId)
+              .executeTakeFirst();
+            if (user) {
+              await promoteConfiguredAdmin(
+                db,
+                adminEmails,
+                session.userId,
+                user.email
+              );
+            }
+          },
+        },
+      },
       user: {
         create: {
           after: async (user) => {
-            if (!adminEmails.has(user.email.toLowerCase())) {
-              return;
-            }
-
-            await db
-              .updateTable("user")
-              .set({
-                daily_date_limit: ADMIN_MEMBERSHIP_TIER.dailyDateLimit,
-                membership_tier: ADMIN_MEMBERSHIP_TIER.id,
-                role: "admin",
-              })
-              .where("id", "=", user.id)
-              .execute();
+            await promoteConfiguredAdmin(db, adminEmails, user.id, user.email);
           },
         },
       },

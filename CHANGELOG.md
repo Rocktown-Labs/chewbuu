@@ -48,6 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed configured Google-authenticated administrators being denied at `/admin` when existing accounts had not yet received their admin role, and added visible Admin navigation plus an account-menu entry.
 - Fixed `NavigationBlocker` erroneously triggering the "Unsaved Onboarding Progress" modal when navigating backward or switching between onboarding steps by ignoring intra-route/same-pathname transitions.
 
 - Fixed React hydration error #418 during onboarding by initializing SSR step to 0 and mounting persisted/hash state client-side.

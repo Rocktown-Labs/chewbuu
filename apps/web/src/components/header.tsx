@@ -1,13 +1,22 @@
 import { Link } from "@tanstack/react-router";
-import { Bell, HeartHandshake, Monitor, Moon, Sun } from "lucide-react";
+import {
+  Bell,
+  HeartHandshake,
+  Monitor,
+  Moon,
+  ShieldCheck,
+  Sun,
+} from "lucide-react";
 
 import { useTheme } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
+import { useAdminStatus } from "@/lib/use-admin-status";
 
 import UserMenu from "./user-menu";
 
 export default function Header() {
   const { data: session } = authClient.useSession();
+  const { isAdmin } = useAdminStatus(Boolean(session));
   const { theme, setTheme } = useTheme();
 
   const publicLinks = [
@@ -87,7 +96,17 @@ export default function Header() {
               Create Profile
             </Link>
           )}
-          <UserMenu />
+          {session && isAdmin && (
+            <Link
+              aria-label="Admin control room"
+              className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-2 font-medium text-primary text-sm transition hover:bg-primary/20"
+              to="/admin"
+            >
+              <ShieldCheck aria-hidden="true" className="size-4" />
+              Admin
+            </Link>
+          )}
+          <UserMenu isAdmin={isAdmin} />
           {session && (
             <Link
               aria-label="Notifications"

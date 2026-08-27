@@ -1,12 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { buildStripePlans, isReservedUsername } from "./index";
+import { parseAdminEmails } from "./membership";
 
 describe("reserved usernames", () => {
   it("protects official brand usernames", () => {
     expect(isReservedUsername("@chewbuu")).toBe(true);
     expect(isReservedUsername("chewbuusync")).toBe(true);
     expect(isReservedUsername("real-plans")).toBe(false);
+  });
+});
+
+describe("configured admin emails", () => {
+  it("normalizes comma-separated email allowlists", () => {
+    expect(parseAdminEmails(" Admin@Example.com, ,owner@example.com ")).toEqual(
+      new Set(["admin@example.com", "owner@example.com"])
+    );
   });
 });
 
