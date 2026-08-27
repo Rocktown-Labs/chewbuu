@@ -502,18 +502,18 @@ export interface AwsBlocksApi {
     reason?: "firecrawl_not_configured" | "invalid_menu" | "unavailable";
   }>;
   createVenueLocation: (input: {
-    address?: string;
+    address: string;
     discoveryPlaceId?: string;
     description?: string;
     handle?: string;
     menuUrl?: string;
     name: string;
     organizationName?: string;
-    phone?: string;
+    phone: string;
     referralCode?: string;
     venueRole?: "owner" | "referrer";
     style?: BrandStyle;
-    websiteUrl?: string;
+    websiteUrl: string;
   }) => Promise<{ location: VenueLocation; referral?: VenueReferral }>;
   updateVenueBrand: (input: UpdateVenueBrandInput) => Promise<{
     location: VenueLocation;

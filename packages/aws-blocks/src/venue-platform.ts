@@ -20,52 +20,12 @@ import type {
   VenueWorkspace,
 } from "./types";
 import { previewVenueMenu } from "./venue-menu";
-
-const httpUrl = z
-  .url()
-  .refine(
-    (value) => value.startsWith("https://") || value.startsWith("http://"),
-    "URL must use http or https"
-  );
-
-const brandStyleSchema = z
-  .object({
-    accentColor: z
-      .string()
-      .regex(/^#[0-9a-f]{6}$/i)
-      .optional(),
-    backgroundColor: z
-      .string()
-      .regex(/^#[0-9a-f]{6}$/i)
-      .optional(),
-    logoUrl: z.url().optional(),
-    tagline: z.string().trim().max(160).optional(),
-  })
-  .default({});
-
-const handleSchema = z
-  .string()
-  .trim()
-  .min(3)
-  .max(32)
-  .transform((value) => value.replace(/^@/, "").toLowerCase())
-  .refine((value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value), {
-    message: "Handles use lowercase letters, numbers, and single hyphens.",
-  });
-
-const venueLocationInputSchema = z.object({
-  address: z.string().trim().max(500).optional(),
-  description: z.string().trim().max(500).optional(),
-  discoveryPlaceId: z.string().trim().max(300).optional(),
-  handle: handleSchema.optional(),
-  menuUrl: httpUrl.optional(),
-  name: z.string().trim().min(1).max(160),
-  organizationName: z.string().trim().min(1).max(160).optional(),
-  phone: z.string().trim().max(50).optional(),
-  venueRole: z.enum(["owner", "referrer"]).default("referrer"),
-  style: brandStyleSchema,
-  websiteUrl: httpUrl.optional(),
-});
+import {
+  brandStyleSchema,
+  handleSchema,
+  httpUrl,
+  venueLocationInputSchema,
+} from "./venue-schemas";
 
 const menuPreviewInputSchema = z.object({ url: httpUrl });
 

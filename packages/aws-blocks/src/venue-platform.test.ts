@@ -1,10 +1,34 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { previewVenueMenu } from "./venue-menu";
+import { venueLocationInputSchema } from "./venue-schemas";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+describe("venue location input", () => {
+  it("requires venue contact details", () => {
+    expect(() =>
+      venueLocationInputSchema.parse({
+        name: "A venue",
+      })
+    ).toThrow();
+
+    expect(
+      venueLocationInputSchema.parse({
+        address: "123 Main Street",
+        name: "A venue",
+        phone: "+1 501 555 0100",
+        websiteUrl: "https://venue.example",
+      })
+    ).toMatchObject({
+      address: "123 Main Street",
+      phone: "+1 501 555 0100",
+      websiteUrl: "https://venue.example",
+    });
+  });
 });
 
 describe("venue menu previews", () => {

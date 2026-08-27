@@ -4583,18 +4583,18 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async createVenueLocation(input: {
-    address?: string;
+    address: string;
     description?: string;
     discoveryPlaceId?: string;
     handle?: string;
     menuUrl?: string;
     name: string;
     organizationName?: string;
-    phone?: string;
+    phone: string;
     referralCode?: string;
     style?: BrandStyle;
     venueRole?: "owner" | "referrer";
-    websiteUrl?: string;
+    websiteUrl: string;
   }) {
     return observeOperation("createVenueLocation", async () => {
       const sessionUser = await requireSession(context.request.headers);
