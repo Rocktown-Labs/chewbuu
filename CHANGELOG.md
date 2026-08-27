@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added guided rounded venue onboarding with Stripe Identity representative verification, storefront asset uploads, venue-owned menu items, item-linked food photos, and PostgreSQL menu modifier groups/options.
 - Added venue operational timeline events for arrival, cooking start, food served, date ended, order/reservation stages, deterministic venue analytics, public aggregate metrics with sample gating, filterable specials, public spot detail pages, and native specials discovery.
 - Added Better Auth Organizations as the canonical venue organization boundary with a non-destructive bridge from existing venue memberships.
 - Added admin Stripe Connect credential verification with SSM SecureString storage; connected-account creation and money movement remain capability-gated pending policy decisions.
@@ -48,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed venue creation failing when `venue_location.description` was written before the column existed by adding an idempotent PostgreSQL migration.
 - Fixed configured Google-authenticated administrators being denied at `/admin` when existing accounts had not yet received their admin role, and added visible Admin navigation plus an account-menu entry.
 - Fixed `NavigationBlocker` erroneously triggering the "Unsaved Onboarding Progress" modal when navigating backward or switching between onboarding steps by ignoring intra-route/same-pathname transitions.
 

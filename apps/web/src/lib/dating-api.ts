@@ -124,8 +124,50 @@ export interface VenueLocation {
   publicAnalyticsEnabled?: boolean;
   publicAnalyticsMinSamples?: number;
   status: string;
+  stripeIdentityStatus?: string;
+  stripeIdentityVerifiedName?: string;
   style?: BrandStyle;
   websiteUrl?: string;
+}
+
+export interface VenueMenuModifierOption {
+  available: boolean;
+  id: string;
+  name: string;
+  priceDeltaCents: number;
+  sortOrder: number;
+}
+
+export interface VenueMenuModifierGroup {
+  id: string;
+  maxSelections: number;
+  menuItemId: string;
+  minSelections: number;
+  name: string;
+  options: VenueMenuModifierOption[];
+  selectionType: "single" | "multiple";
+  sortOrder: number;
+}
+
+export interface VenueMenuItem {
+  available: boolean;
+  description?: string;
+  id: string;
+  locationId: string;
+  modifierGroups: VenueMenuModifierGroup[];
+  name: string;
+  photoUrl?: string;
+  priceCents: number;
+  section?: string;
+  sortOrder: number;
+  status: string;
+}
+
+export interface VenueIdentityVerificationSession {
+  id: string;
+  status: string;
+  url: string;
+  verifiedName?: string;
 }
 
 export interface VenueReferral {
@@ -505,6 +547,58 @@ export const venueApi = {
     blocksApi.captureVenueMenu({ locationId, url }) as Promise<{
       preview: VenueMenuPreview | null;
       reason?: "firecrawl_not_configured" | "invalid_menu" | "unavailable";
+    }>,
+  createIdentityVerificationSession: (locationId: string) =>
+    blocksApi.createVenueIdentityVerificationSession({
+      locationId,
+    }) as Promise<VenueIdentityVerificationSession>,
+  getIdentityVerificationStatus: (locationId: string) =>
+    blocksApi.getVenueIdentityVerificationStatus(
+      locationId
+    ) as Promise<VenueIdentityVerificationSession>,
+  listMenuItems: (locationId: string) =>
+    blocksApi.listVenueMenuItems(locationId) as Promise<{
+      items: VenueMenuItem[];
+    }>,
+  upsertMenuItem: (input: {
+    available?: boolean;
+    description?: string;
+    id?: string;
+    locationId: string;
+    name: string;
+    photoUrl?: string;
+    priceCents: number;
+    section?: string;
+    sortOrder?: number;
+    status?: "draft" | "published" | "archived";
+  }) =>
+    blocksApi.upsertVenueMenuItem(input) as Promise<{
+      item: VenueMenuItem;
+    }>,
+  upsertModifierGroup: (input: {
+    id?: string;
+    locationId: string;
+    maxSelections?: number;
+    menuItemId: string;
+    minSelections?: number;
+    name: string;
+    selectionType?: "single" | "multiple";
+    sortOrder?: number;
+  }) =>
+    blocksApi.upsertVenueMenuModifierGroup(input) as Promise<{
+      group: VenueMenuModifierGroup;
+    }>,
+  upsertModifierOption: (input: {
+    available?: boolean;
+    groupId: string;
+    id?: string;
+    locationId: string;
+    name: string;
+    priceDeltaCents?: number;
+    sortOrder?: number;
+  }) =>
+    blocksApi.upsertVenueMenuModifierOption(input) as Promise<{
+      option: VenueMenuModifierOption;
     }>,
   createLocation: (input: {
     address?: string;

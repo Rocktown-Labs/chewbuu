@@ -51,6 +51,7 @@ import type {
   ApiChatParticipant,
   AccountEntitlementsResponse,
   ApiChatRoom,
+  VenueIdentityVerificationSession,
   AiMessage,
   ApiNotification,
   CheckInInput,
@@ -100,6 +101,12 @@ import {
   updateVenueSpecial,
   upsertVenueTable,
 } from "./venue-analytics";
+import {
+  listVenueMenuItems,
+  upsertVenueMenuItem,
+  upsertVenueMenuModifierGroup,
+  upsertVenueMenuModifierOption,
+} from "./venue-catalog";
 import { previewVenueMenu } from "./venue-menu";
 import {
   acceptVenueInvite,
@@ -120,6 +127,10 @@ import {
   updateVenueReservation,
   inviteVenueMembers,
 } from "./venue-platform";
+import {
+  createVenueIdentityVerificationSession,
+  getVenueIdentityVerificationStatus,
+} from "./venue-vendor";
 
 type BlocksDbExecutor = Kysely<BlocksDatabase> | Transaction<BlocksDatabase>;
 
@@ -3195,6 +3206,52 @@ const readStripeConnectSecret = async (setting: AppSetting<string>) => {
   }
 };
 
+const getStripeIdentitySecret = async () =>
+  process.env.STRIPE_SECRET_KEY ??
+  (await readStripeConnectSecret(stripeConnectSecretKey));
+
+const createVenueIdentitySession = async (
+  sessionUser: SessionUser,
+  input: unknown
+): Promise<VenueIdentityVerificationSession> => {
+  const { locationId } = z
+    .object({ locationId: z.string().min(1) })
+    .parse(input);
+  const stripeSecretKey = await getStripeIdentitySecret();
+  if (!stripeSecretKey) {
+    throw new Error(
+      "Stripe Identity is not configured. Add a server-side Stripe key with Identity permissions."
+    );
+  }
+  const returnUrl = `${venueAppUrl}/venue-portal?verification=complete&locationId=${encodeURIComponent(locationId)}`;
+  return createVenueIdentityVerificationSession(
+    sessionUser.id,
+    locationId,
+    isConfiguredAdmin(sessionUser),
+    stripeSecretKey,
+    returnUrl,
+    sessionUser.email
+  );
+};
+
+const loadVenueIdentityStatus = async (
+  sessionUser: SessionUser,
+  locationId: string
+): Promise<VenueIdentityVerificationSession> => {
+  const stripeSecretKey = await getStripeIdentitySecret();
+  if (!stripeSecretKey) {
+    throw new Error(
+      "Stripe Identity is not configured. Add a server-side Stripe key with Identity permissions."
+    );
+  }
+  return getVenueIdentityVerificationStatus(
+    sessionUser.id,
+    locationId,
+    isConfiguredAdmin(sessionUser),
+    stripeSecretKey
+  );
+};
+
 const configureStripeConnect = async (
   sessionUser: SessionUser,
   input: unknown
@@ -4290,6 +4347,98 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
       return captureVenueMenu(sessionUser.id, body.locationId, {
         url: body.url,
       });
+    });
+  },
+
+  async createVenueIdentityVerificationSession(input: { locationId: string }) {
+    return observeOperation(
+      "createVenueIdentityVerificationSession",
+      async () => {
+        const sessionUser = await requireSession(context.request.headers);
+        return createVenueIdentitySession(sessionUser, input);
+      }
+    );
+  },
+
+  async getVenueIdentityVerificationStatus(locationId: string) {
+    return observeOperation("getVenueIdentityVerificationStatus", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return loadVenueIdentityStatus(
+        sessionUser,
+        z.string().min(1).parse(locationId)
+      );
+    });
+  },
+
+  async listVenueMenuItems(locationId: string) {
+    return observeOperation("listVenueMenuItems", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return listVenueMenuItems(
+        sessionUser.id,
+        z.string().min(1).parse(locationId),
+        isConfiguredAdmin(sessionUser)
+      );
+    });
+  },
+
+  async upsertVenueMenuItem(input: {
+    available?: boolean;
+    description?: string;
+    id?: string;
+    locationId: string;
+    name: string;
+    photoUrl?: string;
+    priceCents: number;
+    section?: string;
+    sortOrder?: number;
+    status?: "draft" | "published" | "archived";
+  }) {
+    return observeOperation("upsertVenueMenuItem", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return upsertVenueMenuItem(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async upsertVenueMenuModifierGroup(input: {
+    id?: string;
+    locationId: string;
+    maxSelections?: number;
+    menuItemId: string;
+    minSelections?: number;
+    name: string;
+    selectionType?: "single" | "multiple";
+    sortOrder?: number;
+  }) {
+    return observeOperation("upsertVenueMenuModifierGroup", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return upsertVenueMenuModifierGroup(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async upsertVenueMenuModifierOption(input: {
+    available?: boolean;
+    groupId: string;
+    id?: string;
+    locationId: string;
+    name: string;
+    priceDeltaCents?: number;
+    sortOrder?: number;
+  }) {
+    return observeOperation("upsertVenueMenuModifierOption", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return upsertVenueMenuModifierOption(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
     });
   },
 

@@ -777,15 +777,20 @@ export const venueAccess = async (
   if (isAdmin) return true;
   const db = await getDb();
   const member = await db
-    .selectFrom("member")
-    .innerJoin(
-      "venue_location",
-      "venue_location.organization_id",
-      "member.organization_id"
+    .selectFrom("venue_location")
+    .leftJoin(
+      "member",
+      "member.organization_id",
+      "venue_location.organization_id"
     )
-    .select("member.id")
+    .select(["member.id", "venue_location.submitted_by_user_id"])
     .where("venue_location.id", "=", locationId)
-    .where("member.user_id", "=", userId)
+    .where((expression) =>
+      expression.or([
+        expression("member.user_id", "=", userId),
+        expression("venue_location.submitted_by_user_id", "=", userId),
+      ])
+    )
     .executeTakeFirst();
   return Boolean(member);
 };

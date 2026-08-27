@@ -126,9 +126,61 @@ export interface VenueLocation {
   organizationId: string;
   publicAnalyticsEnabled?: boolean;
   publicAnalyticsMinSamples?: number;
+  stripeIdentityStatus?:
+    | "not_started"
+    | "requires_input"
+    | "processing"
+    | "verified"
+    | "failed";
+  stripeIdentityVerifiedName?: string;
   style?: BrandStyle;
   status: VenueLocationStatus;
   websiteUrl?: string;
+}
+
+export interface VenueMenuModifierOption {
+  available: boolean;
+  id: string;
+  name: string;
+  priceDeltaCents: number;
+  sortOrder: number;
+}
+
+export interface VenueMenuModifierGroup {
+  id: string;
+  maxSelections: number;
+  menuItemId: string;
+  minSelections: number;
+  name: string;
+  options: VenueMenuModifierOption[];
+  selectionType: "single" | "multiple";
+  sortOrder: number;
+}
+
+export interface VenueMenuItem {
+  available: boolean;
+  description?: string;
+  id: string;
+  locationId: string;
+  name: string;
+  photoUrl?: string;
+  priceCents: number;
+  section?: string;
+  sortOrder: number;
+  status: "draft" | "published" | "archived";
+  modifierGroups: VenueMenuModifierGroup[];
+}
+
+export interface VenueIdentityVerificationSession {
+  id: string;
+  status:
+    | "not_started"
+    | "requires_input"
+    | "processing"
+    | "verified"
+    | "failed";
+  url: string;
+  verifiedName?: string;
 }
 
 export interface VenueReferral {
@@ -430,6 +482,46 @@ export interface AwsBlocksApi {
     preview: VenueMenuPreview | null;
     reason?: "firecrawl_not_configured" | "invalid_menu" | "unavailable";
   }>;
+  createVenueIdentityVerificationSession: (input: {
+    locationId: string;
+  }) => Promise<VenueIdentityVerificationSession>;
+  getVenueIdentityVerificationStatus: (
+    locationId: string
+  ) => Promise<VenueIdentityVerificationSession>;
+  listVenueMenuItems: (locationId: string) => Promise<{
+    items: VenueMenuItem[];
+  }>;
+  upsertVenueMenuItem: (input: {
+    available?: boolean;
+    description?: string;
+    id?: string;
+    locationId: string;
+    name: string;
+    photoUrl?: string;
+    priceCents: number;
+    section?: string;
+    sortOrder?: number;
+    status?: "draft" | "published" | "archived";
+  }) => Promise<{ item: VenueMenuItem }>;
+  upsertVenueMenuModifierGroup: (input: {
+    id?: string;
+    locationId: string;
+    maxSelections?: number;
+    menuItemId: string;
+    minSelections?: number;
+    name: string;
+    selectionType?: "single" | "multiple";
+    sortOrder?: number;
+  }) => Promise<{ group: VenueMenuModifierGroup }>;
+  upsertVenueMenuModifierOption: (input: {
+    available?: boolean;
+    groupId: string;
+    id?: string;
+    locationId: string;
+    name: string;
+    priceDeltaCents?: number;
+    sortOrder?: number;
+  }) => Promise<{ option: VenueMenuModifierOption }>;
   createVenueReferral: (locationId: string) => Promise<{
     referral: VenueReferral;
   }>;
