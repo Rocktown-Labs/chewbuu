@@ -250,15 +250,22 @@ export interface VenueOrder {
 
 export type VenueOperationalEventType =
   | "arrived"
+  | "break_ended"
+  | "break_started"
+  | "clocked_in"
+  | "clocked_out"
   | "cooking_started"
   | "date_ended"
   | "food_served"
   | "left"
+  | "lunch_ended"
+  | "lunch_started"
   | "order_submitted"
   | "reservation_confirmed"
   | "reservation_requested"
   | "reservation_seated"
-  | "order_completed";
+  | "order_completed"
+  | "staff_late";
 
 export interface VenueOperationalEvent {
   actorUserId?: string;
@@ -291,6 +298,7 @@ export interface VenueShift {
   id: string;
   locationId: string;
   role: string;
+  section?: string;
   startAt: string;
   status: string;
   userId: string;
@@ -350,6 +358,7 @@ export interface VenuePublicSummary {
   averageCostCents: number | null;
   averageFoodWaitMinutes: number | null;
   handle: string;
+  jobs: VenueJobListing[];
   locationId: string;
   menuItems: VenuePublicMenuItem[];
   name: string;
@@ -378,6 +387,130 @@ export interface VenueWorkspace {
   shifts: VenueShift[];
   specials: VenueSpecial[];
   tables: VenueTable[];
+}
+
+export type VenueStaffRole =
+  | "admin"
+  | "host"
+  | "kitchen"
+  | "lead"
+  | "manager"
+  | "owner"
+  | "server"
+  | "staff";
+export type VenueAttendanceStatus =
+  | "break"
+  | "clocked_in"
+  | "clocked_out"
+  | "lunch"
+  | "scheduled";
+export type VenueServiceMode = "closed" | "closing" | "open" | "pre_open";
+
+export interface VenueAttendanceSegment {
+  endedAt?: string;
+  id: string;
+  kind: "break" | "lunch";
+  startedAt: string;
+}
+
+export interface VenueShiftAttendance {
+  clockInAt?: string;
+  clockOutAt?: string;
+  currentSegmentKind?: "break" | "lunch";
+  currentSegmentStartedAt?: string;
+  etaAt?: string;
+  id: string;
+  lateMinutes: number;
+  locationId: string;
+  segments: VenueAttendanceSegment[];
+  shiftId: string;
+  status: VenueAttendanceStatus;
+  userId: string;
+}
+
+export interface VenueStaffStatus {
+  attendance?: VenueShiftAttendance;
+  displayName: string;
+  email?: string;
+  phone?: string;
+  role: VenueStaffRole;
+  status: "active" | "invited" | "removed" | "suspended";
+  userId?: string;
+}
+
+export interface VenueServiceCustomer {
+  displayName: string;
+  id: string;
+  locationId: string;
+  notes?: string;
+  userId?: string;
+}
+
+export interface VenueServiceOrderItem {
+  id: string;
+  menuItemId?: string;
+  modifiers: unknown[];
+  name: string;
+  notes?: string;
+  quantity: number;
+  unitPriceCents: number;
+}
+
+export interface VenueServiceOrder extends VenueOrder {
+  customer?: VenueServiceCustomer;
+  items: VenueServiceOrderItem[];
+  source: "guest" | "preorder" | "staff";
+  tableId?: string;
+}
+
+export interface VenueServiceTable extends VenueTable {
+  customerNames: string[];
+  currentOrderIds: string[];
+  occupiedSeats: number;
+}
+
+export interface VenueSyncChannel {
+  id: string;
+  locationId: string;
+  roomId: string;
+  title: string;
+}
+
+export interface VenueJobListing {
+  applicationUrl?: string;
+  description: string;
+  employmentType: string;
+  expiresAt?: string;
+  id: string;
+  locationId: string;
+  payText?: string;
+  publishedAt?: string;
+  scheduleText?: string;
+  status: "archived" | "draft" | "published";
+  title: string;
+}
+
+export interface VenueServiceConfig {
+  closeMinute: number;
+  geofenceRadiusMeters: number;
+  latitude?: number;
+  locationId: string;
+  longitude?: number;
+  openMinute: number;
+  override?: VenueServiceMode;
+}
+
+export interface VenueServiceBoard {
+  assignedSection?: string;
+  attendance?: VenueShiftAttendance;
+  dailyCode?: string;
+  locationId: string;
+  mode: VenueServiceMode;
+  orders: VenueServiceOrder[];
+  preOrders: VenueServiceOrder[];
+  staff: VenueStaffStatus[];
+  tables: VenueServiceTable[];
+  viewerRole: VenueStaffRole;
 }
 
 export interface AwsBlocksApi {
@@ -607,6 +740,111 @@ export interface AwsBlocksApi {
   }>;
   getVenueLocations: () => Promise<{ locations: VenueLocation[] }>;
   getVenueWorkspace: (locationId: string) => Promise<VenueWorkspace>;
+  getVenueServiceBoard: (input: {
+    at?: string;
+    locationId: string;
+  }) => Promise<VenueServiceBoard>;
+  getVenueStaffStatus: (locationId: string) => Promise<{
+    staff: VenueStaffStatus[];
+  }>;
+  updateVenueStaff: (input: {
+    locationId: string;
+    role?: VenueStaffRole;
+    status?: "active" | "removed" | "suspended";
+    userId: string;
+  }) => Promise<{ staff: VenueStaffStatus[] }>;
+  updateVenueServiceConfig: (input: {
+    closeMinute?: number;
+    geofenceRadiusMeters?: number;
+    latitude?: number | null;
+    locationId: string;
+    longitude?: number | null;
+    openMinute?: number;
+    override?: VenueServiceMode | null;
+  }) => Promise<{ config: VenueServiceConfig }>;
+  clockInVenueShift: (input: {
+    code: string;
+    latitude?: number;
+    locationId: string;
+    longitude?: number;
+    shiftId: string;
+  }) => Promise<{ attendance: VenueShiftAttendance }>;
+  updateVenueAttendance: (input: {
+    action: "break_in" | "break_out" | "clock_out" | "lunch_in" | "lunch_out";
+    attendanceId: string;
+  }) => Promise<{ attendance: VenueShiftAttendance }>;
+  reportVenueStaffLate: (input: {
+    attendanceId: string;
+    etaAt?: string;
+    lateMinutes: number;
+  }) => Promise<{ attendance: VenueShiftAttendance }>;
+  createVenueServiceCustomer: (input: {
+    displayName: string;
+    email?: string;
+    locationId: string;
+    notes?: string;
+    phone?: string;
+    userId?: string;
+  }) => Promise<{ customer: VenueServiceCustomer }>;
+  listVenueServiceCustomers: (input: {
+    locationId: string;
+    search?: string;
+  }) => Promise<{ customers: VenueServiceCustomer[] }>;
+  upsertVenueShift: (input: {
+    endAt: string;
+    id?: string;
+    locationId: string;
+    role: VenueStaffRole;
+    section?: string;
+    startAt: string;
+    status?: string;
+    userId: string;
+  }) => Promise<{ shift: VenueShift }>;
+  createVenueServiceOrder: (input: {
+    customerId?: string;
+    customerName?: string;
+    diningSessionId?: string;
+    items: {
+      menuItemId?: string;
+      modifiers?: unknown[];
+      name: string;
+      notes?: string;
+      quantity: number;
+      unitPriceCents: number;
+    }[];
+    locationId: string;
+    source?: "preorder" | "staff";
+    tableId?: string;
+    tipCents?: number;
+  }) => Promise<{ order: VenueServiceOrder }>;
+  updateVenueServiceOrder: (input: {
+    assignedStaffUserId?: string;
+    orderId: string;
+    paymentStatus?: "paid" | "unpaid";
+    status?: string;
+    tipCents?: number;
+  }) => Promise<{ order: VenueServiceOrder }>;
+  listVenueSyncChannels: (locationId: string) => Promise<{
+    channels: VenueSyncChannel[];
+  }>;
+  listVenueJobListings: (locationId: string) => Promise<{
+    listings: VenueJobListing[];
+  }>;
+  listPublicVenueJobListings: (locationId: string) => Promise<{
+    listings: VenueJobListing[];
+  }>;
+  upsertVenueJobListing: (input: {
+    applicationUrl?: string;
+    description: string;
+    employmentType: string;
+    expiresAt?: string;
+    id?: string;
+    locationId: string;
+    payText?: string;
+    scheduleText?: string;
+    status?: "archived" | "draft" | "published";
+    title: string;
+  }) => Promise<{ listing: VenueJobListing }>;
   getVenueAnalytics: (
     locationId: string,
     input?: { endAt?: string; startAt?: string }
@@ -881,6 +1119,7 @@ export interface CommunityInviteResponse {
   id: string;
   inviteToken?: string;
   name: string | null;
+  phone?: string;
   status: string;
 }
 
@@ -894,7 +1133,12 @@ export interface UpdateVenueBrandInput {
 
 export interface InviteVenueMembersInput {
   locationId: string;
-  members: { email: string; name?: string; role?: string }[];
+  members: {
+    email?: string;
+    name?: string;
+    phone?: string;
+    role?: string;
+  }[];
 }
 
 export interface AccountEntitlementsResponse {
