@@ -122,6 +122,23 @@ import {
 } from "./venue-catalog";
 import { previewVenueMenu } from "./venue-menu";
 import {
+  clockInVenueShift,
+  createVenueServiceCustomer,
+  createVenueServiceOrder,
+  getVenueServiceBoard,
+  getVenueStaffStatus,
+  listVenueJobListings,
+  listVenueServiceCustomers,
+  listVenueSyncChannels,
+  reportVenueStaffLate,
+  updateVenueAttendance,
+  updateVenueServiceOrder,
+  updateVenueServiceConfig,
+  updateVenueStaff,
+  upsertVenueJobListing,
+  upsertVenueShift,
+} from "./venue-operations";
+import {
   acceptVenueInvite,
   approveVenueClaim,
   captureVenueMenu,
@@ -2399,6 +2416,7 @@ const loadRoomsFromDatabase = async (userId: string, roomIds?: string[]) => {
     )
     .selectAll("room")
     .where("membership.user_id", "=", userId)
+    .where("room.kind", "!=", "sync_staff")
     .orderBy("room.updated_at", "desc");
 
   if (roomIds?.length) roomQuery = roomQuery.where("room.id", "in", roomIds);
@@ -4662,6 +4680,7 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         input
       );
       for (const invite of result.invites) {
+        if (!invite.email) continue;
         const inviteToken = invite.inviteToken ?? "";
         await venueEmailJob.submit({
           body: `You were invited to help manage a Chewbuu Sync venue. Open ${venueAppUrl}/venues?invite=${encodeURIComponent(inviteToken)} to continue.`,
@@ -4728,6 +4747,358 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return observeOperation("getVenueLocations", async () => {
       const sessionUser = await requireSession(context.request.headers);
       return getVenueLocations(sessionUser.id, isConfiguredAdmin(sessionUser));
+    });
+  },
+
+  async getVenueServiceBoard(input: { at?: string; locationId: string }) {
+    return observeOperation("getVenueServiceBoard", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getVenueServiceBoard(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async getVenueStaffStatus(locationId: string) {
+    return observeOperation("getVenueStaffStatus", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getVenueStaffStatus(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        z.string().min(1).parse(locationId)
+      );
+    });
+  },
+
+  async updateVenueServiceConfig(input: {
+    closeMinute?: number;
+    geofenceRadiusMeters?: number;
+    latitude?: number | null;
+    locationId: string;
+    longitude?: number | null;
+    openMinute?: number;
+    override?: "closed" | "closing" | "open" | "pre_open" | null;
+  }) {
+    return observeOperation("updateVenueServiceConfig", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return updateVenueServiceConfig(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async updateVenueStaff(input: {
+    locationId: string;
+    role?:
+      | "admin"
+      | "host"
+      | "kitchen"
+      | "lead"
+      | "manager"
+      | "owner"
+      | "server"
+      | "staff";
+    status?: "active" | "removed" | "suspended";
+    userId: string;
+  }) {
+    return observeOperation("updateVenueStaff", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return updateVenueStaff(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async clockInVenueShift(input: {
+    code: string;
+    latitude?: number;
+    locationId: string;
+    longitude?: number;
+    shiftId: string;
+  }) {
+    return observeOperation("clockInVenueShift", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await clockInVenueShift(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+      await recordVenueOperationalEvent(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        {
+          entityId: result.attendance.id,
+          entityType: "attendance",
+          eventType: "clocked_in",
+          locationId: input.locationId,
+          metadata: { shiftId: input.shiftId },
+          source: "staff",
+        }
+      );
+      return result;
+    });
+  },
+
+  async updateVenueAttendance(input: {
+    action: "break_in" | "break_out" | "clock_out" | "lunch_in" | "lunch_out";
+    attendanceId: string;
+  }) {
+    return observeOperation("updateVenueAttendance", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await updateVenueAttendance(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+      const eventType =
+        input.action === "break_out"
+          ? "break_started"
+          : input.action === "break_in"
+            ? "break_ended"
+            : input.action === "lunch_out"
+              ? "lunch_started"
+              : input.action === "lunch_in"
+                ? "lunch_ended"
+                : "clocked_out";
+      await recordVenueOperationalEvent(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        {
+          entityId: result.attendance.id,
+          entityType: "attendance",
+          eventType,
+          locationId: result.attendance.locationId,
+          metadata: { attendanceId: result.attendance.id },
+          source: "staff",
+        }
+      );
+      return result;
+    });
+  },
+
+  async reportVenueStaffLate(input: {
+    attendanceId: string;
+    etaAt?: string;
+    lateMinutes: number;
+  }) {
+    return observeOperation("reportVenueStaffLate", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await reportVenueStaffLate(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+      await recordVenueOperationalEvent(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        {
+          entityId: result.attendance.id,
+          entityType: "attendance",
+          eventType: "staff_late",
+          locationId: result.attendance.locationId,
+          metadata: {
+            etaAt: input.etaAt ?? null,
+            lateMinutes: input.lateMinutes,
+          },
+          source: "staff",
+        }
+      );
+      return result;
+    });
+  },
+
+  async createVenueServiceCustomer(input: {
+    displayName: string;
+    email?: string;
+    locationId: string;
+    notes?: string;
+    phone?: string;
+    userId?: string;
+  }) {
+    return observeOperation("createVenueServiceCustomer", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createVenueServiceCustomer(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async listVenueServiceCustomers(input: {
+    locationId: string;
+    search?: string;
+  }) {
+    return observeOperation("listVenueServiceCustomers", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return listVenueServiceCustomers(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async upsertVenueShift(input: {
+    endAt: string;
+    id?: string;
+    locationId: string;
+    role:
+      | "admin"
+      | "host"
+      | "kitchen"
+      | "lead"
+      | "manager"
+      | "owner"
+      | "server"
+      | "staff";
+    section?: string;
+    startAt: string;
+    status?: string;
+    userId: string;
+  }) {
+    return observeOperation("upsertVenueShift", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return upsertVenueShift(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+    });
+  },
+
+  async createVenueServiceOrder(input: unknown) {
+    return observeOperation("createVenueServiceOrder", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await createVenueServiceOrder(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+      await recordVenueOperationalEvent(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        {
+          entityId: result.order.id,
+          entityType: "order",
+          eventType: "order_submitted",
+          locationId: result.order.locationId,
+          metadata: {
+            source: result.order.source,
+            totalCents: result.order.totalCents,
+          },
+          orderId: result.order.id,
+          source: "staff",
+          tableId: result.order.tableId,
+        }
+      );
+      await publishVenueEvent({
+        detail: `A staff order for $${(result.order.totalCents / 100).toFixed(2)} was created.`,
+        id: result.order.id,
+        kind: "order_created",
+        locationId: result.order.locationId,
+        status: result.order.status,
+        title: "New service order",
+      });
+      return result;
+    });
+  },
+
+  async updateVenueServiceOrder(input: unknown) {
+    return observeOperation("updateVenueServiceOrder", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const result = await updateVenueServiceOrder(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
+      const status =
+        typeof input === "object" && input !== null && "status" in input
+          ? input.status
+          : undefined;
+      const eventType =
+        status === "preparing"
+          ? "cooking_started"
+          : status === "served"
+            ? "food_served"
+            : status === "completed"
+              ? "order_completed"
+              : undefined;
+      if (eventType) {
+        await recordVenueOperationalEvent(
+          sessionUser.id,
+          isConfiguredAdmin(sessionUser),
+          {
+            entityId: result.order.id,
+            entityType: "order",
+            eventType,
+            locationId: result.order.locationId,
+            metadata: { status },
+            orderId: result.order.id,
+            source: "staff",
+            tableId: result.order.tableId,
+          }
+        );
+      }
+      await publishVenueEvent({
+        detail: `Order ${result.order.id} moved to ${result.order.status}.`,
+        id: result.order.id,
+        kind: "order_created",
+        locationId: result.order.locationId,
+        status: result.order.status,
+        title: "Service order updated",
+      });
+      return result;
+    });
+  },
+
+  async listVenueSyncChannels(locationId: string) {
+    return observeOperation("listVenueSyncChannels", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return listVenueSyncChannels(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        z.string().min(1).parse(locationId)
+      );
+    });
+  },
+
+  async listVenueJobListings(locationId: string) {
+    return observeOperation("listVenueJobListings", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return listVenueJobListings(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        z.string().min(1).parse(locationId)
+      );
+    });
+  },
+
+  async listPublicVenueJobListings(locationId: string) {
+    return observeOperation("listPublicVenueJobListings", () =>
+      listVenueJobListings(
+        undefined,
+        false,
+        z.string().min(1).parse(locationId),
+        true
+      )
+    );
+  },
+
+  async upsertVenueJobListing(input: unknown) {
+    return observeOperation("upsertVenueJobListing", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return upsertVenueJobListing(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        input
+      );
     });
   },
 

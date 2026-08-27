@@ -51,6 +51,7 @@ These production variables are optional but should be deliberately reviewed:
 - `RESEND_FROM_EMAIL` — otherwise the code default is `Chewbuu <noreply@news.chewbuu.com>`; the sender domain must be verified in Resend
 - `DATABASE_CA_CERT` — optional PEM or certificate path for verified PlanetScale migration connections; the workflow falls back to the GitHub runner system CA bundle
 - `VENUE_EMAIL_FROM` — verified SES sender used by AWS Blocks venue notification jobs
+- `SYNC_ATTENDANCE_SECRET` — server-only secret used to derive daily Sync clock-in codes; required in production
 - `VENUE_APP_URL` — base URL used for clickable venue notification links; defaults to `https://chewbuu.com`
 - `BLOCKS_STRIPE_CONNECT_SECRET_PARAMETER` — optional SSM SecureString path for the admin-configured Stripe restricted/secret platform key; defaults to `/chewbuu-prod-stripe-connect-secret-key`
 - `BLOCKS_STRIPE_CONNECT_WEBHOOK_PARAMETER` — optional SSM SecureString path for the admin-configured Stripe Connect webhook secret; defaults to `/chewbuu-prod-stripe-connect-webhook-secret`

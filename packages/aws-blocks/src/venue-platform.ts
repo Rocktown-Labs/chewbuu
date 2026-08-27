@@ -298,6 +298,7 @@ export const createVenueLocation = async (
           address: parsed.address,
           description: parsed.description ?? null,
           discovery_place_id: parsed.discoveryPlaceId,
+          geofence_radius_meters: 150,
           handle,
           id: locationId,
           menu_url: parsed.menuUrl,
@@ -306,6 +307,8 @@ export const createVenueLocation = async (
           phone: parsed.phone,
           public_analytics_enabled: false,
           public_analytics_min_samples: 5,
+          service_close_minute: 1320,
+          service_open_minute: 660,
           status: "unclaimed",
           style: jsonb(parsed.style),
           submitted_by_user_id: userId,
@@ -471,11 +474,16 @@ export const inviteVenueMembers = async (
       locationId: z.string().min(1),
       members: z
         .array(
-          z.object({
-            email: z.email(),
-            name: z.string().trim().max(120).optional(),
-            role: z.string().trim().min(1).max(50).default("staff"),
-          })
+          z
+            .object({
+              email: z.email().optional(),
+              name: z.string().trim().max(120).optional(),
+              phone: z.string().trim().min(7).max(40).optional(),
+              role: z.string().trim().min(1).max(50).default("staff"),
+            })
+            .refine((member) => member.email || member.phone, {
+              message: "An email or phone number is required.",
+            })
         )
         .min(1)
         .max(50),
@@ -487,28 +495,33 @@ export const inviteVenueMembers = async (
   const db = await getDb();
   const location = await db
     .selectFrom("venue_location")
-    .select("organization_id")
+    .select(["id", "organization_id"])
     .where("id", "=", body.locationId)
     .executeTakeFirst();
   if (!location) throw new Error("Venue not found.");
 
   const invites: CommunityInviteResponse[] = [];
   for (const member of body.members) {
-    const email = member.email.trim().toLowerCase();
-    const existingUser = await db
-      .selectFrom("user")
-      .select("id")
-      .where("email", "=", email)
-      .executeTakeFirst();
+    const email = member.email?.trim().toLowerCase();
+    const phone = member.phone?.trim();
+    const existingUser = email
+      ? await db
+          .selectFrom("user")
+          .select("id")
+          .where("email", "=", email)
+          .executeTakeFirst()
+      : undefined;
     const [invite] = await db
       .insertInto("venue_member_invite")
       .values({
         created_at: new Date(),
-        email,
+        email: email ?? null,
         id: randomUUID(),
         invite_token: randomUUID(),
+        location_id: location.id,
         name: member.name ?? null,
         organization_id: location.organization_id,
+        phone: phone ?? null,
         role: member.role,
         status: existingUser ? "joined" : "sent",
         invited_by_user_id: userId,
@@ -535,6 +548,24 @@ export const inviteVenueMembers = async (
         )
         .execute();
       await db
+        .insertInto("venue_member_location")
+        .values({
+          id: randomUUID(),
+          location_id: location.id,
+          role: member.role,
+          status: "active",
+          updated_at: new Date(),
+          user_id: existingUser.id,
+        })
+        .onConflict((conflict) =>
+          conflict.columns(["location_id", "user_id"]).doUpdateSet({
+            role: member.role,
+            status: "active",
+            updated_at: new Date(),
+          })
+        )
+        .execute();
+      await db
         .insertInto("member")
         .values({
           created_at: new Date(),
@@ -549,10 +580,11 @@ export const inviteVenueMembers = async (
         .execute();
     }
     invites.push({
-      email,
+      email: email ?? "",
       id: invite.id,
       inviteToken: invite.invite_token,
       name: invite.name,
+      ...(invite.phone ? { phone: invite.phone } : {}),
       status: invite.status,
     });
   }
@@ -567,11 +599,20 @@ export const acceptVenueInvite = async (
   const db = await getDb();
   const invite = await db
     .selectFrom("venue_member_invite")
-    .select(["email", "id", "organization_id", "role"])
+    .select(["email", "id", "location_id", "organization_id", "phone", "role"])
     .where("invite_token", "=", inviteToken)
     .where("status", "=", "sent")
     .executeTakeFirst();
-  if (!invite || invite.email.toLowerCase() !== email.toLowerCase()) {
+  const profile = await db
+    .selectFrom("profile")
+    .select("phone")
+    .where("user_id", "=", userId)
+    .executeTakeFirst();
+  const emailMatches = invite?.email?.toLowerCase() === email.toLowerCase();
+  const phoneMatches = Boolean(
+    invite?.phone && profile?.phone === invite.phone
+  );
+  if (!invite || (!emailMatches && !phoneMatches)) {
     throw new Error(
       "This venue invitation is invalid or belongs to another email."
     );
@@ -594,6 +635,26 @@ export const acceptVenueInvite = async (
           .doUpdateSet({ role: invite.role, status: "active" })
       )
       .execute();
+    if (invite.location_id) {
+      await tx
+        .insertInto("venue_member_location")
+        .values({
+          id: randomUUID(),
+          location_id: invite.location_id,
+          role: invite.role,
+          status: "active",
+          updated_at: new Date(),
+          user_id: userId,
+        })
+        .onConflict((conflict) =>
+          conflict.columns(["location_id", "user_id"]).doUpdateSet({
+            role: invite.role,
+            status: "active",
+            updated_at: new Date(),
+          })
+        )
+        .execute();
+    }
     await tx
       .insertInto("member")
       .values({
@@ -638,9 +699,9 @@ export const getVenueLocations = async (userId: string, isAdmin: boolean) => {
     : await db
         .selectFrom("venue_location")
         .innerJoin(
-          "member",
-          "member.organization_id",
-          "venue_location.organization_id"
+          "venue_member_location",
+          "venue_member_location.location_id",
+          "venue_location.id"
         )
         .select([
           "venue_location.address as address",
@@ -654,7 +715,8 @@ export const getVenueLocations = async (userId: string, isAdmin: boolean) => {
           "venue_location.style as style",
           "venue_location.website_url as website_url",
         ])
-        .where("member.user_id", "=", userId)
+        .where("venue_member_location.user_id", "=", userId)
+        .where("venue_member_location.status", "=", "active")
         .orderBy("venue_location.created_at", "desc")
         .execute();
   return { locations: locations.map(toVenueLocation) };
@@ -759,12 +821,30 @@ export const venueAccess = async (
       "member.organization_id",
       "venue_location.organization_id"
     )
+    .leftJoin("venue_member", (join) =>
+      join
+        .onRef(
+          "venue_member.organization_id",
+          "=",
+          "venue_location.organization_id"
+        )
+        .on("venue_member.user_id", "=", userId)
+    )
+    .leftJoin("venue_member_location", (join) =>
+      join
+        .onRef("venue_member_location.location_id", "=", "venue_location.id")
+        .on("venue_member_location.user_id", "=", userId)
+    )
     .select(["member.id", "venue_location.submitted_by_user_id"])
     .where("venue_location.id", "=", locationId)
     .where((expression) =>
       expression.or([
-        expression("member.user_id", "=", userId),
         expression("venue_location.submitted_by_user_id", "=", userId),
+        expression.and([
+          expression("member.user_id", "=", userId),
+          expression("venue_member.status", "=", "active"),
+          expression("venue_member_location.status", "=", "active"),
+        ]),
       ])
     )
     .executeTakeFirst();
@@ -846,6 +926,24 @@ export const approveVenueClaim = async (
       })
       .onConflict((conflict) =>
         conflict.columns(["organization_id", "user_id"]).doUpdateSet({
+          role: "owner",
+          status: "active",
+          updated_at: new Date(),
+        })
+      )
+      .execute();
+    await transaction
+      .insertInto("venue_member_location")
+      .values({
+        id: randomUUID(),
+        location_id: locationId,
+        role: "owner",
+        status: "active",
+        updated_at: new Date(),
+        user_id: claim.submitted_by_user_id,
+      })
+      .onConflict((conflict) =>
+        conflict.columns(["location_id", "user_id"]).doUpdateSet({
           role: "owner",
           status: "active",
           updated_at: new Date(),
@@ -941,6 +1039,7 @@ export const getVenueWorkspace = async (
         "id",
         "location_id",
         "role",
+        "section",
         "start_at",
         "status",
         "user_id",
@@ -1004,6 +1103,7 @@ export const getVenueWorkspace = async (
         id: shift.id,
         locationId: shift.location_id,
         role: shift.role,
+        ...(shift.section ? { section: shift.section } : {}),
         startAt: new Date(shift.start_at).toISOString(),
         status: shift.status,
         userId: shift.user_id,
@@ -1292,6 +1392,7 @@ export const createVenueOrder = async (userId: string, input: unknown) => {
         location_id: orderInput.locationId,
         payment_status: "unpaid",
         reservation_id: orderInput.reservationId,
+        source: "guest",
         status: "submitted",
         subtotal_cents: subtotalCents,
         tip_cents: orderInput.tipCents,

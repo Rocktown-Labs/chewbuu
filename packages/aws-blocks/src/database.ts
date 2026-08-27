@@ -410,7 +410,10 @@ export interface VenueLocationTable {
   description: string | null;
   discovery_place_id: string | null;
   handle: string | null;
+  geofence_radius_meters: number;
   id: string;
+  latitude: number | null;
+  longitude: number | null;
   menu_url: string | null;
   name: string;
   organization_id: string;
@@ -427,7 +430,20 @@ export interface VenueLocationTable {
   stripe_account_id: string | null;
   updated_at: Timestamp;
   verified_at: Timestamp | null;
+  service_close_minute: number;
+  service_mode_override: string | null;
+  service_open_minute: number;
   website_url: string | null;
+}
+
+export interface VenueMemberLocationTable {
+  created_at: Timestamp;
+  id: string;
+  location_id: string;
+  role: string;
+  status: string;
+  updated_at: Timestamp;
+  user_id: string;
 }
 
 export interface VenueMemberTable {
@@ -454,11 +470,13 @@ export interface SyncSubscriptionTable {
 
 export interface VenueMemberInviteTable {
   created_at: Timestamp;
-  email: string;
+  email: string | null;
   id: string;
   invite_token: string;
+  location_id: string | null;
   name: string | null;
   organization_id: string;
+  phone: string | null;
   role: string;
   status: string;
   invited_by_user_id: string;
@@ -561,12 +579,37 @@ export interface VenueReferralTable {
   updated_at: Timestamp;
 }
 
+export interface VenueShiftAttendanceTable {
+  clock_in_at: Timestamp | null;
+  clock_out_at: Timestamp | null;
+  created_at: Timestamp;
+  current_segment_kind: string | null;
+  current_segment_started_at: Timestamp | null;
+  eta_at: Timestamp | null;
+  id: string;
+  late_minutes: number;
+  location_id: string;
+  shift_id: string;
+  status: string;
+  updated_at: Timestamp;
+  user_id: string;
+}
+
+export interface VenueAttendanceSegmentTable {
+  attendance_id: string;
+  ended_at: Timestamp | null;
+  id: string;
+  kind: string;
+  started_at: Timestamp;
+}
+
 export interface VenueShiftTable {
   created_at: Timestamp;
   end_at: Timestamp;
   id: string;
   location_id: string;
   role: string;
+  section: string | null;
   start_at: Timestamp;
   status: string;
   updated_at: Timestamp;
@@ -617,7 +660,10 @@ export interface VenueOrderTable {
   location_id: string;
   payment_status: string;
   reservation_id: string | null;
+  service_customer_id: string | null;
+  source: string;
   status: string;
+  table_id: string | null;
   stripe_payment_intent_id: string | null;
   subtotal_cents: number;
   tip_cents: number;
@@ -629,11 +675,50 @@ export interface VenueOrderTable {
 export interface VenueOrderItemTable {
   created_at: Timestamp;
   id: string;
+  menu_item_id: string | null;
+  modifiers: JsonColumn<unknown[]>;
   name: string;
   notes: string | null;
   order_id: string;
   quantity: number;
   unit_price_cents: number;
+}
+
+export interface VenueServiceCustomerTable {
+  created_at: Timestamp;
+  display_name: string;
+  email: string | null;
+  id: string;
+  location_id: string;
+  notes: string | null;
+  phone: string | null;
+  updated_at: Timestamp;
+  user_id: string | null;
+}
+
+export interface VenueSyncChannelTable {
+  created_at: Timestamp;
+  id: string;
+  location_id: string;
+  room_id: string;
+  status: string;
+  updated_at: Timestamp;
+}
+
+export interface VenueJobListingTable {
+  application_url: string | null;
+  created_at: Timestamp;
+  description: string;
+  employment_type: string;
+  expires_at: Timestamp | null;
+  id: string;
+  location_id: string;
+  pay_text: string | null;
+  published_at: Timestamp | null;
+  schedule_text: string | null;
+  status: string;
+  title: string;
+  updated_at: Timestamp;
 }
 
 export interface VenueTipAllocationTable {
@@ -729,6 +814,7 @@ export interface BlocksDatabase {
   venue_location: VenueLocationTable;
   venue_media: VenueMediaTable;
   venue_member: VenueMemberTable;
+  venue_member_location: VenueMemberLocationTable;
   venue_member_invite: VenueMemberInviteTable;
   venue_menu: VenueMenuTable;
   venue_menu_item: VenueMenuItemTable;
@@ -738,13 +824,18 @@ export interface BlocksDatabase {
   venue_order: VenueOrderTable;
   venue_order_item: VenueOrderItemTable;
   venue_organization: VenueOrganizationTable;
+  venue_service_customer: VenueServiceCustomerTable;
   venue_referral: VenueReferralTable;
   venue_reservation: VenueReservationTable;
   venue_shift: VenueShiftTable;
+  venue_shift_attendance: VenueShiftAttendanceTable;
   venue_shift_swap: VenueShiftSwapTable;
   venue_special: VenueSpecialTable;
+  venue_sync_channel: VenueSyncChannelTable;
   venue_table: VenueTableTable;
+  venue_job_listing: VenueJobListingTable;
   venue_tip_allocation: VenueTipAllocationTable;
+  venue_attendance_segment: VenueAttendanceSegmentTable;
 }
 
 const scope = new Scope("chewbuu");

@@ -7,6 +7,7 @@ import { getDb, jsonb } from "./database";
 import type { BlocksDatabase } from "./database";
 import type {
   VenueAnalytics,
+  VenueJobListing,
   VenueOperationalEvent,
   VenueOperationalEventType,
   VenuePublicMenuItem,
@@ -18,15 +19,22 @@ import { venueAccess } from "./venue-platform";
 
 const eventTypeSchema: z.ZodType<VenueOperationalEventType> = z.enum([
   "arrived",
+  "break_ended",
+  "break_started",
+  "clocked_in",
+  "clocked_out",
   "cooking_started",
   "date_ended",
   "food_served",
   "left",
+  "lunch_ended",
+  "lunch_started",
   "order_completed",
   "order_submitted",
   "reservation_confirmed",
   "reservation_requested",
   "reservation_seated",
+  "staff_late",
 ]);
 
 const metadataSchema = z.record(z.string(), z.unknown()).default({});
@@ -132,6 +140,38 @@ const toSpecial = (special: {
   startsAt: new Date(special.starts_at).toISOString(),
   status: special.status as VenueSpecial["status"],
   title: special.title,
+});
+
+const toPublicJob = (listing: {
+  application_url: string | null;
+  description: string;
+  employment_type: string;
+  expires_at: Date | string | null;
+  id: string;
+  location_id: string;
+  pay_text: string | null;
+  published_at: Date | string | null;
+  schedule_text: string | null;
+  status: string;
+  title: string;
+}): VenueJobListing => ({
+  ...(listing.application_url
+    ? { applicationUrl: listing.application_url }
+    : {}),
+  description: listing.description,
+  employmentType: listing.employment_type,
+  ...(toIso(listing.expires_at)
+    ? { expiresAt: toIso(listing.expires_at) }
+    : {}),
+  id: listing.id,
+  locationId: listing.location_id,
+  ...(listing.pay_text ? { payText: listing.pay_text } : {}),
+  ...(toIso(listing.published_at)
+    ? { publishedAt: toIso(listing.published_at) }
+    : {}),
+  ...(listing.schedule_text ? { scheduleText: listing.schedule_text } : {}),
+  status: "published",
+  title: listing.title,
 });
 
 const toTable = (table: {
@@ -690,7 +730,7 @@ export const getVenuePublicSummary = async (
   if (!location) throw new Error("Venue not found");
   if (!isPublicVenue(location)) throw new Error("Spot is not published");
 
-  const [specialsResult, menuItems] = await Promise.all([
+  const [specialsResult, menuItems, jobs] = await Promise.all([
     listPublicVenueSpecials({ locationId: location.id }),
     db
       .selectFrom("venue_menu_item")
@@ -700,10 +740,37 @@ export const getVenuePublicSummary = async (
       .orderBy("sort_order", "asc")
       .orderBy("name", "asc")
       .execute(),
+    db
+      .selectFrom("venue_job_listing")
+      .select([
+        "application_url",
+        "description",
+        "employment_type",
+        "expires_at",
+        "id",
+        "location_id",
+        "pay_text",
+        "published_at",
+        "schedule_text",
+        "status",
+        "title",
+      ])
+      .where("location_id", "=", location.id)
+      .where("status", "=", "published")
+      .where((expression) =>
+        expression.or([
+          expression("expires_at", "is", null),
+          expression("expires_at", ">", new Date()),
+        ])
+      )
+      .orderBy("created_at", "desc")
+      .limit(20)
+      .execute(),
   ]);
   const publicFields = {
     ...(location.address ? { address: location.address } : {}),
     handle: location.handle ?? location.id,
+    jobs: jobs.map(toPublicJob),
     locationId: location.id,
     menuItems: menuItems.map(toPublicMenuItem),
     name: location.name,
