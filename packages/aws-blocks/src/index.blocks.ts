@@ -126,6 +126,7 @@ import {
   createVenueServiceCustomer,
   createVenueServiceOrder,
   getVenueServiceBoard,
+  getVenueServiceConfig,
   getVenueStaffStatus,
   listVenueJobListings,
   listVenueServiceCustomers,
@@ -4757,6 +4758,17 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         sessionUser.id,
         isConfiguredAdmin(sessionUser),
         input
+      );
+    });
+  },
+
+  async getVenueServiceConfig(locationId: string) {
+    return observeOperation("getVenueServiceConfig", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getVenueServiceConfig(
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser),
+        z.string().min(1).parse(locationId)
       );
     });
   },

@@ -508,6 +508,7 @@ export interface VenueServiceBoard {
   mode: VenueServiceMode;
   orders: VenueServiceOrder[];
   preOrders: VenueServiceOrder[];
+  shifts: VenueShift[];
   staff: VenueStaffStatus[];
   tables: VenueServiceTable[];
   viewerRole: VenueStaffRole;
@@ -744,6 +745,9 @@ export interface AwsBlocksApi {
     at?: string;
     locationId: string;
   }) => Promise<VenueServiceBoard>;
+  getVenueServiceConfig: (locationId: string) => Promise<{
+    config: VenueServiceConfig;
+  }>;
   getVenueStaffStatus: (locationId: string) => Promise<{
     staff: VenueStaffStatus[];
   }>;

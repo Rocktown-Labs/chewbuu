@@ -449,6 +449,40 @@ export const updateVenueServiceConfig = async (
   return { config };
 };
 
+export const getVenueServiceConfig = async (
+  userId: string,
+  isAdmin: boolean,
+  locationId: string
+) => {
+  await assertAccess(userId, locationId, isAdmin, true);
+  const db = await getDb();
+  const location = await db
+    .selectFrom("venue_location")
+    .select([
+      "geofence_radius_meters",
+      "latitude",
+      "longitude",
+      "service_close_minute",
+      "service_mode_override",
+      "service_open_minute",
+    ])
+    .where("id", "=", locationId)
+    .executeTakeFirstOrThrow();
+  return {
+    config: {
+      closeMinute: location.service_close_minute,
+      geofenceRadiusMeters: location.geofence_radius_meters,
+      ...(location.latitude === null ? {} : { latitude: location.latitude }),
+      locationId,
+      ...(location.longitude === null ? {} : { longitude: location.longitude }),
+      openMinute: location.service_open_minute,
+      ...(location.service_mode_override
+        ? { override: serviceModeSchema.parse(location.service_mode_override) }
+        : {}),
+    } satisfies VenueServiceConfig,
+  };
+};
+
 const loadStaff = async (
   db: Db,
   locationId: string,
@@ -509,7 +543,12 @@ const loadStaff = async (
       displayName: assignment.name,
       email: assignment.email,
       role: toRole(assignment.role),
-      status: assignment.status === "active" ? "active" : "suspended",
+      status:
+        assignment.status === "active"
+          ? "active"
+          : assignment.status === "removed"
+            ? "removed"
+            : "suspended",
       userId: assignment.user_id,
     });
   }
@@ -621,22 +660,34 @@ export const getVenueServiceBoard = async (
     ])
     .where("id", "=", body.locationId)
     .executeTakeFirstOrThrow();
+  const viewerIsManager = isManager(access.role);
   const shifts = await db
     .selectFrom("venue_shift")
-    .select(["end_at", "id", "section", "start_at", "user_id"])
+    .select([
+      "end_at",
+      "id",
+      "location_id",
+      "role",
+      "section",
+      "start_at",
+      "status",
+      "user_id",
+    ])
     .where("location_id", "=", body.locationId)
-    .where("user_id", "=", userId)
     .where("start_at", "<=", new Date(now.getTime() + 24 * 60 * 60 * 1000))
     .where("end_at", ">=", new Date(now.getTime() - 24 * 60 * 60 * 1000))
+    .$if(!viewerIsManager, (query) => query.where("user_id", "=", userId))
     .orderBy("start_at", "desc")
-    .limit(1)
+    .limit(100)
     .execute();
-  const attendance = shifts[0]
-    ? await attendanceForShift(db, shifts[0].id)
+  const viewerShift = shifts.find((shift) => shift.user_id === userId);
+  const attendance = viewerShift
+    ? await attendanceForShift(db, viewerShift.id)
     : undefined;
-  const viewerIsManager = isManager(access.role);
-  const assignedSection = shifts[0]?.section ?? undefined;
-  const [tables, staff, orders] = await Promise.all([
+  const assignedSection = !viewerIsManager
+    ? (viewerShift?.section ?? undefined)
+    : undefined;
+  const [tables, allStaff, orders] = await Promise.all([
     loadTables(db, body.locationId, {
       ...(assignedSection ? { section: assignedSection } : {}),
       ...(!viewerIsManager ? { staffUserId: userId } : {}),
@@ -672,6 +723,9 @@ export const getVenueServiceBoard = async (
   const detailedOrders = await Promise.all(
     orders.map((order) => orderWithDetails(db, order))
   );
+  const staff = viewerIsManager
+    ? allStaff
+    : allStaff.filter((person) => person.userId === userId);
   return {
     ...(assignedSection ? { assignedSection } : {}),
     ...(attendance ? { attendance } : {}),
@@ -685,6 +739,7 @@ export const getVenueServiceBoard = async (
     ),
     orders: detailedOrders.filter((order) => order.source !== "preorder"),
     preOrders: detailedOrders.filter((order) => order.source === "preorder"),
+    shifts: shifts.map(toShift),
     staff,
     tables,
     viewerRole: access.role,

@@ -14,6 +14,7 @@ Supported roles are `owner`, `admin`, `manager`, `lead`, `server`, `host`, `kitc
 
 - service mode: `pre_open`, `open`, `closing`, or `closed`
 - the viewer's active shift and attendance
+- visible shifts for the current service window (manager roles see the location; staff see their own)
 - assigned tables and current order IDs
 - customer display names
 - open service orders
@@ -21,7 +22,7 @@ Supported roles are `owner`, `admin`, `manager`, `lead`, `server`, `host`, `kitc
 - location staff status
 - the daily manager attendance code for manager roles only
 
-Service mode uses the location's configured UTC open/close minute defaults of 11:00 and 22:00. Managers configure those values, the geofence center/radius, or an exceptional `service_mode_override` through `updateVenueServiceConfig`.
+Service mode uses the location's configured UTC open/close minute defaults of 11:00 and 22:00. Managers read those values with `getVenueServiceConfig` and configure the open/close minutes, geofence center/radius, or an exceptional `service_mode_override` through `updateVenueServiceConfig`.
 
 ## Attendance
 
@@ -59,6 +60,10 @@ Set `SYNC_ATTENDANCE_SECRET` in production. The daily code is derived from that 
 Existing `getMessages` and `sendMessage` can be used with the returned Sync room ID. General Dating room discovery excludes `sync_staff` rooms so work conversations do not appear in the Dating chat surface.
 
 Orders remain unpaid test records until a separately enabled Stripe payment flow captures payment.
+
+## Web client
+
+The authenticated `/sync` route is the first web client for this contract. It is responsive for desktop and iPad manager workflows and includes a staff fallback for shift attendance, service orders, customers, tables, and the location staff channel. Location selectors and server responses preserve the same organization and location boundaries as native clients. Payment capture is intentionally presented as gated until Stripe policies and capability configuration are enabled.
 
 ## Staff access
 

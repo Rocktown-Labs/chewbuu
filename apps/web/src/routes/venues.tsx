@@ -8,7 +8,13 @@ import {
   CardTitle,
 } from "@chewbuu/ui/components/card";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, LoaderCircle, Plus, Store } from "lucide-react";
+import {
+  ArrowRight,
+  LayoutDashboard,
+  LoaderCircle,
+  Plus,
+  Store,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -70,9 +76,14 @@ function VenueLocationsPage() {
               Manage venue operations from one responsive workspace.
             </p>
           </div>
-          <Link className={buttonVariants()} to="/venue-portal">
-            <Plus className="mr-2 size-4" /> Add venue
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link className={buttonVariants({ variant: "outline" })} to="/sync">
+              <LayoutDashboard data-icon="inline-start" /> Sync desk
+            </Link>
+            <Link className={buttonVariants()} to="/venue-portal">
+              <Plus data-icon="inline-start" /> Add venue
+            </Link>
+          </div>
         </div>
 
         {isLoading ? (

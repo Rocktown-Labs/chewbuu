@@ -1,4 +1,16 @@
 import { api as blocksApi } from "@chewbuu/aws-blocks";
+import type {
+  VenueJobListing as BlocksVenueJobListing,
+  VenueServiceBoard as BlocksVenueServiceBoard,
+  VenueServiceConfig as BlocksVenueServiceConfig,
+  VenueServiceCustomer as BlocksVenueServiceCustomer,
+  VenueServiceMode as BlocksVenueServiceMode,
+  VenueServiceOrder as BlocksVenueServiceOrder,
+  VenueShiftAttendance as BlocksVenueShiftAttendance,
+  VenueStaffRole as BlocksVenueStaffRole,
+  VenueStaffStatus as BlocksVenueStaffStatus,
+  VenueSyncChannel as BlocksVenueSyncChannel,
+} from "@chewbuu/aws-blocks";
 import { env } from "@chewbuu/env/web";
 
 interface ApiOptions {
@@ -691,6 +703,143 @@ export const venueApi = {
   }) => blocksApi.inviteVenueMembers(input),
   getWorkspace: (locationId: string) =>
     blocksApi.getVenueWorkspace(locationId) as Promise<VenueWorkspace>,
+  getServiceBoard: (input: { at?: string; locationId: string }) =>
+    blocksApi.getVenueServiceBoard(input) as Promise<BlocksVenueServiceBoard>,
+  getServiceConfig: (locationId: string) =>
+    blocksApi.getVenueServiceConfig(locationId) as Promise<{
+      config: BlocksVenueServiceConfig;
+    }>,
+  getStaffStatus: (locationId: string) =>
+    blocksApi.getVenueStaffStatus(locationId) as Promise<{
+      staff: BlocksVenueStaffStatus[];
+    }>,
+  updateStaff: (input: {
+    locationId: string;
+    role?: BlocksVenueStaffRole;
+    status?: "active" | "removed" | "suspended";
+    userId: string;
+  }) =>
+    blocksApi.updateVenueStaff(input) as Promise<{
+      staff: BlocksVenueStaffStatus[];
+    }>,
+  updateServiceConfig: (input: {
+    closeMinute?: number;
+    geofenceRadiusMeters?: number;
+    latitude?: number | null;
+    locationId: string;
+    longitude?: number | null;
+    openMinute?: number;
+    override?: BlocksVenueServiceMode | null;
+  }) =>
+    blocksApi.updateVenueServiceConfig(input) as Promise<{
+      config: BlocksVenueServiceConfig;
+    }>,
+  clockIn: (input: {
+    code: string;
+    latitude?: number;
+    locationId: string;
+    longitude?: number;
+    shiftId: string;
+  }) =>
+    blocksApi.clockInVenueShift(input) as Promise<{
+      attendance: BlocksVenueShiftAttendance;
+    }>,
+  updateAttendance: (input: {
+    action: "break_in" | "break_out" | "clock_out" | "lunch_in" | "lunch_out";
+    attendanceId: string;
+  }) =>
+    blocksApi.updateVenueAttendance(input) as Promise<{
+      attendance: BlocksVenueShiftAttendance;
+    }>,
+  reportLate: (input: {
+    attendanceId: string;
+    etaAt?: string;
+    lateMinutes: number;
+  }) =>
+    blocksApi.reportVenueStaffLate(input) as Promise<{
+      attendance: BlocksVenueShiftAttendance;
+    }>,
+  listServiceCustomers: (input: { locationId: string; search?: string }) =>
+    blocksApi.listVenueServiceCustomers(input) as Promise<{
+      customers: BlocksVenueServiceCustomer[];
+    }>,
+  upsertShift: (input: {
+    endAt: string;
+    id?: string;
+    locationId: string;
+    role: BlocksVenueStaffRole;
+    section?: string;
+    startAt: string;
+    status?: string;
+    userId: string;
+  }) =>
+    blocksApi.upsertVenueShift(input) as Promise<{
+      shift: VenueShift;
+    }>,
+  createServiceCustomer: (input: {
+    displayName: string;
+    email?: string;
+    locationId: string;
+    notes?: string;
+    phone?: string;
+    userId?: string;
+  }) =>
+    blocksApi.createVenueServiceCustomer(input) as Promise<{
+      customer: BlocksVenueServiceCustomer;
+    }>,
+  createServiceOrder: (input: {
+    customerId?: string;
+    customerName?: string;
+    diningSessionId?: string;
+    items: {
+      menuItemId?: string;
+      modifiers?: unknown[];
+      name: string;
+      notes?: string;
+      quantity: number;
+      unitPriceCents: number;
+    }[];
+    locationId: string;
+    source?: "preorder" | "staff";
+    tableId?: string;
+    tipCents?: number;
+  }) =>
+    blocksApi.createVenueServiceOrder(input) as Promise<{
+      order: BlocksVenueServiceOrder;
+    }>,
+  updateServiceOrder: (input: {
+    assignedStaffUserId?: string;
+    orderId: string;
+    paymentStatus?: "paid" | "unpaid";
+    status?: string;
+    tipCents?: number;
+  }) =>
+    blocksApi.updateVenueServiceOrder(input) as Promise<{
+      order: BlocksVenueServiceOrder;
+    }>,
+  listSyncChannels: (locationId: string) =>
+    blocksApi.listVenueSyncChannels(locationId) as Promise<{
+      channels: BlocksVenueSyncChannel[];
+    }>,
+  listJobListings: (locationId: string) =>
+    blocksApi.listVenueJobListings(locationId) as Promise<{
+      listings: BlocksVenueJobListing[];
+    }>,
+  upsertJobListing: (input: {
+    applicationUrl?: string;
+    description: string;
+    employmentType: string;
+    expiresAt?: string;
+    id?: string;
+    locationId: string;
+    payText?: string;
+    scheduleText?: string;
+    status?: "archived" | "draft" | "published";
+    title: string;
+  }) =>
+    blocksApi.upsertVenueJobListing(input) as Promise<{
+      listing: BlocksVenueJobListing;
+    }>,
   getAnalytics: (
     locationId: string,
     input?: { endAt?: string; startAt?: string }
