@@ -90,6 +90,7 @@ const runtimeEnvironment: Record<string, string | undefined> = {
   STRIPE_SUGAR_ANNUAL_PRICE_ID: process.env.STRIPE_SUGAR_ANNUAL_PRICE_ID,
   STRIPE_SUGAR_PRICE_ID: process.env.STRIPE_SUGAR_PRICE_ID,
   STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+  SYNC_ATTENDANCE_SECRET: process.env.SYNC_ATTENDANCE_SECRET,
 };
 
 let webHosting: Hosting | undefined;

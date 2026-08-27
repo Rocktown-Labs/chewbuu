@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Provisioned the Sync attendance signing secret as platform-managed production configuration and passed it into the AWS Blocks runtime, so venues and staff never need to configure it.
 - Added the missing `venue_location.style` migration, required venue contact details in the venue portal, and removed the ordinary-member Chewbuu Sync brand shortcut. The portal now explains that any signed-in member can submit a venue, while venue operations require an approved claim, team invitation, or admin access.
 
 ### Changed

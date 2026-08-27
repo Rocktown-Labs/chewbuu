@@ -98,6 +98,14 @@ jobs:
             --value "$BETTER_AUTH_SECRET" \
             >/dev/null
 
+      - name: Verify Sync attendance secret
+        env:
+          SYNC_ATTENDANCE_SECRET: ${{ secrets.SYNC_ATTENDANCE_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$SYNC_ATTENDANCE_SECRET"
+          echo 'Sync attendance secret is configured.'
+
       - name: Ensure CloudFront ACM certificate
         run: |
           set -euo pipefail
@@ -209,6 +217,7 @@ jobs:
           STRIPE_SUGAR_ANNUAL_PRICE_ID: ${{ secrets.STRIPE_SUGAR_ANNUAL_PRICE_ID }}
           STRIPE_SUGAR_PRICE_ID: ${{ secrets.STRIPE_SUGAR_PRICE_ID }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          SYNC_ATTENDANCE_SECRET: ${{ secrets.SYNC_ATTENDANCE_SECRET }}
           VITE_SERVER_URL: "/"
           CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
 
