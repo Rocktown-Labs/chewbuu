@@ -330,14 +330,32 @@ export interface VenueAnalytics {
   totalCovers: number;
 }
 
+export interface VenuePublicMenuItem {
+  description?: string;
+  id: string;
+  name: string;
+  priceCents: number;
+  section?: string;
+}
+
+export interface PublicVenueLocation {
+  address?: string;
+  handle: string;
+  id: string;
+  name: string;
+}
+
 export interface VenuePublicSummary {
   address?: string;
   averageCostCents: number | null;
   averageFoodWaitMinutes: number | null;
+  handle: string;
   locationId: string;
+  menuItems: VenuePublicMenuItem[];
   name: string;
   sampleSize: number;
   specials: VenueSpecial[];
+  websiteUrl?: string;
 }
 
 export interface VenueEvent {
@@ -418,6 +436,7 @@ export interface AwsBlocksApi {
   getDateMeeting: (requestId: string) => Promise<ChimeMeetingResponse>;
   suggestPlaces: (input: PlaceSuggestionInput) => Promise<{
     places: PlaceSuggestion[];
+    reason?: "google_not_configured" | "unavailable";
   }>;
   getPlacePhoto: (photoName: string) => Promise<PlacePhotoResponse>;
   checkIn: (input: CheckInInput) => Promise<CheckInResponse>;
@@ -596,6 +615,9 @@ export interface AwsBlocksApi {
     events: VenueOperationalEvent[];
   }>;
   getVenuePublicSummary: (locationId: string) => Promise<VenuePublicSummary>;
+  listPublicVenueLocations: () => Promise<{
+    locations: PublicVenueLocation[];
+  }>;
   listPublicVenueSpecials: (input?: {
     category?: string;
     locationId?: string;
@@ -732,7 +754,8 @@ export interface PlaceSuggestionInput {
   filters: string[];
   latitude?: string;
   longitude?: string;
-  searchKind?: "place" | "signal";
+  query?: string;
+  searchKind?: "place" | "signal" | "venue";
   what: string[];
 }
 
@@ -745,6 +768,7 @@ export interface PlaceSuggestion {
   name: string;
   openNow?: boolean;
   photoUrl?: string;
+  phone?: string;
   placeId: string;
   priceLevel?: string;
   rating?: string;

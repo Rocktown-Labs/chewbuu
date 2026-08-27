@@ -110,6 +110,7 @@ export interface DatePlace {
   longitude?: number;
   name: string;
   openNow?: boolean;
+  phone?: string;
   photoUrl?: string;
   placeId: string;
   priceLevel?: string;
@@ -310,14 +311,32 @@ export interface VenueAnalytics {
   totalCovers: number;
 }
 
+export interface VenuePublicMenuItem {
+  description?: string;
+  id: string;
+  name: string;
+  priceCents: number;
+  section?: string;
+}
+
+export interface PublicVenueLocation {
+  address?: string;
+  handle: string;
+  id: string;
+  name: string;
+}
+
 export interface VenuePublicSummary {
   address?: string;
   averageCostCents: number | null;
   averageFoodWaitMinutes: number | null;
+  handle: string;
   locationId: string;
+  menuItems: VenuePublicMenuItem[];
   name: string;
   sampleSize: number;
   specials: VenueSpecial[];
+  websiteUrl?: string;
 }
 
 export interface VenueDiningSession {
@@ -645,6 +664,17 @@ export const venueApi = {
       location: VenueLocation;
       referral?: VenueReferral;
     }>,
+  searchVenues: (query: string) =>
+    blocksApi.suggestPlaces({
+      area: query,
+      filters: [],
+      query,
+      searchKind: "venue",
+      what: ["eat"],
+    }) as unknown as Promise<{
+      places: DatePlace[];
+      reason?: "google_not_configured" | "unavailable";
+    }>,
   follow: (locationId: string) => blocksApi.followVenue(locationId),
   getLocations: () =>
     blocksApi.getVenueLocations() as Promise<{ locations: VenueLocation[] }>,
@@ -672,6 +702,10 @@ export const venueApi = {
     }>,
   getPublicSummary: (locationId: string) =>
     blocksApi.getVenuePublicSummary(locationId) as Promise<VenuePublicSummary>,
+  listPublicLocations: () =>
+    blocksApi.listPublicVenueLocations() as Promise<{
+      locations: PublicVenueLocation[];
+    }>,
   getPublicSpecials: (input?: { category?: string; locationId?: string }) =>
     blocksApi.listPublicVenueSpecials(input) as Promise<{
       specials: VenueSpecial[];
@@ -799,11 +833,13 @@ export const datingApi = {
     filters: string[];
     latitude?: string;
     longitude?: string;
-    searchKind?: "place" | "signal";
+    query?: string;
+    searchKind?: "place" | "signal" | "venue";
     what: PlaceSuggestWhat[];
   }) =>
     blocksApi.suggestPlaces(body) as unknown as Promise<{
       places: DatePlace[];
+      reason?: "google_not_configured" | "unavailable";
     }>,
   checkIn: (body: {
     code?: string;

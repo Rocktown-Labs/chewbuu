@@ -15,8 +15,11 @@ import {
   Camera,
   Check,
   ExternalLink,
+  Globe2,
   LoaderCircle,
+  MapPin,
   Plus,
+  Search,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -31,6 +34,7 @@ import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client";
 import {
   venueApi,
+  type DatePlace,
   type VenueIdentityVerificationSession,
   type VenueLocation,
   type VenueMenuItem,
@@ -50,6 +54,12 @@ function VenuePortalPage() {
   const [isClaimRequested, setIsClaimRequested] = useState(false);
   const [isOwner, setIsOwner] = useState(true);
   const [location, setLocation] = useState<VenueLocation | null>(null);
+  const [venueQuery, setVenueQuery] = useState("");
+  const [venueResults, setVenueResults] = useState<DatePlace[]>([]);
+  const [isSearchingVenues, setIsSearchingVenues] = useState(false);
+  const [venueSearchMessage, setVenueSearchMessage] = useState("");
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [menuPlan, setMenuPlan] = useState<"chewbuu" | "website">("chewbuu");
   const [preview, setPreview] = useState<VenueMenuPreview | null>(null);
   const [referral, setReferral] = useState<VenueReferral | undefined>();
   const [form, setForm] = useState({
@@ -70,8 +80,66 @@ function VenuePortalPage() {
     void loadSession();
   }, []);
 
+  useEffect(() => {
+    const query = venueQuery.trim();
+    if (isSignedIn !== true || query.length < 2) {
+      setVenueResults([]);
+      setVenueSearchMessage("");
+      setIsSearchingVenues(false);
+      return;
+    }
+
+    let active = true;
+    const timeout = window.setTimeout(async () => {
+      setIsSearchingVenues(true);
+      setVenueSearchMessage("");
+      try {
+        const result = await venueApi.searchVenues(query);
+        if (!active) return;
+        setVenueResults(result.places);
+        setVenueSearchMessage(
+          result.reason === "google_not_configured"
+            ? "Search is temporarily unavailable. You can still enter the venue manually."
+            : result.reason === "unavailable"
+              ? "We couldn’t search right now. You can still enter the venue manually."
+              : result.places.length === 0
+                ? "No exact matches yet. Keep typing or enter the details below."
+                : ""
+        );
+      } catch {
+        if (active) {
+          setVenueResults([]);
+          setVenueSearchMessage(
+            "We couldn’t search right now. You can still enter the venue manually."
+          );
+        }
+      } finally {
+        if (active) setIsSearchingVenues(false);
+      }
+    }, 350);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [isSignedIn, venueQuery]);
+
   const updateField = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const selectVenue = (place: DatePlace) => {
+    setSelectedPlaceId(place.placeId);
+    setVenueQuery(place.name);
+    setVenueResults([]);
+    setVenueSearchMessage("");
+    setForm((current) => ({
+      ...current,
+      address: place.address ?? current.address,
+      name: place.name,
+      phone: place.phone ?? current.phone,
+      websiteUrl: place.websiteUri ?? current.websiteUrl,
+    }));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -81,7 +149,8 @@ function VenuePortalPage() {
       const result = await venueApi.createLocation({
         address: form.address,
         description: form.description || undefined,
-        menuUrl: form.menuUrl || undefined,
+        discoveryPlaceId: selectedPlaceId ?? undefined,
+        menuUrl: menuPlan === "website" ? form.menuUrl || undefined : undefined,
         name: form.name,
         organizationName: form.organizationName || undefined,
         phone: form.phone,
@@ -96,7 +165,7 @@ function VenuePortalPage() {
         setIsClaimRequested(claimResult.status === "requested");
       }
 
-      if (form.menuUrl) {
+      if (menuPlan === "website" && form.menuUrl) {
         setIsPreviewing(true);
         const menuResult = await venueApi.captureMenu(
           result.location.id,
@@ -149,16 +218,36 @@ function VenuePortalPage() {
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-6 py-12">
       <div className="mx-auto max-w-2xl">
-        <Badge variant="secondary">Chewbuu Sync</Badge>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-          Put your venue on the date map.
-        </h1>
-        <p className="mt-3 text-muted-foreground">
-          Claim a spot, or help a favorite restaurant get ready for
-          reservations, dining, ordering, and specials. Anyone can view this
-          page, but you must sign in to submit a venue. Venue operations open
-          after a claim is approved or a team invitation is accepted.
-        </p>
+        <div className="flex items-center gap-3 text-sm font-semibold text-primary">
+          <Badge variant="secondary">Chewbuu Sync</Badge>
+          <span>Venue onboarding · 1 of 5</span>
+        </div>
+        <div className="mt-6 max-w-xl">
+          <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+            Put your place on the map.
+          </h1>
+          <p className="mt-4 text-lg text-muted-foreground">
+            Find the real venue, confirm the details, and we’ll guide you
+            through verification, menus, and launch.
+          </p>
+        </div>
+        <div
+          className="mt-6 grid grid-cols-5 gap-2"
+          aria-label="Onboarding progress"
+        >
+          {["Find", "Claim", "Verify", "Build", "Launch"].map(
+            (label, index) => (
+              <div key={label}>
+                <div
+                  className={`h-1.5 rounded-full ${index === 0 ? "bg-primary" : "bg-primary/15"}`}
+                />
+                <span className="mt-2 block text-[11px] font-medium text-muted-foreground">
+                  0{index + 1} {label}
+                </span>
+              </div>
+            )
+          )}
+        </div>
 
         <Card className="mt-8 overflow-hidden rounded-3xl border-primary/15 shadow-xl shadow-primary/5 [&_[data-slot=input]]:rounded-xl [&_[data-slot=textarea]]:rounded-xl">
           <CardHeader className="bg-primary/5">
@@ -170,6 +259,65 @@ function VenuePortalPage() {
           </CardHeader>
           <CardContent>
             <form className="space-y-5" onSubmit={handleSubmit}>
+              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-full bg-primary p-2 text-primary-foreground">
+                    <Search className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">Start with a real place</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Search Google for the venue name or address. We’ll use the
+                      Place ID to match the right location, then you can correct
+                      anything below.
+                    </p>
+                    <div className="relative mt-3">
+                      <Input
+                        aria-label="Search for your venue"
+                        autoComplete="organization"
+                        onChange={(event) => setVenueQuery(event.target.value)}
+                        placeholder="Search by venue name or address"
+                        value={venueQuery}
+                      />
+                      {isSearchingVenues ? (
+                        <LoaderCircle className="absolute top-3 right-3 size-4 animate-spin text-muted-foreground" />
+                      ) : null}
+                      {venueResults.length > 0 ? (
+                        <div className="absolute z-10 mt-2 w-full overflow-hidden rounded-2xl border bg-background p-1 shadow-xl">
+                          {venueResults.map((place) => (
+                            <button
+                              className="flex w-full items-start gap-3 rounded-xl p-3 text-left transition hover:bg-muted"
+                              key={place.placeId}
+                              onClick={() => selectVenue(place)}
+                              type="button"
+                            >
+                              <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
+                              <span className="min-w-0">
+                                <span className="block truncate font-semibold">
+                                  {place.name}
+                                </span>
+                                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                                  {place.address ?? "Address not provided"}
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    {venueSearchMessage ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {venueSearchMessage}
+                      </p>
+                    ) : null}
+                    {selectedPlaceId ? (
+                      <p className="mt-2 text-xs font-medium text-primary">
+                        Place selected. Review the prefilled details below.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
               <FormField label="Venue name" required>
                 <Input
                   required
@@ -230,37 +378,88 @@ function VenuePortalPage() {
                   />
                 </FormField>
               </div>
-              <FormField
-                label="Menu URL"
-                description="Optional. We’ll try to create a temporary menu preview from this official page."
-              >
-                <Input
-                  type="url"
-                  value={form.menuUrl}
-                  onChange={(event) =>
-                    updateField("menuUrl", event.target.value)
-                  }
-                  placeholder="https://restaurant.example/menu"
-                />
-              </FormField>
-              <label className="flex items-start gap-3 rounded-lg border p-4 text-sm">
-                <input
-                  checked={isOwner}
-                  className="mt-1"
-                  onChange={(event) => setIsOwner(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>
-                  <span className="font-medium">
-                    I work at or manage this venue
-                  </span>
-                  <span className="block text-muted-foreground">
-                    We’ll submit a claim request for review. If you’re helping
-                    as a guest, you’ll be credited as the venue referrer
-                    instead.
-                  </span>
-                </span>
-              </label>
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-semibold">
+                  Where should the menu live?
+                </legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    aria-pressed={menuPlan === "chewbuu"}
+                    className={`rounded-2xl border p-4 text-left transition ${menuPlan === "chewbuu" ? "border-primary bg-primary/10" : "hover:bg-muted/50"}`}
+                    onClick={() => setMenuPlan("chewbuu")}
+                    type="button"
+                  >
+                    <span className="flex items-center gap-2 font-semibold">
+                      <MapPin className="size-4 text-primary" /> Build on
+                      Chewbuu
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Create a verified menu at your future Chewbuu spot page.
+                    </span>
+                  </button>
+                  <button
+                    className={`rounded-2xl border p-4 text-left transition ${menuPlan === "website" ? "border-primary bg-primary/10" : "hover:bg-muted/50"}`}
+                    onClick={() => setMenuPlan("website")}
+                    type="button"
+                  >
+                    <span className="flex items-center gap-2 font-semibold">
+                      <Globe2 className="size-4 text-primary" /> Use your
+                      website
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Link an official menu and we’ll create a temporary
+                      preview.
+                    </span>
+                  </button>
+                </div>
+                {menuPlan === "website" ? (
+                  <FormField
+                    label="Official menu URL"
+                    description="Optional. Leave it blank if the menu is not online yet."
+                  >
+                    <Input
+                      type="url"
+                      value={form.menuUrl}
+                      onChange={(event) =>
+                        updateField("menuUrl", event.target.value)
+                      }
+                      placeholder="https://restaurant.example/menu"
+                    />
+                  </FormField>
+                ) : null}
+              </fieldset>
+              <fieldset className="space-y-3">
+                <legend className="text-sm font-semibold">Your role</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    aria-pressed={isOwner}
+                    className={`rounded-2xl border p-4 text-left transition ${isOwner ? "border-primary bg-primary/10" : "hover:bg-muted/50"}`}
+                    onClick={() => setIsOwner(true)}
+                    type="button"
+                  >
+                    <span className="block font-semibold">
+                      I manage this venue
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Submit a claim for Sync review.
+                    </span>
+                  </button>
+                  <button
+                    aria-pressed={!isOwner}
+                    className={`rounded-2xl border p-4 text-left transition ${!isOwner ? "border-primary bg-primary/10" : "hover:bg-muted/50"}`}
+                    onClick={() => setIsOwner(false)}
+                    type="button"
+                  >
+                    <span className="block font-semibold">
+                      I’m helping this venue
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      Refer the place; the $50 reward is paid after onboarding
+                      and the first paid invoice clears.
+                    </span>
+                  </button>
+                </div>
+              </fieldset>
               <Button
                 disabled={isSubmitting || isSignedIn !== true}
                 type="submit"
@@ -294,6 +493,18 @@ function VenuePortalPage() {
                   {(referral.rewardAmountCents / 100).toFixed(2)} ·{" "}
                   {referral.status.replaceAll("_", " ")}
                 </p>
+              ) : null}
+              {menuPlan === "chewbuu" ? (
+                <div className="rounded-2xl bg-primary/5 p-4 text-sm">
+                  <p className="font-semibold">Your Chewbuu menu home</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Once Sync verifies the venue, its public menu will live at
+                    this spot page:
+                  </p>
+                  <code className="mt-2 block break-all text-xs text-primary">
+                    chewbuu.com/spots/{location.handle ?? location.id}
+                  </code>
+                </div>
               ) : null}
               <Link
                 className={buttonVariants({ size: "sm", variant: "outline" })}

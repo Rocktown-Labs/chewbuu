@@ -171,7 +171,7 @@ const assertVenueHandleAllowed = (handle: string, allowReserved: boolean) => {
   }
 };
 
-const assertVenueHandleAvailable = async (
+const venueHandleIsTaken = async (
   db: Kysely<BlocksDatabase>,
   handle: string
 ) => {
@@ -187,7 +187,14 @@ const assertVenueHandleAvailable = async (
       .where("handle", "=", handle)
       .executeTakeFirst(),
   ]);
-  if (location || organization) {
+  return Boolean(location || organization);
+};
+
+const assertVenueHandleAvailable = async (
+  db: Kysely<BlocksDatabase>,
+  handle: string
+) => {
+  if (await venueHandleIsTaken(db, handle)) {
     throw new Error(`@${handle} is already in use.`);
   }
 };
@@ -202,9 +209,11 @@ export const createVenueLocation = async (
   if (!allowReserved && isReservedBrandName(parsed.name)) {
     throw new Error("Chewbuu brand words are reserved for official venues.");
   }
-  const handle = handleSchema.parse(
-    parsed.handle ?? handleFromName(parsed.name)
-  );
+  const requestedHandle = parsed.handle
+    ? handleSchema.parse(parsed.handle)
+    : undefined;
+  let handle =
+    requestedHandle ?? handleSchema.parse(handleFromName(parsed.name));
   assertVenueHandleAllowed(handle, allowReserved);
   const db = await getDb();
 
@@ -228,9 +237,16 @@ export const createVenueLocation = async (
     : undefined;
 
   if (!location) {
-    await assertVenueHandleAvailable(db, handle);
     const organizationId = randomUUID();
     const locationId = randomUUID();
+    if (requestedHandle) {
+      await assertVenueHandleAvailable(db, handle);
+    } else if (await venueHandleIsTaken(db, handle)) {
+      handle = handleSchema.parse(
+        `${handle.slice(0, 23)}-${locationId.slice(0, 8)}`
+      );
+      await assertVenueHandleAvailable(db, handle);
+    }
     const slug = `${(parsed.organizationName ?? parsed.name)
       .toLowerCase()
       .replaceAll(/[^a-z0-9]+/g, "-")
