@@ -26,6 +26,10 @@ describe("AWS Blocks API surface", () => {
       "getDateMedia",
       "getDateMeeting",
       "getDatingSummary",
+      "createIdentityVerificationSession",
+      "getIdentityVerificationStatus",
+      "getUsernameChangeStatus",
+      "listUsernameChangeRequests",
       "getFriendships",
       "getMediaUrl",
       "getMessages",
@@ -66,6 +70,9 @@ describe("AWS Blocks API surface", () => {
       "publishRecap",
       "publishTyping",
       "requestFriendship",
+      "requestUsernameChange",
+      "verifyUsernameChange",
+      "approveUsernameChange",
       "respondFriendship",
       "runDateLifecycle",
       "saveProfile",
@@ -94,7 +101,7 @@ describe("AWS Blocks API surface", () => {
       "inviteVenueMembers",
     ];
 
-    expect(methodNames).toHaveLength(87);
+    expect(methodNames).toHaveLength(94);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {

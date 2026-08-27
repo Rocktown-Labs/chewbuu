@@ -47,6 +47,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@chewbuu/ui/components/sheet";
+import { Slider } from "@chewbuu/ui/components/slider";
 import { Switch } from "@chewbuu/ui/components/switch";
 import { Textarea } from "@chewbuu/ui/components/textarea";
 import { cn } from "@chewbuu/ui/lib/utils";
@@ -109,17 +110,20 @@ import {
 import type { ChatPerson } from "@/features/chat/chat-types";
 import { DateConfirmScreen } from "@/features/chat/date-confirm";
 import { DateWizard } from "@/features/date-wizard/date-wizard";
+import { getMatchAgeBounds } from "@/lib/age-rules";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
   dateMediaApi,
   getApiUrl,
+  recapsApi,
   venueApi,
   type DatePlace,
   type DatingMedia,
   type DatingProfilePayload,
   type DatingSummary,
   type PendingReview,
+  type UsernameChangeRequest,
   type VenueSpecial,
 } from "@/lib/dating-api";
 import { syncDatingSummaryToDb, syncPlacesToDb } from "@/lib/db";
@@ -200,6 +204,7 @@ interface DateHistoryItem {
 
 const meSearchSchema = z.object({
   dateId: z.string().optional(),
+  usernameToken: z.string().optional(),
   filter: z.enum(["all", "received", "sent", "active"]).optional(),
   step: z.enum(["request", "matcher", "choice", "date"]).optional(),
   tab: z
@@ -227,6 +232,7 @@ interface MePageProps {
   initialSpotsCategory?: SpotCategory;
   initialStep?: "request" | "matcher" | "choice" | "date";
   initialTab?: DashboardTab;
+  initialUsernameToken?: string;
 }
 
 type DashboardChatsComponent = ComponentType<{
@@ -235,6 +241,12 @@ type DashboardChatsComponent = ComponentType<{
   onOpenDate?: (dateId: string) => void;
 }>;
 type ProfileMode = "edit" | "menu" | "profile" | "settings";
+type ProfileEditSection =
+  | "identity"
+  | "media"
+  | "preferences"
+  | "safety"
+  | "lifestyle";
 type ProfileStatTarget = "circles" | "friends" | "recaps" | "reviews";
 type ProfileMediaItem = {
   kind: "intro_video" | "photo" | "profile_photo";
@@ -469,6 +481,30 @@ const getAge = (birthdayString: string) => {
   return age;
 };
 
+const getDateStreak = (requests: DatingSummary["requests"]) => {
+  const scheduledDays = new Set(
+    requests
+      .filter(
+        (request) => new Date(request.scheduledAt).getTime() <= Date.now()
+      )
+      .map((request) => {
+        const date = new Date(request.scheduledAt);
+        return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+      })
+  );
+  const cursor = new Date();
+  let streak = 0;
+  while (
+    scheduledDays.has(
+      `${cursor.getFullYear()}-${cursor.getMonth()}-${cursor.getDate()}`
+    )
+  ) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+};
+
 const getAcceptedMatchForRequest = (
   request: DatingSummary["requests"][number]
 ) =>
@@ -607,26 +643,36 @@ function RouteComponent() {
       initialFilter={search.filter}
       initialStep={search.step}
       initialTab={search.tab ?? "feed"}
+      initialUsernameToken={search.usernameToken}
     />
   );
 }
 
 function HomeDashboardView({
   canDate,
+  confirmedDates,
+  dateStreak,
+  monthlyBookings,
   onOpenPlanDateDrawer,
   onOpenAnalytics,
   onNavigateTab,
   profileArea,
+  publishedRecaps,
+  savedSpots,
   weatherText,
 }: {
   canDate: boolean;
+  confirmedDates: DatingSummary["requests"];
+  dateStreak: number;
+  monthlyBookings: number;
   onOpenPlanDateDrawer: () => void;
   onOpenAnalytics: () => void;
   onNavigateTab: (tab: DashboardTab) => void;
   profileArea?: string;
+  publishedRecaps: number;
+  savedSpots: number;
   weatherText?: string;
 }) {
-  void canDate;
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<
     Date | undefined
   >(new Date());
@@ -640,7 +686,15 @@ function HomeDashboardView({
     });
   }, [selectedCalendarDate]);
 
-  const hasEventOnSelectedDate = false;
+  const selectedBookings = confirmedDates.filter((request) => {
+    const requestDate = new Date(request.scheduledAt);
+    return (
+      requestDate.getFullYear() === selectedCalendarDate?.getFullYear() &&
+      requestDate.getMonth() === selectedCalendarDate?.getMonth() &&
+      requestDate.getDate() === selectedCalendarDate?.getDate()
+    );
+  });
+  const hasEventOnSelectedDate = selectedBookings.length > 0;
 
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6">
@@ -699,66 +753,46 @@ function HomeDashboardView({
 
         {hasEventOnSelectedDate ? (
           <Card className="rounded-2xl border-primary/30 bg-gradient-to-br from-card via-card to-primary/5 p-4 sm:p-5 shadow-sm">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="relative size-12 shrink-0 rounded-full overflow-hidden border-2 border-primary">
-                    <img
-                      alt="Date partner"
-                      className="size-full object-cover"
-                      src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"
-                    />
-                  </div>
-                  <div>
-                    <Badge className="rounded-full bg-emerald-500/15 text-emerald-600 font-bold text-[10px] border-0 mb-1">
-                      Confirmed Date · 7:30 PM
-                    </Badge>
-                    <h4 className="font-extrabold text-base">
-                      Date with Maya Lin
-                    </h4>
-                    <p className="text-xs text-muted-foreground">
-                      Eat + Drink · Dutch Split · {profileArea || "Searcy, AR"}
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  className="rounded-full font-bold text-xs shrink-0"
-                  size="sm"
-                  type="button"
+            <div className="grid gap-3">
+              {selectedBookings.map((request) => (
+                <div
+                  className="rounded-xl border border-border/80 bg-background/60 p-3.5"
+                  key={request.id}
                 >
-                  View Details
-                </Button>
-              </div>
-
-              <div className="grid gap-2.5 sm:grid-cols-2 rounded-xl border border-border/80 bg-background/60 p-3.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs">
-                    1
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Badge className="mb-1 rounded-full border-0 bg-emerald-500/15 text-emerald-600 font-bold text-[10px]">
+                        {request.status}
+                      </Badge>
+                      <h4 className="font-extrabold text-base">
+                        {getDateIntentTitle(request.what)}
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        {request.paymentMode === "dutch"
+                          ? "Dutch split"
+                          : "Requester covers"}{" "}
+                        ·{" "}
+                        {request.searchArea ||
+                          profileArea ||
+                          "Location pending"}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {new Date(request.scheduledAt).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-xs truncate">
-                      Stop 1: Barista Parlor
-                    </p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      Coffee & Pastries · 12 South
-                    </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {request.places.map((place) => (
+                      <Badge key={place.placeId} variant="secondary">
+                        {place.name}
+                      </Badge>
+                    ))}
                   </div>
                 </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="flex size-7 items-center justify-center rounded-full bg-sky-500/10 text-sky-500 font-bold text-xs">
-                    2
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-bold text-xs truncate">
-                      Stop 2: The Basement East
-                    </p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      Live Music Venue · East Nashville
-                    </p>
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
           </Card>
         ) : (
@@ -796,7 +830,9 @@ function HomeDashboardView({
           type="button"
         >
           <Badge className="w-fit rounded-full border-0 bg-amber-500/20 font-extrabold text-[10px] text-amber-600">
-            🔥 3 In a Row
+            {dateStreak > 0
+              ? `🔥 ${dateStreak} day streak`
+              : "No active streak"}
           </Badge>
 
           <div className="mt-5">
@@ -804,7 +840,9 @@ function HomeDashboardView({
               Streak Analytics
             </span>
             <h4 className="font-extrabold text-lg leading-snug text-foreground">
-              3 Date Streak
+              {dateStreak > 0
+                ? `${dateStreak} Date Streak`
+                : "Start your first streak"}
             </h4>
             <p className="mt-1 flex items-center text-[11px] font-bold text-amber-600 group-hover:underline">
               View Badges & Stats <ChevronRight className="ml-0.5 size-3.5" />
@@ -820,7 +858,9 @@ function HomeDashboardView({
           type="button"
         >
           <Badge className="w-fit rounded-full border-0 bg-primary/20 font-extrabold text-[10px] text-primary">
-            📅 4 Booked
+            {monthlyBookings > 0
+              ? `📅 ${monthlyBookings} Booked`
+              : "No bookings yet"}
           </Badge>
 
           <div className="mt-5">
@@ -828,7 +868,9 @@ function HomeDashboardView({
               Monthly Schedule
             </span>
             <h4 className="font-extrabold text-lg leading-snug text-foreground">
-              4 Confirmed
+              {monthlyBookings > 0
+                ? `${monthlyBookings} Confirmed`
+                : "No confirmed dates"}
             </h4>
             <p className="mt-1 flex items-center text-[11px] font-bold text-primary group-hover:underline">
               Open Calendar <ChevronRight className="ml-0.5 size-3.5" />
@@ -844,7 +886,7 @@ function HomeDashboardView({
           type="button"
         >
           <Badge className="w-fit rounded-full border-0 bg-emerald-500/20 font-extrabold text-[10px] text-emerald-600">
-            ⭐ 12 Saved
+            {savedSpots > 0 ? `⭐ ${savedSpots} Saved` : "No saved spots"}
           </Badge>
 
           <div className="mt-5">
@@ -852,7 +894,9 @@ function HomeDashboardView({
               Local Venues
             </span>
             <h4 className="font-extrabold text-lg leading-snug text-foreground">
-              12 Fav Spots
+              {savedSpots > 0
+                ? `${savedSpots} Fav Spots`
+                : "Save your first spot"}
             </h4>
             <p className="mt-1 flex items-center text-[11px] font-bold text-emerald-600 group-hover:underline">
               Explore Local Spots <ChevronRight className="ml-0.5 size-3.5" />
@@ -868,7 +912,9 @@ function HomeDashboardView({
           type="button"
         >
           <Badge className="w-fit rounded-full border-0 bg-purple-500/20 font-extrabold text-[10px] text-purple-600">
-            📸 5 Recaps
+            {publishedRecaps > 0
+              ? `📸 ${publishedRecaps} Recaps`
+              : "No recaps yet"}
           </Badge>
 
           <div className="mt-5">
@@ -876,7 +922,9 @@ function HomeDashboardView({
               Food Recaps
             </span>
             <h4 className="font-extrabold text-lg leading-snug text-foreground">
-              5 Published
+              {publishedRecaps > 0
+                ? `${publishedRecaps} Published`
+                : "Share your first recap"}
             </h4>
             <p className="mt-1 flex items-center text-[11px] font-bold text-purple-600 group-hover:underline">
               My Profile Recaps <ChevronRight className="ml-0.5 size-3.5" />
@@ -885,32 +933,41 @@ function HomeDashboardView({
         </button>
       </div>
 
-      {/* Quick Date Action Queue Card */}
+      {/* Honest next-action card */}
       <div className="flex flex-col gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold shadow-xs">
-            <Compass className="size-5" />
+            {canDate ? (
+              <Compass className="size-5" />
+            ) : (
+              <ShieldCheck className="size-5" />
+            )}
           </div>
           <div>
-            <Badge className="rounded-full bg-primary/20 text-primary font-bold text-[9px] border-0 mb-1">
-              AI Recommendation
+            <Badge className="mb-1 rounded-full border-0 bg-primary/20 text-primary font-bold text-[9px]">
+              {canDate ? "Next date" : "Finish readiness"}
             </Badge>
             <h4 className="font-extrabold text-base">
-              Dinner & Arcade Date Prompt
+              {canDate
+                ? "Plan a date when you’re ready"
+                : "Complete your dating profile"}
             </h4>
-            <p className="text-xs text-muted-foreground max-w-md">
-              High match potential this weekend! Queue up this date request in
-              the Matcher to find partners.
+            <p className="max-w-md text-xs text-muted-foreground">
+              {canDate
+                ? "Choose a real place and send a request when the timing feels right."
+                : "Identity, media, location, and a safety contact unlock real dating."}
             </p>
           </div>
         </div>
 
         <Button
-          className="rounded-full font-bold text-xs shrink-0 self-start sm:self-center"
-          onClick={onOpenPlanDateDrawer}
+          className="shrink-0 self-start rounded-full font-bold text-xs sm:self-center"
+          onClick={
+            canDate ? onOpenPlanDateDrawer : () => onNavigateTab("profile")
+          }
           type="button"
         >
-          Queue in Matcher
+          {canDate ? "Plan a date" : "Open profile"}
           <ChevronRight className="ml-1 size-4" />
         </Button>
       </div>
@@ -1032,6 +1089,7 @@ export function MePage({
   initialSpotsCategory = "all",
   initialStep = "request",
   initialTab = "feed",
+  initialUsernameToken,
 }: MePageProps) {
   const { session } = useRouteContext({ from: "/_auth" });
   const navigate = useNavigate();
@@ -1180,6 +1238,7 @@ export function MePage({
 
   // Local state for user's own uploaded date recaps (persisted to localStorage)
   const [userRecaps, setUserRecaps] = useState<DateRecap[]>([]);
+  const [publishedRecapCount, setPublishedRecapCount] = useState(0);
   const [showAddRecap, setShowAddRecap] = useState(false);
   const [recapForm, setRecapForm] = useState({
     placeName: "",
@@ -1192,16 +1251,22 @@ export function MePage({
   useEffect(() => {
     const load = async () => {
       try {
-        const [nextSummary, nextProfile, nextPendingReviews] =
+        const [nextSummary, nextProfile, nextPendingReviews, nextRecaps] =
           await Promise.all([
             datingApi.getSummary(),
             datingApi.getProfile(),
             datingApi.getPendingReviews(),
+            recapsApi.get(),
           ]);
         setSummary(nextSummary);
         syncDatingSummaryToDb(nextSummary);
         setProfile(nextProfile.profile);
         setPendingReviews(nextPendingReviews.reviews);
+        setPublishedRecapCount(
+          nextRecaps.recaps.filter(
+            (recap) => recap.authorUserId === session.data?.user.id
+          ).length
+        );
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : "Could not load dashboard."
@@ -1221,7 +1286,7 @@ export function MePage({
         console.error("Failed to parse read date requests:", error);
       }
     }
-  }, []);
+  }, [session.data?.user.id]);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -1336,6 +1401,11 @@ export function MePage({
       hash: "basics",
       label: "Profile Details",
     },
+    {
+      checked: summary?.readiness.identityVerified ?? false,
+      hash: "identity",
+      label: "Stripe Identity",
+    },
     { checked: !!profilePhoto, hash: "media", label: "Verified Photo" },
     { checked: !!introVideo, hash: "media", label: "Verified Video" },
     { checked: !!profile?.area, hash: "basics", label: "Dating Location" },
@@ -1417,6 +1487,20 @@ export function MePage({
       );
     });
   }, [pendingRequests]);
+
+  const dateStreak = getDateStreak(confirmedDates);
+  const monthlyBookings = confirmedDates.filter((request) => {
+    const date = new Date(request.scheduledAt);
+    const now = new Date();
+    return (
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear()
+    );
+  }).length;
+  const savedSpots = Object.values(profile?.favoritePlaces ?? {}).reduce(
+    (total, places) => total + places.length,
+    0
+  );
 
   const getDatesForDay = (date: Date) => {
     return confirmedDates.filter((req) => {
@@ -1946,6 +2030,9 @@ export function MePage({
           {activeTab === "feed" && (
             <HomeDashboardView
               canDate={canDate}
+              confirmedDates={confirmedDates}
+              dateStreak={dateStreak}
+              monthlyBookings={monthlyBookings}
               onNavigateTab={(tab) => setDashboardTab(tab)}
               onOpenAnalytics={() => setIsAnalyticsOpen(true)}
               onOpenPlanDateDrawer={() => {
@@ -1953,6 +2040,8 @@ export function MePage({
                 setIsPlanDateDrawerOpen(true);
               }}
               profileArea={userCity || profile?.area}
+              publishedRecaps={publishedRecapCount}
+              savedSpots={savedSpots}
               weatherText={weatherText}
             />
           )}
@@ -2912,6 +3001,8 @@ export function MePage({
 
               {profileMode === "edit" && (
                 <ProfileEditPanel
+                  isOnboarded={summary?.readiness.onboarded ?? false}
+                  initialUsernameToken={initialUsernameToken}
                   profile={profile}
                   setProfile={setProfile}
                   setProfileMode={setProfileMode}
@@ -4001,11 +4092,15 @@ function ProfileSettingsPanel({
 }
 
 function ProfileEditPanel({
+  initialUsernameToken,
+  isOnboarded,
   profile,
   setProfile,
   setProfileMode,
   tier,
 }: {
+  initialUsernameToken?: string;
+  isOnboarded: boolean;
   profile: DatingProfilePayload | null;
   setProfile: (profile: DatingProfilePayload) => void;
   setProfileMode: (mode: ProfileMode) => void;
@@ -4062,8 +4157,14 @@ function ProfileEditPanel({
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [savedFormData, setSavedFormData] = useState(formData);
   const [uploadingMedia, setUploadingMedia] = useState<string | null>(null);
+  const [usernameRequestOpen, setUsernameRequestOpen] = useState(false);
+  const [usernameRequestValue, setUsernameRequestValue] = useState("");
+  const [usernameRequestStatus, setUsernameRequestStatus] =
+    useState<UsernameChangeRequest | null>(null);
   const usernameCheck = useUsernameChecker(formData.username);
+  const usernameChangeCheck = useUsernameChecker(usernameRequestValue);
   const normalizedUsername = formData.username.trim().toLowerCase();
   const usernameWasUnchanged = normalizedUsername === (profile?.username ?? "");
   const usernameStatus = usernameWasUnchanged
@@ -4081,6 +4182,32 @@ function ProfileEditPanel({
           : usernameStatus === "invalid"
             ? "Use 3+ letters, numbers, or underscores"
             : "Enter a username";
+  useEffect(() => {
+    if (!formData.birthday) return;
+    const bounds = getMatchAgeBounds(formData.birthday);
+    setFormData((current) => {
+      const nextMin = Math.min(
+        Math.max(current.ageRangeMin, bounds.min),
+        bounds.max
+      );
+      const nextMax = Math.max(
+        Math.min(current.ageRangeMax, bounds.max),
+        nextMin
+      );
+      if (nextMin === current.ageRangeMin && nextMax === current.ageRangeMax) {
+        return current;
+      }
+      return { ...current, ageRangeMin: nextMin, ageRangeMax: nextMax };
+    });
+  }, [formData.birthday]);
+
+  const profileMedia = formData.media.find(
+    (item) => item.kind === "profile_photo"
+  );
+  const introMedia = formData.media.find((item) => item.kind === "intro_video");
+  const additionalMedia = formData.media.filter(
+    (item) => item.kind === "photo"
+  );
   const availableSettingsInterestCategories = useMemo(() => {
     const age = getAge(formData.birthday);
     return age !== null && age < 21
@@ -4089,6 +4216,63 @@ function ProfileEditPanel({
         )
       : settingsInterestCategories;
   }, [formData.birthday]);
+  const getSectionSnapshot = (
+    section: ProfileEditSection,
+    data: typeof formData
+  ) => {
+    switch (section) {
+      case "media": {
+        return data.media;
+      }
+      case "identity": {
+        return [data.name, data.bio, data.area, data.birthday];
+      }
+      case "lifestyle": {
+        return [
+          data.sex,
+          data.sexuality,
+          data.height,
+          data.weight,
+          data.maritalStatus,
+          data.kids,
+          data.wantsKids,
+          data.occupation,
+          data.religion,
+          data.politics,
+        ];
+      }
+      case "preferences": {
+        return [
+          data.interestedIn,
+          data.lookingFor,
+          data.visibleProfileChips,
+          data.datingModes,
+          data.interestDetails,
+          data.ageRangeMin,
+          data.ageRangeMax,
+          data.distanceMiles,
+        ];
+      }
+      case "safety": {
+        return [
+          data.trustedContactName,
+          data.trustedContactPhone,
+          data.trustedContactEmail,
+          data.safetyOptIn,
+        ];
+      }
+      default: {
+        return [];
+      }
+    }
+  };
+  const isSectionDirty = (section: ProfileEditSection) =>
+    JSON.stringify(getSectionSnapshot(section, formData)) !==
+    JSON.stringify(getSectionSnapshot(section, savedFormData));
+  const isAnySectionDirty = (
+    ["media", "identity", "lifestyle", "preferences", "safety"] as const
+  ).some(isSectionDirty);
+
   const formProfileChipOptions = useMemo(
     () => [
       ...formData.lookingFor.map((value) =>
@@ -4165,6 +4349,62 @@ function ProfileEditPanel({
       setUploadingMedia(null);
     }
   };
+  useEffect(() => {
+    const loadUsernameChangeStatus = async () => {
+      try {
+        const { request } = await datingApi.getUsernameChangeStatus();
+        setUsernameRequestStatus(request);
+      } catch {
+        setUsernameRequestStatus(null);
+      }
+    };
+    void loadUsernameChangeStatus();
+  }, []);
+
+  useEffect(() => {
+    if (!initialUsernameToken) return;
+    const verifyRequest = async () => {
+      try {
+        const { request } =
+          await datingApi.verifyUsernameChange(initialUsernameToken);
+        setUsernameRequestStatus(request);
+        toast.success(
+          "Email verified. Your username change is queued for approval."
+        );
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Could not verify username change."
+        );
+      }
+    };
+    void verifyRequest();
+  }, [initialUsernameToken]);
+
+  const handleUsernameChangeRequest = async () => {
+    const requestedUsername = usernameRequestValue.trim().toLowerCase();
+    if (usernameChangeCheck.status !== "available") {
+      toast.error("Choose an available username before requesting a change.");
+      return;
+    }
+    try {
+      const { request } = await datingApi.requestUsernameChange({
+        username: requestedUsername,
+      });
+      setUsernameRequestStatus(request);
+      setUsernameRequestOpen(false);
+      setUsernameRequestValue("");
+      toast.success("Check your email to verify the username change request.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not request a username change."
+      );
+    }
+  };
+
   const formErrors = useMemo(() => {
     const errors: string[] = [];
     if (!normalizedUsername) {
@@ -4197,8 +4437,12 @@ function ProfileEditPanel({
     ) {
       errors.push("Select at least one interest in each category.");
     }
-    if (formData.ageRangeMin < 18) {
-      errors.push("Minimum match age must be 18 or older.");
+    const ageBounds = getMatchAgeBounds(formData.birthday);
+    if (formData.ageRangeMin < ageBounds.min) {
+      errors.push(`Minimum match age must be ${ageBounds.min} or older.`);
+    }
+    if (formData.ageRangeMax > ageBounds.max) {
+      errors.push(`Maximum match age cannot exceed ${ageBounds.max}.`);
     }
     if (formData.ageRangeMax < formData.ageRangeMin) {
       errors.push("Maximum match age must be greater than minimum match age.");
@@ -4212,7 +4456,7 @@ function ProfileEditPanel({
     usernameStatus,
   ]);
 
-  const handleSave = async () => {
+  const handleSave = async (section?: ProfileEditSection) => {
     if (formErrors.length > 0) {
       toast.error(formErrors[0]);
       return;
@@ -4252,7 +4496,7 @@ function ProfileEditPanel({
           sexuality: formData.sexuality,
           trustedContacts: [],
         }),
-        username: normalizedUsername,
+        username: profile?.username ?? normalizedUsername,
         name: formData.name.trim() || undefined,
         bio: formData.bio.trim() || undefined,
         birthday: formData.birthday,
@@ -4301,8 +4545,13 @@ function ProfileEditPanel({
 
       await datingApi.saveProfile(updatedPayload);
       setProfile(updatedPayload);
-      toast.success("Profile settings updated successfully!");
-      setProfileMode("profile");
+      setSavedFormData(formData);
+      toast.success(
+        section
+          ? `${section} settings saved.`
+          : "Profile settings updated successfully!"
+      );
+      if (!section) setProfileMode("profile");
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -4313,6 +4562,32 @@ function ProfileEditPanel({
       setIsSaving(false);
     }
   };
+
+  if (!isOnboarded) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 p-5">
+        <Card className="rounded-3xl border-primary/25 bg-primary/5 shadow-sm">
+          <CardHeader>
+            <CardTitle>Finish onboarding first</CardTitle>
+            <CardDescription>
+              Complete your profile, identity verification, media, and safety
+              setup before editing account settings.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              className={buttonVariants({ className: "rounded-full" })}
+              hash="identity"
+              to="/onboarding"
+            >
+              Finish onboarding
+              <ChevronRight className="ml-1 size-4" />
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 p-5 max-w-3xl mx-auto w-full">
@@ -4334,431 +4609,526 @@ function ProfileEditPanel({
         </Badge>
       </div>
 
-      {/* SECTION 1: USERNAME & BASIC IDENTITY */}
-      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
+      {/* SECTION 1: PROFILE MEDIA */}
+      <details className="group rounded-3xl border border-border bg-card/60 shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-bold text-sm [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center gap-2">
             <User className="size-4 text-primary" />
             Profile media
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Replace your profile photo, intro video, or add a photo without
-            returning to the onboarding wizard.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-3">
-          {(
-            [
-              ["profile_photo", "Profile photo", "image/*"],
-              ["intro_video", "Intro video", "video/*"],
-              ["photo", "Additional photo", "image/*"],
-            ] as const
-          ).map(([kind, label, accept]) => (
-            <label
-              className="flex cursor-pointer flex-col gap-2 rounded-2xl border border-dashed border-border p-4 text-center transition hover:border-primary/60 hover:bg-primary/5"
-              key={kind}
-            >
-              <span className="text-xs font-bold">{label}</span>
-              <span className="text-[11px] text-muted-foreground">
-                {uploadingMedia === kind ? "Uploading..." : "Choose file"}
-              </span>
-              <input
-                accept={accept}
-                className="sr-only"
-                disabled={Boolean(uploadingMedia)}
-                onChange={(event) => {
-                  void uploadProfileMedia(event.target.files?.[0], kind);
-                  event.currentTarget.value = "";
-                }}
-                type="file"
-              />
-            </label>
-          ))}
-        </CardContent>
-      </Card>
+          </span>
+          <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+        </summary>
+        <Card className="rounded-none border-0 border-t bg-transparent shadow-none">
+          <CardHeader>
+            <CardDescription className="text-xs">
+              Replace your profile photo, intro video, or add a photo without
+              returning to the onboarding wizard.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            {(
+              [
+                ["profile_photo", "Profile photo", "image/*"],
+                ["intro_video", "Intro video", "video/*"],
+                ["photo", "Additional photo", "image/*"],
+              ] as const
+            ).map(([kind, label, accept]) => {
+              const media =
+                kind === "profile_photo"
+                  ? profileMedia
+                  : kind === "intro_video"
+                    ? introMedia
+                    : additionalMedia[0];
+              return (
+                <label
+                  className="flex cursor-pointer flex-col gap-2 rounded-2xl border border-dashed border-border p-4 text-center transition hover:border-primary/60 hover:bg-primary/5"
+                  key={kind}
+                >
+                  {media?.url && kind === "intro_video" ? (
+                    <video
+                      aria-label="Saved intro video"
+                      className="aspect-video w-full rounded-xl bg-black object-cover"
+                      controls
+                      src={media.url}
+                    >
+                      <track kind="captions" />
+                    </video>
+                  ) : media?.url ? (
+                    <img
+                      alt={`${label.replace(" photo", "")} preview`}
+                      className="mx-auto size-20 rounded-xl object-cover"
+                      src={media.url}
+                    />
+                  ) : null}
+                  <span className="text-xs font-bold">{label}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {kind === "photo" && formData.media.length >= 7
+                      ? "Maximum of 5 additional photos"
+                      : kind === "photo" && additionalMedia.length > 0
+                        ? `${additionalMedia.length} saved · add another`
+                        : uploadingMedia === kind
+                          ? "Uploading..."
+                          : media?.url
+                            ? "Choose a replacement"
+                            : "Choose file"}
+                  </span>
+                  <input
+                    accept={accept}
+                    className="sr-only"
+                    disabled={
+                      Boolean(uploadingMedia) ||
+                      (kind === "photo" && formData.media.length >= 7)
+                    }
+                    onChange={(event) => {
+                      void uploadProfileMedia(event.target.files?.[0], kind);
+                      event.currentTarget.value = "";
+                    }}
+                    type="file"
+                  />
+                </label>
+              );
+            })}
+          </CardContent>
+          {additionalMedia.length > 0 ? (
+            <div className="flex flex-wrap gap-2 px-5 pb-5">
+              {additionalMedia.map((media, index) => (
+                <img
+                  alt={`Additional profile ${index + 1}`}
+                  className="size-20 rounded-xl object-cover"
+                  key={media.url}
+                  src={media.url}
+                />
+              ))}
+            </div>
+          ) : null}
+          <div className="px-5 pb-5">
+            <SectionSaveButton
+              dirty={isSectionDirty("media")}
+              disabled={isSaving}
+              onClick={() => void handleSave("media")}
+            />
+          </div>
+        </Card>
+      </details>
 
       {/* SECTION 1: USERNAME & BASIC IDENTITY */}
-      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
+      <details className="group rounded-3xl border border-border bg-card/60 shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-bold text-sm [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center gap-2">
             <User className="size-4 text-primary" />
-            1. Identity & Username
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Your unique @username is required for matching and date circle tags.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">
-              Username <span className="text-red-500">*</span>
-            </FieldLabel>
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">
-                @
-              </span>
+            Identity & Username
+          </span>
+          <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+        </summary>
+        <Card className="rounded-none border-0 border-t bg-transparent shadow-none">
+          <CardHeader>
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <User className="size-4 text-primary" />
+              1. Identity & Username
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Your unique @username is required for matching and date circle
+              tags.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-bold">
+                Username <span className="text-red-500">*</span>
+              </FieldLabel>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-xs font-bold text-muted-foreground">
+                  @
+                </span>
+                <Input
+                  aria-describedby="profile-username-status"
+                  className="rounded-full bg-muted/40 pl-7"
+                  readOnly
+                  value={formData.username}
+                />
+              </div>
+              <p
+                className="text-[11px] text-muted-foreground"
+                id="profile-username-status"
+              >
+                {usernameRequestStatus?.status === "pending_verification"
+                  ? `Change to @${usernameRequestStatus.requestedUsername} is waiting for email verification.`
+                  : usernameRequestStatus?.status === "pending_approval"
+                    ? `Change to @${usernameRequestStatus.requestedUsername} is queued for approval.`
+                    : "Username changes require email verification and approval."}
+              </p>
+              <Button
+                className="w-fit rounded-full text-xs"
+                onClick={() => {
+                  setUsernameRequestValue("");
+                  setUsernameRequestOpen(true);
+                }}
+                type="button"
+                variant="outline"
+              >
+                Request username change
+              </Button>
+            </Field>
+
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-bold">
+                Display Name
+              </FieldLabel>
               <Input
-                aria-describedby="profile-username-status"
-                aria-invalid={
-                  usernameStatus === "invalid" || usernameStatus === "taken"
+                className="rounded-full"
+                placeholder="First Last"
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
                 }
-                className={cn(
-                  "rounded-full pl-7",
-                  usernameStatus === "available" &&
-                    "border-emerald-500 focus-visible:ring-emerald-500/35",
-                  (usernameStatus === "invalid" ||
-                    usernameStatus === "taken") &&
-                    "border-destructive focus-visible:ring-destructive/35"
-                )}
-                placeholder="username"
-                value={formData.username}
+              />
+            </Field>
+
+            <Field className="sm:col-span-2 gap-1">
+              <FieldLabel className="text-xs font-bold">Bio</FieldLabel>
+              <Textarea
+                className="rounded-2xl bg-background/80"
+                placeholder="Tell dates a bit about yourself..."
+                value={formData.bio}
+                onChange={(e) =>
+                  setFormData({ ...formData, bio: e.target.value })
+                }
+              />
+            </Field>
+
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-bold">
+                Location (City, State)
+              </FieldLabel>
+              <Input
+                className="rounded-full"
+                placeholder="Nashville, TN"
+                value={formData.area}
+                onChange={(e) =>
+                  setFormData({ ...formData, area: e.target.value })
+                }
+              />
+            </Field>
+
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-bold">Birthday</FieldLabel>
+              <Input
+                type="date"
+                className="rounded-full"
+                value={formData.birthday}
+                onChange={(e) =>
+                  setFormData({ ...formData, birthday: e.target.value })
+                }
+              />
+            </Field>
+            <SectionSaveButton
+              dirty={isSectionDirty("identity")}
+              disabled={isSaving}
+              onClick={() => void handleSave("identity")}
+            />
+          </CardContent>
+        </Card>
+      </details>
+
+      {/* SECTION 2: PHYSICAL & PERSONAL DETAILS */}
+      <details className="group rounded-3xl border border-border bg-card/60 shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-bold text-sm [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center gap-2">
+            <Sparkles className="size-4 text-primary" />
+            Personal details & lifestyle
+          </span>
+          <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+        </summary>
+        <Card className="rounded-none border-0 border-t bg-transparent shadow-none">
+          <CardHeader>
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Sparkles className="size-4 text-primary" />
+              2. Personal Details & Lifestyle
+            </CardTitle>
+            <CardDescription className="text-xs">
+              These onboarding wizard fields help filter matches and display
+              badge details.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <SettingsSelectField
+              label="Sex"
+              onChange={(sex) => setFormData({ ...formData, sex })}
+              options={sexOptions}
+              value={formData.sex}
+            />
+
+            <SettingsSelectField
+              label="Sexuality"
+              onChange={(sexuality) => setFormData({ ...formData, sexuality })}
+              options={sexualityOptions}
+              value={formData.sexuality}
+            />
+
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-bold">Height</FieldLabel>
+              <Input
+                className="rounded-full"
+                placeholder="5'10&quot;"
+                value={formData.height}
+                onChange={(e) =>
+                  setFormData({ ...formData, height: e.target.value })
+                }
+              />
+            </Field>
+
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-bold">Weight</FieldLabel>
+              <Input
+                className="rounded-full"
+                placeholder="165 lbs"
+                value={formData.weight}
+                onChange={(e) =>
+                  setFormData({ ...formData, weight: e.target.value })
+                }
+              />
+            </Field>
+
+            <SettingsSelectField
+              label="Relationship Status"
+              onChange={(maritalStatus) =>
+                setFormData({ ...formData, maritalStatus })
+              }
+              options={maritalStatusOptions}
+              value={formData.maritalStatus}
+            />
+
+            <SettingsSelectField
+              label="Kids"
+              onChange={(kids) => setFormData({ ...formData, kids })}
+              options={kidsOptions}
+              value={formData.kids}
+            />
+
+            <SettingsSelectField
+              label="Future Kids"
+              onChange={(wantsKids) => setFormData({ ...formData, wantsKids })}
+              options={wantsKidsOptions}
+              value={formData.wantsKids}
+            />
+
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-bold">Occupation</FieldLabel>
+              <Input
+                className="rounded-full"
+                placeholder="Engineer, Designer..."
+                value={formData.occupation}
+                onChange={(e) =>
+                  setFormData({ ...formData, occupation: e.target.value })
+                }
+              />
+            </Field>
+
+            <SettingsSelectField
+              label="Religion"
+              onChange={(religion) => setFormData({ ...formData, religion })}
+              options={religionOptions}
+              value={formData.religion}
+            />
+
+            <SettingsSelectField
+              label="Politics"
+              onChange={(politics) => setFormData({ ...formData, politics })}
+              options={politicsOptions}
+              value={formData.politics}
+            />
+            <SectionSaveButton
+              dirty={isSectionDirty("lifestyle")}
+              disabled={isSaving}
+              onClick={() => void handleSave("lifestyle")}
+            />
+          </CardContent>
+        </Card>
+      </details>
+
+      {/* SECTION 3: DATING PREFERENCES & CRITERIA */}
+      <details className="group rounded-3xl border border-border bg-card/60 shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-bold text-sm [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center gap-2">
+            <Heart className="size-4 text-primary" />
+            Dating preferences & match criteria
+          </span>
+          <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+        </summary>
+        <Card className="rounded-none border-0 border-t bg-transparent shadow-none">
+          <CardHeader>
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Heart className="size-4 text-primary" />
+              3. Dating Preferences & Match Criteria
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Configure who you want to meet and what date styles you prefer.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <SettingsMultiPillField
+              label="Interested In"
+              onChange={(interestedIn) =>
+                setFormData({ ...formData, interestedIn })
+              }
+              options={interestedInOptions}
+              value={formData.interestedIn}
+            />
+
+            <SettingsMultiPillField
+              label="Looking For"
+              onChange={(lookingFor) =>
+                setFormData({ ...formData, lookingFor })
+              }
+              options={lookingForOptions}
+              value={formData.lookingFor}
+            />
+
+            <ProfileChipVisibilityField
+              onChange={(visibleProfileChips) =>
+                setFormData({ ...formData, visibleProfileChips })
+              }
+              options={formProfileChipOptions}
+              value={formData.visibleProfileChips}
+            />
+
+            <div className="sm:col-span-2">
+              <SettingsMultiPillField
+                label="Date Request Categories"
+                onChange={(datingModes) =>
+                  setFormData({ ...formData, datingModes })
+                }
+                options={dateRequestCategoryOptions}
+                value={formData.datingModes}
+              />
+              <FieldDescription className="mt-2 text-xs">
+                Chewbuu date requests can only be Eat, Drink, or Play.
+              </FieldDescription>
+            </div>
+
+            <div className="grid gap-3 sm:col-span-2">
+              <div>
+                <p className="font-bold text-xs">Interest Categories</p>
+                <FieldDescription className="mt-1 text-xs">
+                  These mirror onboarding chips and keep each signal in its
+                  category.
+                </FieldDescription>
+              </div>
+              <div className="grid gap-3">
+                {availableSettingsInterestCategories.map((category) => (
+                  <div
+                    className="rounded-2xl border border-border bg-background/35 p-3"
+                    key={category.label}
+                  >
+                    <p className="mb-2 font-bold text-xs">{category.label}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {category.suggestions.map((suggestion) => {
+                        const active = (
+                          formData.interestDetails[category.label] ?? []
+                        ).includes(suggestion);
+                        return (
+                          <button
+                            className={cn(
+                              "rounded-full px-3 py-1.5 font-bold text-xs transition",
+                              active
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground hover:text-foreground"
+                            )}
+                            key={suggestion}
+                            onClick={() =>
+                              toggleInterestDetail(category.label, suggestion)
+                            }
+                            type="button"
+                          >
+                            {suggestion}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <MatchAgeRangeField
+              birthday={formData.birthday}
+              max={formData.ageRangeMax}
+              min={formData.ageRangeMin}
+              onChange={(min, max) =>
+                setFormData({ ...formData, ageRangeMin: min, ageRangeMax: max })
+              }
+            />
+            <SectionSaveButton
+              dirty={isSectionDirty("preferences")}
+              disabled={isSaving}
+              onClick={() => void handleSave("preferences")}
+            />
+          </CardContent>
+        </Card>
+      </details>
+
+      {/* SECTION 4: SAFETY CONTACT */}
+      <details className="group rounded-3xl border border-border bg-card/60 shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 font-bold text-sm [&::-webkit-details-marker]:hidden">
+          <span className="flex items-center gap-2">
+            <ShieldCheck className="size-4 text-primary" />
+            Safety & emergency contact
+          </span>
+          <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+        </summary>
+        <Card className="rounded-none border-0 border-t bg-transparent shadow-none">
+          <CardHeader>
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <ShieldCheck className="size-4 text-primary" />
+              4. Safety & Emergency Contact
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Trusted contacts receive live date safety check-ins and emergency
+              alerts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-bold">
+                Contact Name
+              </FieldLabel>
+              <Input
+                className="rounded-full"
+                placeholder="Friend / Family Member"
+                value={formData.trustedContactName}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    username: e.target.value.toLowerCase(),
+                    trustedContactName: e.target.value,
                   })
                 }
               />
-            </div>
-            <p
-              className={cn(
-                "text-[11px]",
-                usernameStatus === "available" && "text-emerald-600",
-                usernameStatus === "checking" && "text-muted-foreground",
-                (usernameStatus === "invalid" || usernameStatus === "taken") &&
-                  "text-destructive"
-              )}
-              id="profile-username-status"
-            >
-              {usernameMessage}
-            </p>
-          </Field>
+            </Field>
 
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Display Name</FieldLabel>
-            <Input
-              className="rounded-full"
-              placeholder="First Last"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
+            <Field className="gap-1">
+              <FieldLabel className="text-xs font-bold">
+                Contact Phone
+              </FieldLabel>
+              <Input
+                className="rounded-full"
+                placeholder="Phone number"
+                value={formData.trustedContactPhone}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    trustedContactPhone: e.target.value,
+                  })
+                }
+              />
+            </Field>
+            <SectionSaveButton
+              dirty={isSectionDirty("safety")}
+              disabled={isSaving}
+              onClick={() => void handleSave("safety")}
             />
-          </Field>
-
-          <Field className="sm:col-span-2 gap-1">
-            <FieldLabel className="text-xs font-bold">Bio</FieldLabel>
-            <Textarea
-              className="rounded-2xl bg-background/80"
-              placeholder="Tell dates a bit about yourself..."
-              value={formData.bio}
-              onChange={(e) =>
-                setFormData({ ...formData, bio: e.target.value })
-              }
-            />
-          </Field>
-
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">
-              Location (City, State)
-            </FieldLabel>
-            <Input
-              className="rounded-full"
-              placeholder="Nashville, TN"
-              value={formData.area}
-              onChange={(e) =>
-                setFormData({ ...formData, area: e.target.value })
-              }
-            />
-          </Field>
-
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Birthday</FieldLabel>
-            <Input
-              type="date"
-              className="rounded-full"
-              value={formData.birthday}
-              onChange={(e) =>
-                setFormData({ ...formData, birthday: e.target.value })
-              }
-            />
-          </Field>
-        </CardContent>
-      </Card>
-
-      {/* SECTION 2: PHYSICAL & PERSONAL DETAILS */}
-      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <Sparkles className="size-4 text-primary" />
-            2. Personal Details & Lifestyle
-          </CardTitle>
-          <CardDescription className="text-xs">
-            These onboarding wizard fields help filter matches and display badge
-            details.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <SettingsSelectField
-            label="Sex"
-            onChange={(sex) => setFormData({ ...formData, sex })}
-            options={sexOptions}
-            value={formData.sex}
-          />
-
-          <SettingsSelectField
-            label="Sexuality"
-            onChange={(sexuality) => setFormData({ ...formData, sexuality })}
-            options={sexualityOptions}
-            value={formData.sexuality}
-          />
-
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Height</FieldLabel>
-            <Input
-              className="rounded-full"
-              placeholder="5'10&quot;"
-              value={formData.height}
-              onChange={(e) =>
-                setFormData({ ...formData, height: e.target.value })
-              }
-            />
-          </Field>
-
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Weight</FieldLabel>
-            <Input
-              className="rounded-full"
-              placeholder="165 lbs"
-              value={formData.weight}
-              onChange={(e) =>
-                setFormData({ ...formData, weight: e.target.value })
-              }
-            />
-          </Field>
-
-          <SettingsSelectField
-            label="Relationship Status"
-            onChange={(maritalStatus) =>
-              setFormData({ ...formData, maritalStatus })
-            }
-            options={maritalStatusOptions}
-            value={formData.maritalStatus}
-          />
-
-          <SettingsSelectField
-            label="Kids"
-            onChange={(kids) => setFormData({ ...formData, kids })}
-            options={kidsOptions}
-            value={formData.kids}
-          />
-
-          <SettingsSelectField
-            label="Future Kids"
-            onChange={(wantsKids) => setFormData({ ...formData, wantsKids })}
-            options={wantsKidsOptions}
-            value={formData.wantsKids}
-          />
-
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Occupation</FieldLabel>
-            <Input
-              className="rounded-full"
-              placeholder="Engineer, Designer..."
-              value={formData.occupation}
-              onChange={(e) =>
-                setFormData({ ...formData, occupation: e.target.value })
-              }
-            />
-          </Field>
-
-          <SettingsSelectField
-            label="Religion"
-            onChange={(religion) => setFormData({ ...formData, religion })}
-            options={religionOptions}
-            value={formData.religion}
-          />
-
-          <SettingsSelectField
-            label="Politics"
-            onChange={(politics) => setFormData({ ...formData, politics })}
-            options={politicsOptions}
-            value={formData.politics}
-          />
-        </CardContent>
-      </Card>
-
-      {/* SECTION 3: DATING PREFERENCES & CRITERIA */}
-      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <Heart className="size-4 text-primary" />
-            3. Dating Preferences & Match Criteria
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Configure who you want to meet and what date styles you prefer.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <SettingsMultiPillField
-            label="Interested In"
-            onChange={(interestedIn) =>
-              setFormData({ ...formData, interestedIn })
-            }
-            options={interestedInOptions}
-            value={formData.interestedIn}
-          />
-
-          <SettingsMultiPillField
-            label="Looking For"
-            onChange={(lookingFor) => setFormData({ ...formData, lookingFor })}
-            options={lookingForOptions}
-            value={formData.lookingFor}
-          />
-
-          <ProfileChipVisibilityField
-            onChange={(visibleProfileChips) =>
-              setFormData({ ...formData, visibleProfileChips })
-            }
-            options={formProfileChipOptions}
-            value={formData.visibleProfileChips}
-          />
-
-          <div className="sm:col-span-2">
-            <SettingsMultiPillField
-              label="Date Request Categories"
-              onChange={(datingModes) =>
-                setFormData({ ...formData, datingModes })
-              }
-              options={dateRequestCategoryOptions}
-              value={formData.datingModes}
-            />
-            <FieldDescription className="mt-2 text-xs">
-              Chewbuu date requests can only be Eat, Drink, or Play.
-            </FieldDescription>
-          </div>
-
-          <div className="grid gap-3 sm:col-span-2">
-            <div>
-              <p className="font-bold text-xs">Interest Categories</p>
-              <FieldDescription className="mt-1 text-xs">
-                These mirror onboarding chips and keep each signal in its
-                category.
-              </FieldDescription>
-            </div>
-            <div className="grid gap-3">
-              {availableSettingsInterestCategories.map((category) => (
-                <div
-                  className="rounded-2xl border border-border bg-background/35 p-3"
-                  key={category.label}
-                >
-                  <p className="mb-2 font-bold text-xs">{category.label}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {category.suggestions.map((suggestion) => {
-                      const active = (
-                        formData.interestDetails[category.label] ?? []
-                      ).includes(suggestion);
-                      return (
-                        <button
-                          className={cn(
-                            "rounded-full px-3 py-1.5 font-bold text-xs transition",
-                            active
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground hover:text-foreground"
-                          )}
-                          key={suggestion}
-                          onClick={() =>
-                            toggleInterestDetail(category.label, suggestion)
-                          }
-                          type="button"
-                        >
-                          {suggestion}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">
-              Age Range Min ({formData.ageRangeMin})
-            </FieldLabel>
-            <Input
-              type="number"
-              className="rounded-full"
-              value={formData.ageRangeMin}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  ageRangeMin: Number(e.target.value),
-                })
-              }
-            />
-          </Field>
-
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">
-              Age Range Max ({formData.ageRangeMax})
-            </FieldLabel>
-            <Input
-              type="number"
-              className="rounded-full"
-              value={formData.ageRangeMax}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  ageRangeMax: Number(e.target.value),
-                })
-              }
-            />
-          </Field>
-        </CardContent>
-      </Card>
-
-      {/* SECTION 4: SAFETY CONTACT */}
-      <Card className="rounded-3xl border-border bg-card/60 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <ShieldCheck className="size-4 text-primary" />
-            4. Safety & Emergency Contact
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Trusted contacts receive live date safety check-ins and emergency
-            alerts.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Contact Name</FieldLabel>
-            <Input
-              className="rounded-full"
-              placeholder="Friend / Family Member"
-              value={formData.trustedContactName}
-              onChange={(e) =>
-                setFormData({ ...formData, trustedContactName: e.target.value })
-              }
-            />
-          </Field>
-
-          <Field className="gap-1">
-            <FieldLabel className="text-xs font-bold">Contact Phone</FieldLabel>
-            <Input
-              className="rounded-full"
-              placeholder="Phone number"
-              value={formData.trustedContactPhone}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  trustedContactPhone: e.target.value,
-                })
-              }
-            />
-          </Field>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </details>
 
       {formErrors.length > 0 ? (
         <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-destructive text-xs">
@@ -4787,14 +5157,150 @@ function ProfileEditPanel({
         </Button>
         <Button
           className="rounded-full font-bold px-8 shadow-lg shadow-primary/20"
-          disabled={isSaving || usernameStatus === "checking"}
-          onClick={handleSave}
+          disabled={isSaving || !isAnySectionDirty}
+          onClick={() => void handleSave()}
           type="button"
         >
-          {isSaving ? "Saving Settings..." : "Save All Profile Settings"}
+          {isSaving
+            ? "Saving Settings..."
+            : isAnySectionDirty
+              ? "Save All Profile Settings"
+              : "All settings saved"}
         </Button>
       </div>
+
+      <Dialog onOpenChange={setUsernameRequestOpen} open={usernameRequestOpen}>
+        <DialogContent className="rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Request a username change</DialogTitle>
+            <DialogDescription>
+              You can request two username changes in a 30-day period. We’ll
+              email you a verification link, then queue the request for
+              approval.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <FieldLabel htmlFor="requested-username">New username</FieldLabel>
+            <Input
+              autoComplete="off"
+              id="requested-username"
+              onChange={(event) =>
+                setUsernameRequestValue(event.target.value.toLowerCase())
+              }
+              placeholder="new_username"
+              value={usernameRequestValue}
+            />
+            <p
+              className={cn(
+                "text-xs",
+                usernameChangeCheck.status === "available"
+                  ? "text-emerald-600"
+                  : usernameChangeCheck.status === "taken" ||
+                      usernameChangeCheck.status === "invalid"
+                    ? "text-destructive"
+                    : "text-muted-foreground"
+              )}
+            >
+              {usernameChangeCheck.status === "available"
+                ? "Username is available."
+                : usernameChangeCheck.status === "taken"
+                  ? "That username is taken."
+                  : usernameChangeCheck.status === "invalid"
+                    ? "Use 3+ letters, numbers, or underscores."
+                    : "We’ll check availability before submitting."}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              onClick={() => setUsernameRequestOpen(false)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={usernameChangeCheck.status !== "available"}
+              onClick={() => void handleUsernameChangeRequest()}
+              type="button"
+            >
+              Send verification email
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function SectionSaveButton({
+  dirty,
+  disabled,
+  onClick,
+}: {
+  dirty: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  if (!dirty) return null;
+  return (
+    <Button
+      className="w-fit rounded-full text-xs"
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      {disabled ? "Saving…" : "Save section"}
+    </Button>
+  );
+}
+
+function MatchAgeRangeField({
+  birthday,
+  max,
+  min,
+  onChange,
+}: {
+  birthday: string;
+  max: number;
+  min: number;
+  onChange: (min: number, max: number) => void;
+}) {
+  const bounds = getMatchAgeBounds(birthday);
+  const safeMin = Math.min(Math.max(min || bounds.min, bounds.min), bounds.max);
+  const safeMax = Math.max(Math.min(max || bounds.max, bounds.max), safeMin);
+  const isProtectedAge = (getAge(birthday) ?? 0) < 21;
+
+  return (
+    <Field className="gap-2 sm:col-span-2">
+      <div className="flex items-center justify-between gap-3">
+        <FieldLabel className="text-xs font-bold">Match age range</FieldLabel>
+        <Badge className="rounded-full text-[10px]" variant="secondary">
+          {safeMin}–{safeMax}
+        </Badge>
+      </div>
+      <FieldDescription className="text-xs">
+        {isProtectedAge
+          ? "For ages 18–20, matches stay within ages 18–22."
+          : "For adults, matching starts at age 23. Older members cannot contact ages 18–21."}
+      </FieldDescription>
+      <div className="rounded-2xl border border-border bg-background/50 p-4">
+        <Slider
+          aria-label="Match age range"
+          max={bounds.max}
+          min={bounds.min}
+          onValueChange={(value) => {
+            if (Array.isArray(value) && value.length >= 2) {
+              onChange(value[0], value[1]);
+            }
+          }}
+          value={[safeMin, safeMax]}
+        />
+        <div className="mt-3 flex justify-between text-xs text-muted-foreground">
+          <span>{bounds.min} min</span>
+          <span>{bounds.max} max</span>
+        </div>
+      </div>
+    </Field>
   );
 }
 

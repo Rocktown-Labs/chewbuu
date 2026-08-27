@@ -49,6 +49,8 @@ import {
   datingApi,
   pricingApi,
   type MembershipPlan,
+  type UsernameChangeRequest,
+  usernameApi,
   type StripeConnectStatus,
 } from "@/lib/dating-api";
 import { useAdminStatus } from "@/lib/use-admin-status";
@@ -136,6 +138,9 @@ const RouteComponent = () => {
   const [deleteUserDialog, setDeleteUserDialog] = useState<AdminUser | null>(
     null
   );
+  const [usernameRequests, setUsernameRequests] = useState<
+    (UsernameChangeRequest & { email: string; name: string })[]
+  >([]);
 
   const loadPlans = async () => {
     try {
@@ -145,6 +150,15 @@ const RouteComponent = () => {
       toast.error(
         error instanceof Error ? error.message : "Could not load plans."
       );
+    }
+  };
+
+  const loadUsernameRequests = async () => {
+    try {
+      const { requests } = await usernameApi.listRequests();
+      setUsernameRequests(requests);
+    } catch {
+      setUsernameRequests([]);
     }
   };
 
@@ -179,6 +193,7 @@ const RouteComponent = () => {
     };
     void loadPlans();
     void loadUsers();
+    void loadUsernameRequests();
     void loadConnectStatus();
   }, [isAdmin]);
 
@@ -292,7 +307,7 @@ const RouteComponent = () => {
   if (!isAdmin) {
     return (
       <main className="mx-auto grid min-h-full w-full max-w-5xl place-items-center px-4 py-10">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md rounded-3xl">
           <CardHeader>
             <CardTitle>Admin access required</CardTitle>
           </CardHeader>
@@ -306,7 +321,7 @@ const RouteComponent = () => {
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-10">
+    <main className="mx-auto w-full max-w-7xl px-4 py-10 [&_[data-slot=input]]:rounded-full [&_[data-slot=textarea]]:rounded-2xl">
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="font-semibold text-primary text-sm uppercase tracking-[0.18em]">
@@ -324,7 +339,10 @@ const RouteComponent = () => {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {ADMIN_SECTIONS.map(({ icon: Icon, label, text }) => (
-          <Card key={label}>
+          <Card
+            className="rounded-3xl border-border/80 bg-card/70 shadow-sm"
+            key={label}
+          >
             <CardHeader className="pb-2">
               <Icon aria-hidden="true" className="mb-1 text-primary size-5" />
               <CardTitle className="text-base">{label}</CardTitle>
@@ -336,7 +354,7 @@ const RouteComponent = () => {
         ))}
       </div>
 
-      <Card className="mt-6 border-primary/20 bg-primary/5">
+      <Card className="mt-6 rounded-3xl border-primary/20 bg-primary/5">
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold">Venue operations preview</h2>
@@ -374,23 +392,23 @@ const RouteComponent = () => {
           onValueChange={setActiveTab}
           value={activeTab}
         >
-          <TabsList className="grid w-full grid-cols-3 max-w-md h-10 rounded-lg p-1 bg-muted/60">
+          <TabsList className="grid h-12 w-full max-w-md grid-cols-3 rounded-full bg-muted/60 p-1">
             <TabsTrigger
-              className="rounded-md font-medium text-sm data-active:bg-background data-active:shadow-xs"
+              className="rounded-full font-medium text-sm data-active:bg-background data-active:shadow-xs"
               value="users"
             >
               <UsersRound className="mr-1.5 size-4" />
               Users
             </TabsTrigger>
             <TabsTrigger
-              className="rounded-md font-medium text-sm data-active:bg-background data-active:shadow-xs"
+              className="rounded-full font-medium text-sm data-active:bg-background data-active:shadow-xs"
               value="billing"
             >
               <Crown className="mr-1.5 size-4" />
               Billing & Plans
             </TabsTrigger>
             <TabsTrigger
-              className="rounded-md font-medium text-sm data-active:bg-background data-active:shadow-xs"
+              className="rounded-full font-medium text-sm data-active:bg-background data-active:shadow-xs"
               value="observability"
             >
               <Activity className="mr-1.5 size-4" />
@@ -400,7 +418,61 @@ const RouteComponent = () => {
 
           {/* TAB 1: USERS */}
           <TabsContent className="mt-6 space-y-4" value="users">
-            <Card>
+            {usernameRequests.length > 0 ? (
+              <Card className="rounded-3xl border-amber-500/30 bg-amber-500/5 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <UserCog className="size-4 text-amber-600" /> Username
+                    change queue
+                  </CardTitle>
+                  <CardDescription>
+                    Review email-verified username changes before they become
+                    public.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-2">
+                  {usernameRequests.map((request) => (
+                    <div
+                      className="flex flex-col gap-3 rounded-2xl border border-border bg-background/40 p-3 sm:flex-row sm:items-center sm:justify-between"
+                      key={request.id}
+                    >
+                      <div>
+                        <p className="font-medium text-sm">
+                          @{request.requestedUsername} · {request.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {request.email}
+                        </p>
+                      </div>
+                      <Button
+                        className="rounded-full"
+                        onClick={async () => {
+                          try {
+                            await usernameApi.approveRequest(request.id);
+                            toast.success(
+                              `@${request.requestedUsername} approved.`
+                            );
+                            await loadUsernameRequests();
+                            await loadUsers();
+                          } catch (error) {
+                            toast.error(
+                              error instanceof Error
+                                ? error.message
+                                : "Could not approve username change."
+                            );
+                          }
+                        }}
+                        size="sm"
+                        type="button"
+                      >
+                        Approve
+                      </Button>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ) : null}
+            <Card className="rounded-3xl border-border/80 bg-card/70 shadow-sm">
               <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <CardTitle className="text-xl">User Administration</CardTitle>
@@ -602,7 +674,7 @@ const RouteComponent = () => {
 
           {/* TAB 2: BILLING & PRICING */}
           <TabsContent className="mt-6 space-y-6" value="billing">
-            <Card>
+            <Card className="rounded-3xl border-border/80 bg-card/70 shadow-sm">
               <CardHeader className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
                 <div>
                   <Badge className="mb-2 rounded-full" variant="secondary">
@@ -968,7 +1040,7 @@ const RouteComponent = () => {
 
           {/* TAB 3: OBSERVABILITY & OPERATIONS */}
           <TabsContent className="mt-6 space-y-6" value="observability">
-            <Card>
+            <Card className="rounded-3xl border-border/80 bg-card/70 shadow-sm">
               <CardHeader>
                 <Badge className="mb-2 rounded-full w-fit" variant="secondary">
                   AWS CloudWatch & X-Ray

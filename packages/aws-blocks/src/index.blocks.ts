@@ -41,6 +41,10 @@ import { getDatabaseUrl, getDb, jsonb } from "./database";
 import type { BlocksDatabase } from "./database";
 import { nextDateLifecycleStatus } from "./date-lifecycle";
 import {
+  createIdentityVerificationSession,
+  getIdentityVerificationStatus,
+} from "./identity";
+import {
   adjustReliabilityScore,
   calculateMatchScore,
   distanceBetweenMiles,
@@ -51,6 +55,7 @@ import type {
   ApiChatParticipant,
   AccountEntitlementsResponse,
   ApiChatRoom,
+  IdentityVerificationSession,
   VenueIdentityVerificationSession,
   AiMessage,
   ApiNotification,
@@ -87,6 +92,13 @@ import type {
   UpdateCommunityInput,
   UpdateVenueBrandInput,
 } from "./types";
+import {
+  approveUsernameChange,
+  getUsernameChangeStatus,
+  listUsernameChangeRequests,
+  requestUsernameChange,
+  verifyUsernameChange,
+} from "./username-change";
 import {
   createVenueSpecial,
   endVenueDiningSession,
@@ -1279,7 +1291,7 @@ const loadProfile = async (userId: string, sessionUser: SessionUser) => {
 
   if (!storedProfile) return null;
 
-  const [media, contacts, invites] = await Promise.all([
+  const [media, contacts, invites, identity] = await Promise.all([
     db
       .selectFrom("profile_media")
       .selectAll()
@@ -1296,6 +1308,11 @@ const loadProfile = async (userId: string, sessionUser: SessionUser) => {
       .selectAll()
       .where("user_id", "=", userId)
       .execute(),
+    db
+      .selectFrom("user")
+      .select(["identity_status", "identity_verified_name", "username"])
+      .where("id", "=", userId)
+      .executeTakeFirst(),
   ]);
 
   const [profilePhotoUrl, introVideoUrl, resolvedMedia] = await Promise.all([
@@ -1319,11 +1336,16 @@ const loadProfile = async (userId: string, sessionUser: SessionUser) => {
     email: sessionUser.email,
     favoritePlaces: storedProfile.favorite_places ?? {},
     friendInvites: invites,
+    identityStatus:
+      identity?.identity_status as IdentityVerificationSession["status"],
+    ...(identity?.identity_verified_name
+      ? { identityVerifiedName: identity.identity_verified_name }
+      : {}),
     media: resolvedMedia,
     name: sessionUser.name,
     trustedContacts: contacts,
     userId,
-    username: sessionUser.username ?? "",
+    username: identity?.username ?? sessionUser.username ?? "",
   } satisfies DatingProfileResponse;
 };
 
@@ -1363,7 +1385,7 @@ const loadDatingSummary = async (
   sessionUser: SessionUser
 ): Promise<DatingSummaryResponse> => {
   const db = await getDb();
-  const [profile, pendingReviews, requests] = await Promise.all([
+  const [profile, pendingReviews, requests, identity] = await Promise.all([
     db
       .selectFrom("profile")
       .select([
@@ -1394,13 +1416,20 @@ const loadDatingSummary = async (
       )
       .orderBy("scheduled_at", "desc")
       .execute(),
+    db
+      .selectFrom("user")
+      .select("identity_status")
+      .where("id", "=", sessionUser.id)
+      .executeTakeFirst(),
   ]);
+  const identityVerified = identity?.identity_status === "verified";
   if (!profile || !hasLocation(profile)) {
     return {
       membershipTier: sessionUser.membershipTier ?? "social",
       pendingReviews: pendingReviews.length,
       readiness: {
         canDate: false,
+        identityVerified,
         onboarded: Boolean(profile?.onboarded),
         pendingReviews: pendingReviews.length,
       },
@@ -1465,7 +1494,11 @@ const loadDatingSummary = async (
     membershipTier: sessionUser.membershipTier ?? "social",
     pendingReviews: pendingReviews.length,
     readiness: {
-      canDate: Boolean(profile?.canDate) && pendingReviews.length === 0,
+      canDate:
+        Boolean(profile?.canDate) &&
+        identityVerified &&
+        pendingReviews.length === 0,
+      identityVerified,
       onboarded: Boolean(profile?.onboarded),
       pendingReviews: pendingReviews.length,
     },
@@ -1660,13 +1693,23 @@ const saveProfile = async (
     (item) => item.kind === "intro_video"
   );
   const locationReady = hasLocation(body);
-  const canDate = hasProfilePhoto && hasIntroVideo && locationReady;
+  const db = await getDb();
+  const userState = await db
+    .selectFrom("user")
+    .select(["identity_status", "username"])
+    .where("id", "=", sessionUser.id)
+    .executeTakeFirst();
+  const identityVerified = userState?.identity_status === "verified";
+  const usernameToSave = userState?.username || body.username;
+  const canDate =
+    hasProfilePhoto && hasIntroVideo && locationReady && identityVerified;
   const onboarded =
     !draft &&
     Boolean(
       hasProfilePhoto &&
       hasIntroVideo &&
-      body.username &&
+      identityVerified &&
+      usernameToSave &&
       body.area &&
       locationReady &&
       body.birthday &&
@@ -1675,7 +1718,6 @@ const saveProfile = async (
       (body.safetyOptIn ||
         (body.trustedContacts && body.trustedContacts.length > 0))
     );
-  const db = await getDb();
   const now = new Date();
 
   await db.transaction().execute(async (tx) => {
@@ -1796,7 +1838,7 @@ const saveProfile = async (
         has_completed_onboarding: onboarded,
         has_intro_video: hasIntroVideo,
         has_profile_photo: hasProfilePhoto,
-        ...(body.username ? { username: body.username } : {}),
+        ...(usernameToSave ? { username: usernameToSave } : {}),
       })
       .where("id", "=", sessionUser.id)
       .execute();
@@ -1806,17 +1848,20 @@ const saveProfile = async (
   const pendingReviews = pendingReviewRows.length;
   const savedProfile = await loadProfile(sessionUser.id, {
     ...sessionUser,
-    username: body.username ?? sessionUser.username,
+    username: usernameToSave ?? sessionUser.username,
   });
   return {
     profile: savedProfile as DatingProfileResponse,
     readiness: {
       canDate: canDate && pendingReviews === 0,
+      identityVerified,
       onboarded,
       pendingReviews,
     },
   };
 };
+
+const isProtectedYoungAdult = (age: number) => age >= 18 && age <= 21;
 
 const createDateRequest = async (
   sessionUser: SessionUser,
@@ -1950,6 +1995,17 @@ const createDateRequest = async (
     : null;
   const candidates = candidateRows
     .filter((candidate) => {
+      const candidateAge = candidate.birthday
+        ? getAge(candidate.birthday)
+        : null;
+      if (
+        requesterAge !== null &&
+        candidateAge !== null &&
+        isProtectedYoungAdult(candidateAge) &&
+        requesterAge > candidateAge
+      ) {
+        return false;
+      }
       if (friendUserId) return true;
       if (pendingCandidateIds.has(candidate.userId)) return false;
       const requesterInterestedIn = requesterProfile?.interested_in ?? [];
@@ -1966,9 +2022,6 @@ const createDateRequest = async (
       ) {
         return false;
       }
-      const candidateAge = candidate.birthday
-        ? getAge(candidate.birthday)
-        : null;
       if (requesterAge === null || candidateAge === null) return false;
       if (
         requesterProfile?.age_range_min !== null &&
@@ -3210,6 +3263,35 @@ const getStripeIdentitySecret = async () =>
   process.env.STRIPE_SECRET_KEY ??
   (await readStripeConnectSecret(stripeConnectSecretKey));
 
+const createIdentitySession = async (
+  sessionUser: SessionUser
+): Promise<IdentityVerificationSession> => {
+  const stripeSecretKey = await getStripeIdentitySecret();
+  if (!stripeSecretKey) {
+    throw new Error(
+      "Stripe Identity is not configured. Add a server-side Stripe key with Identity permissions."
+    );
+  }
+  return createIdentityVerificationSession(
+    sessionUser.id,
+    sessionUser.email,
+    stripeSecretKey,
+    `${venueAppUrl}/onboarding?verification=complete#identity`
+  );
+};
+
+const loadIdentityStatus = async (
+  sessionUser: SessionUser
+): Promise<IdentityVerificationSession> => {
+  const stripeSecretKey = await getStripeIdentitySecret();
+  if (!stripeSecretKey) {
+    throw new Error(
+      "Stripe Identity is not configured. Add a server-side Stripe key with Identity permissions."
+    );
+  }
+  return getIdentityVerificationStatus(sessionUser.id, stripeSecretKey);
+};
+
 const createVenueIdentitySession = async (
   sessionUser: SessionUser,
   input: unknown
@@ -4032,6 +4114,64 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return observeOperation("getProfile", async () => {
       const sessionUser = await requireSession(context.request.headers);
       return { profile: await loadProfile(sessionUser.id, sessionUser) };
+    });
+  },
+
+  async createIdentityVerificationSession() {
+    return observeOperation("createIdentityVerificationSession", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createIdentitySession(sessionUser);
+    });
+  },
+
+  async getIdentityVerificationStatus() {
+    return observeOperation("getIdentityVerificationStatus", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return loadIdentityStatus(sessionUser);
+    });
+  },
+
+  async requestUsernameChange(input: { username: string }) {
+    return observeOperation("requestUsernameChange", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const body = z
+        .object({ username: z.string().trim().min(1) })
+        .parse(input);
+      return requestUsernameChange(
+        sessionUser.id,
+        body,
+        async (email) => {
+          await venueEmailJob.submit(email);
+        },
+        venueAppUrl
+      );
+    });
+  },
+
+  async getUsernameChangeStatus() {
+    const sessionUser = await requireSession(context.request.headers);
+    return getUsernameChangeStatus(sessionUser.id);
+  },
+
+  async verifyUsernameChange(token: string) {
+    const parsedToken = z.string().trim().min(1).parse(token);
+    return verifyUsernameChange(parsedToken, async (email) => {
+      await venueEmailJob.submit(email);
+    });
+  },
+
+  async listUsernameChangeRequests() {
+    const sessionUser = await requireSession(context.request.headers);
+    requireAdmin(sessionUser);
+    return listUsernameChangeRequests();
+  },
+
+  async approveUsernameChange(input: { requestId: string }) {
+    const sessionUser = await requireSession(context.request.headers);
+    requireAdmin(sessionUser);
+    const body = z.object({ requestId: z.string().min(1) }).parse(input);
+    return approveUsernameChange(body.requestId, async (email) => {
+      await venueEmailJob.submit(email);
     });
   },
 

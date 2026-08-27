@@ -3,7 +3,7 @@ import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
 import { createDb } from "@chewbuu/db";
 import { env } from "@chewbuu/env/server";
-import { betterAuth } from "better-auth";
+import { APIError, betterAuth } from "better-auth";
 import { admin } from "better-auth/plugins/admin";
 import { organization } from "better-auth/plugins/organization";
 import { username } from "better-auth/plugins/username";
@@ -201,6 +201,26 @@ export const createAuth = () => {
         create: {
           after: async (user) => {
             await promoteConfiguredAdmin(db, adminEmails, user.id, user.email);
+          },
+        },
+        update: {
+          before: async (data, context) => {
+            if (!("username" in data)) return;
+            const userId =
+              context?.context?.session?.user?.id ??
+              ("id" in data ? data.id : undefined);
+            if (!userId) return;
+            const current = await db
+              .selectFrom("user")
+              .select("username")
+              .where("id", "=", userId)
+              .executeTakeFirst();
+            if (current?.username && current.username !== data.username) {
+              throw new APIError("BAD_REQUEST", {
+                message:
+                  "Existing usernames can only be changed through the verified request flow.",
+              });
+            }
           },
         },
       },
