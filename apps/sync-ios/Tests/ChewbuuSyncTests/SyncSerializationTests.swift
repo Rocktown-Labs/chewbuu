@@ -100,4 +100,32 @@ final class SyncSerializationTests: XCTestCase {
         XCTAssertEqual(TableFilter.orders.tableStatus, .ordered)
         XCTAssertEqual(TableFilter.paid.tableStatus, .paid)
     }
+
+    func testOrderCanAssignMultipleNamedPartyGuests() throws {
+        let service = SyncService()
+        let avery = try XCTUnwrap(service.customer(for: "c1"))
+        let jordan = try XCTUnwrap(service.customer(for: "c6"))
+        let guests = [
+            PartyGuest(name: avery.name, phone: avery.phone, customerId: avery.id),
+            PartyGuest(name: jordan.name, phone: jordan.phone, customerId: jordan.id),
+        ]
+
+        service.assignPartyGuests(tableId: "t1", guests: guests)
+
+        let table = try XCTUnwrap(service.table(for: "t1"))
+        XCTAssertEqual(table.partyGuestNames, ["Avery Williams", "Jordan Lee"])
+        XCTAssertEqual(table.partyName, "Avery Williams + Jordan Lee")
+        XCTAssertEqual(table.customerId, "c1")
+    }
+
+    func testSpecialsLinkToMenuAndJobsKeepApplicantDetails() throws {
+        let service = SyncService()
+        let item = try XCTUnwrap(service.menuCatalog.first)
+        let special = try XCTUnwrap(service.addSpecial(title: "Late night", detail: "A simple offer", discount: "10% off", menuItemIds: [item.id]))
+        let job = try XCTUnwrap(service.jobListings.first)
+
+        XCTAssertEqual(special.menuItemIds, [item.id])
+        XCTAssertFalse(job.applicantList.isEmpty)
+        XCTAssertFalse(job.applicantList[0].experience.isEmpty)
+    }
 }

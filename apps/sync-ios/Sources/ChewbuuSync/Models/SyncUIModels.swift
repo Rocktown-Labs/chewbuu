@@ -67,6 +67,7 @@ public enum SyncInspectorSelection: Hashable {
     case customer(String)
     case menuItem(String)
     case staff(String)
+    case job(String)
 }
 
 public enum TableFilter: String, CaseIterable, Identifiable {
@@ -103,6 +104,7 @@ public struct MockTable: Identifiable, Equatable {
     public var customerId: String?
     public var orders: [MockOrderItem]
     public var isChewbuuDate: Bool
+    public var partyGuestNames: [String] = []
 
     public enum TableStatus: String, CaseIterable {
         case available = "Available"
@@ -113,9 +115,9 @@ public struct MockTable: Identifiable, Equatable {
         public var color: Color {
             switch self {
             case .available: return ChewbuuTheme.success
-            case .seated: return ChewbuuTheme.warning
-            case .ordered: return ChewbuuTheme.burgundy
-            case .paid: return ChewbuuTheme.gold
+            case .seated: return ChewbuuTheme.gold
+            case .ordered: return ChewbuuTheme.yellow
+            case .paid: return ChewbuuTheme.secondaryText
             }
         }
     }
@@ -189,6 +191,20 @@ public struct MockCustomer: Identifiable, Equatable {
     }
 }
 
+public struct PartyGuest: Identifiable, Equatable {
+    public let id: String
+    public var name: String
+    public var phone: String
+    public var customerId: String?
+
+    public init(id: String = UUID().uuidString, name: String, phone: String, customerId: String?) {
+        self.id = id
+        self.name = name
+        self.phone = phone
+        self.customerId = customerId
+    }
+}
+
 public struct MockTableRequest: Identifiable, Equatable {
     public let id: String
     public var tableId: String
@@ -215,7 +231,7 @@ public struct MockTableRequest: Identifiable, Equatable {
         public var color: Color {
             switch self {
             case .new: return ChewbuuTheme.gold
-            case .inProgress: return ChewbuuTheme.burgundy
+            case .inProgress: return ChewbuuTheme.yellow
             case .resolved: return ChewbuuTheme.success
             }
         }
@@ -237,6 +253,26 @@ public struct CatalogItem: Identifiable, Equatable {
     public var availabilityNote: String = ""
 }
 
+public struct MockSpecial: Identifiable, Equatable {
+    public let id: String
+    public var title: String
+    public var detail: String
+    public var discount: String
+    public var menuItemIds: [String]
+    public var isPublished: Bool
+}
+
+public struct MockApplicant: Identifiable, Equatable {
+    public let id: String
+    public var name: String
+    public var phone: String
+    public var email: String
+    public var availability: String
+    public var experience: String
+    public var note: String
+    public var status: String
+}
+
 public struct MockJobListing: Identifiable, Equatable {
     public let id: String
     public var title: String
@@ -244,6 +280,7 @@ public struct MockJobListing: Identifiable, Equatable {
     public var schedule: String
     public var applicants: Int
     public var isPublished: Bool
+    public var applicantList: [MockApplicant] = []
 }
 
 public struct MockChatMessage: Identifiable, Equatable {

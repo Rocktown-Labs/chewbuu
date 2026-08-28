@@ -4,6 +4,7 @@ public struct OverviewView: View {
     @ObservedObject var syncService: SyncService
     let onNavigate: (SyncDestination) -> Void
     let onInspect: (SyncInspectorSelection) -> Void
+    let onNewOrder: () -> Void
 
     private var activeRequests: [MockTableRequest] {
         syncService.tableRequests.filter { $0.status != .resolved && $0.kind == .service }
@@ -107,7 +108,7 @@ public struct OverviewView: View {
 
                     OverviewPanel(title: "Quick actions", detail: "Keep the next tap close.", icon: "arrow.forward.circle", color: ChewbuuTheme.gold) {
                         HStack(spacing: 10) {
-                            QuickAction(title: "Take order", icon: "plus", color: ChewbuuTheme.burgundy) { onNavigate(.orders) }
+                            QuickAction(title: "New order", icon: "plus", color: ChewbuuTheme.burgundy) { onNewOrder() }
                             QuickAction(title: "Seat party", icon: "person.badge.plus", color: ChewbuuTheme.burgundy) { onNavigate(.tables) }
                             QuickAction(title: "Kitchen", icon: "flame", color: ChewbuuTheme.warning) { onNavigate(.kitchen) }
                         }

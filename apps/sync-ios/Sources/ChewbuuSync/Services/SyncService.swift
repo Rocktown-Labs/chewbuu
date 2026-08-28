@@ -22,6 +22,7 @@ public final class SyncService: ObservableObject {
     @Published public var customers: [MockCustomer] = []
     @Published public var tableRequests: [MockTableRequest] = []
     @Published public var jobListings: [MockJobListing] = []
+    @Published public var specials: [MockSpecial] = []
     @Published public var lastActionMessage: String?
 
     public init(server: BlocksServer = SyncEnvironment.defaultServer()) {
@@ -97,8 +98,34 @@ public final class SyncService: ObservableObject {
         ]
 
         jobListings = [
-            MockJobListing(id: "j1", title: "Evening Server", location: "Downtown", schedule: "Thu–Sun · 4pm–close", applicants: 8, isPublished: true),
-            MockJobListing(id: "j2", title: "Barback", location: "Downtown", schedule: "Fri–Sat · 5pm–close", applicants: 3, isPublished: false),
+            MockJobListing(
+                id: "j1",
+                title: "Evening Server",
+                location: "Downtown",
+                schedule: "Thu–Sun · 4pm–close",
+                applicants: 8,
+                isPublished: true,
+                applicantList: [
+                    MockApplicant(id: "a1", name: "Taylor Brooks", phone: "(555) 014-1020", email: "taylor@example.com", availability: "Thu–Sun evenings", experience: "4 years · full service", note: "Strong wine knowledge; looking for a stable floor team.", status: "New"),
+                    MockApplicant(id: "a2", name: "Riley Chen", phone: "(555) 014-1094", email: "riley@example.com", availability: "Fri–Sun evenings", experience: "2 years · neighborhood bistro", note: "Can start next week.", status: "Review"),
+                ]
+            ),
+            MockJobListing(
+                id: "j2",
+                title: "Barback",
+                location: "Downtown",
+                schedule: "Fri–Sat · 5pm–close",
+                applicants: 3,
+                isPublished: false,
+                applicantList: [
+                    MockApplicant(id: "a3", name: "Morgan Ellis", phone: "(555) 014-1118", email: "morgan@example.com", availability: "Fri–Sat nights", experience: "1 year · cocktail bar", note: "Interested in growing into bartending.", status: "New"),
+                ]
+            ),
+        ]
+
+        specials = [
+            MockSpecial(id: "sp1", title: "Date Night Dessert", detail: "Complimentary molten cake for Chewbuu Date tables", discount: "Complimentary", menuItemIds: ["m7"], isPublished: true),
+            MockSpecial(id: "sp2", title: "Golden Hour", detail: "20% off selected drinks from 4–6pm", discount: "20% off", menuItemIds: ["m5", "m6", "m9"], isPublished: false),
         ]
     }
 
@@ -148,6 +175,7 @@ public final class SyncService: ObservableObject {
         tables[index].serverName = serverName
         tables[index].seatedTimeMinutes = 1
         tables[index].isChewbuuDate = isChewbuuDate
+        tables[index].partyGuestNames = [partyName]
         lastActionMessage = "Seated \(partyName) at Table \(tables[index].label)."
     }
 
@@ -156,8 +184,18 @@ public final class SyncService: ObservableObject {
         tables[index].customerId = customerId
         if let customer = customer(for: customerId) {
             tables[index].partyName = customer.name
+            tables[index].partyGuestNames = [customer.name]
             tables[index].occupiedSeats = max(tables[index].occupiedSeats, customer.partySize)
         }
+    }
+
+    public func assignPartyGuests(tableId: String, guests: [PartyGuest]) {
+        guard let index = tables.firstIndex(where: { $0.id == tableId }), !guests.isEmpty else { return }
+        let names = guests.map(\.name)
+        tables[index].partyGuestNames = names
+        tables[index].partyName = names.joined(separator: " + ")
+        tables[index].customerId = guests.first?.customerId
+        tables[index].occupiedSeats = min(tables[index].seats, max(tables[index].occupiedSeats, guests.count))
     }
 
     public func addOrderItem(tableId: String, item: CatalogItem, selectedModifiers: [String], quantity: Int, notes: String = "") {
@@ -225,6 +263,7 @@ public final class SyncService: ObservableObject {
         tables[index].seatedTimeMinutes = 0
         tables[index].orders.removeAll()
         tables[index].isChewbuuDate = false
+        tables[index].partyGuestNames.removeAll()
         lastActionMessage = "Table \(label) closed and available."
     }
 
@@ -260,6 +299,40 @@ public final class SyncService: ObservableObject {
     public func toggleJobListing(jobId: String) {
         guard let index = jobListings.firstIndex(where: { $0.id == jobId }) else { return }
         jobListings[index].isPublished.toggle()
+    }
+
+    @discardableResult
+    public func addJobListing(title: String, location: String, schedule: String) -> MockJobListing? {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty else { return nil }
+        let listing = MockJobListing(id: UUID().uuidString, title: cleanTitle, location: location, schedule: schedule, applicants: 0, isPublished: false)
+        jobListings.append(listing)
+        lastActionMessage = "Created \(cleanTitle)."
+        return listing
+    }
+
+    @discardableResult
+    public func addSpecial(title: String, detail: String, discount: String, menuItemIds: [String]) -> MockSpecial? {
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanTitle.isEmpty, !menuItemIds.isEmpty else { return nil }
+        let special = MockSpecial(id: UUID().uuidString, title: cleanTitle, detail: detail, discount: discount, menuItemIds: menuItemIds, isPublished: false)
+        specials.append(special)
+        lastActionMessage = "Created special \(cleanTitle)."
+        return special
+    }
+
+    public func toggleSpecial(specialId: String) {
+        guard let index = specials.firstIndex(where: { $0.id == specialId }) else { return }
+        specials[index].isPublished.toggle()
+    }
+
+    public func updateSpecial(specialId: String, title: String, detail: String, discount: String, menuItemIds: [String]) {
+        guard let index = specials.firstIndex(where: { $0.id == specialId }) else { return }
+        specials[index].title = title
+        specials[index].detail = detail
+        specials[index].discount = discount
+        specials[index].menuItemIds = menuItemIds
+        lastActionMessage = "Saved special \(title)."
     }
 
     public var activeOrderCount: Int {
