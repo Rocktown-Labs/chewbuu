@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct KitchenKDSView: View {
     @ObservedObject var syncService: SyncService
+    let onInspect: (SyncInspectorSelection) -> Void
     @State private var selectedStatus = "All"
 
     private let statuses = ["All", "Pending", "Preparing", "Ready", "Served"]
@@ -16,32 +17,32 @@ public struct KitchenKDSView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 ForEach(statuses, id: \.self) { status in
                     Button(status) { selectedStatus = status }
-                        .buttonStyle(SyncChipButtonStyle(isSelected: selectedStatus == status, color: ChewbuuTheme.orange))
+                        .buttonStyle(SyncChipButtonStyle(isSelected: selectedStatus == status, color: ChewbuuTheme.burgundy))
                 }
                 Spacer()
-                Label("\(allOrders.filter { $0.item.status != .served }.count) active tickets", systemImage: "flame.fill")
+                Label("\(allOrders.filter { $0.item.status != .served }.count) active", systemImage: "flame")
                     .font(.subheadline.bold())
-                    .foregroundStyle(ChewbuuTheme.orange)
+                    .foregroundStyle(ChewbuuTheme.burgundy)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 13)
-            .background(ChewbuuTheme.surface.opacity(0.7))
+            .padding(.vertical, 12)
+            .background(ChewbuuTheme.surface)
 
             Divider().overlay(ChewbuuTheme.divider)
 
             if allOrders.isEmpty {
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     Spacer()
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 50))
-                        .foregroundStyle(ChewbuuTheme.mint)
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 42))
+                        .foregroundStyle(ChewbuuTheme.success)
                     Text("Kitchen is clear")
                         .font(.title3.bold())
                         .foregroundStyle(ChewbuuTheme.primaryText)
-                    Text("New orders will appear here as soon as they are sent.")
+                    Text("New orders appear after they are sent.")
                         .font(.subheadline)
                         .foregroundStyle(ChewbuuTheme.secondaryText)
                     Spacer()
@@ -49,9 +50,9 @@ public struct KitchenKDSView: View {
                 .frame(maxWidth: .infinity)
             } else {
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 275, maximum: 370), spacing: 14)], spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 270, maximum: 380), spacing: 11)], spacing: 11) {
                         ForEach(allOrders, id: \.item.id) { entry in
-                            KdsTicketCard(tableLabel: entry.tableLabel, item: entry.item) {
+                            KdsTicketCard(tableLabel: entry.tableLabel, item: entry.item, onSelect: { onInspect(.table(entry.tableId)) }) {
                                 syncService.advanceItem(tableId: entry.tableId, itemId: entry.item.id)
                             }
                         }
@@ -67,24 +68,28 @@ public struct KitchenKDSView: View {
 struct KdsTicketCard: View {
     let tableLabel: String
     let item: MockOrderItem
+    let onSelect: () -> Void
     let advance: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Table \(tableLabel)", systemImage: "square.grid.2x2.fill")
-                    .font(.subheadline.bold())
-                    .foregroundStyle(ChewbuuTheme.blue)
-                Spacer()
-                Label("\(item.minutesAgo)m", systemImage: "timer")
-                    .font(.caption.bold())
-                    .foregroundStyle(item.minutesAgo > 15 ? ChewbuuTheme.coral : ChewbuuTheme.secondaryText)
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: onSelect) {
+                HStack {
+                    Label("Table \(tableLabel)", systemImage: "square.grid.2x2")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(ChewbuuTheme.burgundy)
+                    Spacer()
+                    Label("\(item.minutesAgo)m", systemImage: "timer")
+                        .font(.caption.bold())
+                        .foregroundStyle(item.minutesAgo > 15 ? ChewbuuTheme.coral : ChewbuuTheme.secondaryText)
+                }
             }
-            HStack(alignment: .top, spacing: 10) {
+            .buttonStyle(.plain)
+            HStack(alignment: .top, spacing: 9) {
                 Text("\(item.quantity)x")
                     .font(.title3.bold())
-                    .foregroundStyle(ChewbuuTheme.amber)
-                VStack(alignment: .leading, spacing: 5) {
+                    .foregroundStyle(ChewbuuTheme.burgundy)
+                VStack(alignment: .leading, spacing: 4) {
                     Text(item.name).font(.headline.bold()).foregroundStyle(ChewbuuTheme.primaryText)
                     ForEach(item.modifiers, id: \.self) { modifier in
                         Text("• \(modifier)").font(.caption).foregroundStyle(ChewbuuTheme.secondaryText)
@@ -96,13 +101,13 @@ struct KdsTicketCard: View {
                 SyncStatusPill(title: item.status.rawValue, color: item.status.color)
                 Spacer()
                 if item.status != .served {
-                    Button(nextActionTitle) { advance() }
-                        .buttonStyle(SyncFilledButtonStyle(color: item.status == .ready ? ChewbuuTheme.mint : ChewbuuTheme.blue))
+                    Button(nextActionTitle, action: advance)
+                        .buttonStyle(SyncOutlineButtonStyle(color: item.status == .ready ? ChewbuuTheme.success : ChewbuuTheme.burgundy))
                 }
             }
         }
-        .padding(15)
-        .syncCard(isSelected: item.status == .ready, accent: item.status == .ready ? ChewbuuTheme.mint : ChewbuuTheme.orange)
+        .padding(14)
+        .syncCard(accent: item.status == .ready ? ChewbuuTheme.success : ChewbuuTheme.burgundy)
     }
 
     private var nextActionTitle: String {

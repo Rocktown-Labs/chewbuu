@@ -21,7 +21,6 @@ public final class SyncService: ObservableObject {
     @Published public var menuCatalog: [CatalogItem] = []
     @Published public var customers: [MockCustomer] = []
     @Published public var tableRequests: [MockTableRequest] = []
-    @Published public var diningDates: [MockDiningDate] = []
     @Published public var jobListings: [MockJobListing] = []
     @Published public var lastActionMessage: String?
 
@@ -30,15 +29,23 @@ public final class SyncService: ObservableObject {
         loadInitialData()
     }
 
+    public var reservationRequests: [MockTableRequest] {
+        tableRequests.filter { $0.kind == .reservation }
+    }
+
+    public var openCheckCount: Int {
+        tables.filter { $0.status == .seated || $0.status == .ordered }.count
+    }
+
     public func loadInitialData() {
         customers = [
-            MockCustomer(id: "c1", name: "Avery Williams", email: "avery@example.com", phone: "(555) 014-0192", favoriteOrder: "Ribeye · Medium Rare", lastVisit: "Tonight", isChewbuuMember: true, visitCount: 8),
-            MockCustomer(id: "c2", name: "Chen VIP Group", email: "chen@example.com", phone: "(555) 014-0231", favoriteOrder: "Hamachi Crudo", lastVisit: "Tonight", isChewbuuMember: false, visitCount: 3),
-            MockCustomer(id: "c3", name: "Davis Anniversary", email: "davis@example.com", phone: "(555) 014-0334", favoriteOrder: "Molten Lava Cake", lastVisit: "Today", isChewbuuMember: true, visitCount: 5),
-            MockCustomer(id: "c4", name: "Smith Table", email: "smith@example.com", phone: "(555) 014-0468", favoriteOrder: "Wild Mushroom Risotto", lastVisit: "Yesterday", isChewbuuMember: false, visitCount: 2),
-            MockCustomer(id: "c5", name: "Walk-in Pair", email: "", phone: "", favoriteOrder: "Smoked Old Fashioned", lastVisit: "Tonight", isChewbuuMember: false, visitCount: 1),
-            MockCustomer(id: "c6", name: "Jordan Lee", email: "jordan@chewbuu.com", phone: "(555) 014-0799", favoriteOrder: "Sparkling Water", lastVisit: "Last Friday", isChewbuuMember: true, visitCount: 12),
-            MockCustomer(id: "c7", name: "Maya & Sam", email: "maya@example.com", phone: "(555) 014-0818", favoriteOrder: "Espresso Martini", lastVisit: "Last month", isChewbuuMember: true, visitCount: 4),
+            MockCustomer(id: "c1", name: "Avery Williams", email: "avery@example.com", phone: "(555) 014-0192", partySize: 2, favoriteOrder: "Ribeye · Medium Rare", lastVisit: "Tonight", isChewbuuMember: true, visitCount: 8),
+            MockCustomer(id: "c2", name: "Chen VIP Group", email: "chen@example.com", phone: "(555) 014-0231", partySize: 5, favoriteOrder: "Hamachi Crudo", lastVisit: "Tonight", isChewbuuMember: false, visitCount: 3),
+            MockCustomer(id: "c3", name: "Davis Anniversary", email: "davis@example.com", phone: "(555) 014-0334", partySize: 2, favoriteOrder: "Molten Lava Cake", lastVisit: "Today", isChewbuuMember: true, visitCount: 5),
+            MockCustomer(id: "c4", name: "Smith Table", email: "smith@example.com", phone: "(555) 014-0468", partySize: 2, favoriteOrder: "Wild Mushroom Risotto", lastVisit: "Yesterday", isChewbuuMember: false, visitCount: 2),
+            MockCustomer(id: "c5", name: "Walk-in Pair", email: "", phone: "", partySize: 2, favoriteOrder: "Smoked Old Fashioned", lastVisit: "Tonight", isChewbuuMember: false, visitCount: 1),
+            MockCustomer(id: "c6", name: "Jordan Lee", email: "jordan@chewbuu.com", phone: "(555) 014-0799", partySize: 2, favoriteOrder: "Sparkling Water", lastVisit: "Last Friday", isChewbuuMember: true, visitCount: 12),
+            MockCustomer(id: "c7", name: "Maya & Sam", email: "maya@example.com", phone: "(555) 014-0818", partySize: 2, favoriteOrder: "Espresso Martini", lastVisit: "Last month", isChewbuuMember: true, visitCount: 4),
         ]
 
         tables = [
@@ -70,10 +77,10 @@ public final class SyncService: ObservableObject {
         ]
 
         menuCatalog = [
-            CatalogItem(id: "m1", category: "Mains", name: "Prime Dry-Aged Ribeye", priceCents: 5200, description: "14oz prime cut, garlic herb butter", modifiers: ["Rare", "Medium Rare", "Medium", "Well Done", "Truffle Butter", "Chimichurri"], isAvailable: true),
-            CatalogItem(id: "m2", category: "Mains", name: "Wild Mushroom Risotto", priceCents: 3400, description: "Arborio rice, chanterelles, parmesan", modifiers: ["Extra Parmesan", "Shaved Black Truffle", "Vegan Option"], isAvailable: true),
-            CatalogItem(id: "m3", category: "Appetizers", name: "Hamachi Crudo", priceCents: 2100, description: "Yellowtail, citrus ponzu, serrano", modifiers: ["Extra Ponzu", "No Jalapeno"], isAvailable: true),
-            CatalogItem(id: "m4", category: "Appetizers", name: "Truffle Parmesan Fries", priceCents: 1400, description: "Hand-cut kennebec fries, truffle oil", modifiers: ["Extra Garlic Aioli", "Extra Parmesan"], isAvailable: true),
+            CatalogItem(id: "m1", category: "Mains", name: "Prime Dry-Aged Ribeye", priceCents: 5200, description: "14oz prime cut, garlic herb butter", modifiers: ["Rare", "Medium Rare", "Medium", "Well Done", "Truffle Butter", "Chimichurri"], isAvailable: true, photoName: "ribeye", dealName: "Chef's table", comboItems: [], substitutions: ["Wild Mushroom Risotto"], availabilityNote: "Cook to order"),
+            CatalogItem(id: "m2", category: "Mains", name: "Wild Mushroom Risotto", priceCents: 3400, description: "Arborio rice, chanterelles, parmesan", modifiers: ["Extra Parmesan", "Shaved Black Truffle", "Vegan Option"], isAvailable: true, comboItems: ["Seasonal greens"], substitutions: ["Prime Dry-Aged Ribeye"], availabilityNote: "Contains dairy"),
+            CatalogItem(id: "m3", category: "Appetizers", name: "Hamachi Crudo", priceCents: 2100, description: "Yellowtail, citrus ponzu, serrano", modifiers: ["Extra Ponzu", "No Jalapeno"], isAvailable: true, photoName: "crudo", availabilityNote: "Limited tonight"),
+            CatalogItem(id: "m4", category: "Appetizers", name: "Truffle Parmesan Fries", priceCents: 1400, description: "Hand-cut kennebec fries, truffle oil", modifiers: ["Extra Garlic Aioli", "Extra Parmesan"], isAvailable: true, comboItems: ["House aioli"], substitutions: ["Seasonal greens"]),
             CatalogItem(id: "m5", category: "Drinks", name: "Smoked Old Fashioned", priceCents: 1800, description: "Bourbon, bitters, hickory smoke", modifiers: ["Large Rock", "Neat", "Orange Peel"], isAvailable: true),
             CatalogItem(id: "m6", category: "Drinks", name: "Craft Espresso Martini", priceCents: 1600, description: "Vodka, espresso, kahlua, vanilla", modifiers: ["Oat Milk", "Decaf", "Extra Dry"], isAvailable: true),
             CatalogItem(id: "m7", category: "Desserts", name: "Molten Lava Cake", priceCents: 1500, description: "Valrhona chocolate, vanilla gelato", modifiers: ["Extra Gelato", "Berry Coulis"], isAvailable: true),
@@ -86,12 +93,7 @@ public final class SyncService: ObservableObject {
             MockTableRequest(id: "r1", tableId: "t3", customerId: "c2", title: "Add-on order", detail: "Two sparkling waters and another round of crudo", ageMinutes: 3, status: .new),
             MockTableRequest(id: "r2", tableId: "t2", customerId: "c1", title: "Dessert & drinks", detail: "Chocolate cake and two espresso martinis", ageMinutes: 7, status: .new),
             MockTableRequest(id: "r3", tableId: "t7", customerId: "c5", title: "Ready for the check", detail: "Guest tapped for close-out", ageMinutes: 11, status: .new),
-        ]
-
-        diningDates = [
-            MockDiningDate(id: "d1", title: "Chewbuu Date Night", guests: "Avery Williams + guest", tableLabel: "T2", detail: "Dinner, drinks & a shared dessert", status: "In service"),
-            MockDiningDate(id: "d2", title: "First Bite", guests: "Davis Anniversary", tableLabel: "T4", detail: "Celebration dinner", status: "Cheque paid"),
-            MockDiningDate(id: "d3", title: "Meet for a Matcha", guests: "Jordan Lee + guest", tableLabel: "—", detail: "Reservation arriving at 19:30", status: "Upcoming"),
+            MockTableRequest(id: "r4", tableId: "t5", customerId: nil, title: "Avery Williams + Jordan Lee", detail: "Chewbuu Date · dinner reservation", ageMinutes: 0, status: .new, kind: .reservation, guestNames: "Avery Williams + Jordan Lee", scheduledTime: "19:30", preorderedItems: ["Shared dessert"]),
         ]
 
         jobListings = [
@@ -126,6 +128,17 @@ public final class SyncService: ObservableObject {
         return customers.first(where: { $0.id == id })
     }
 
+    @discardableResult
+    public func createCustomer(name: String, phone: String, partySize: Int) -> MockCustomer? {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty, !cleanPhone.isEmpty else { return nil }
+        let customer = MockCustomer(id: UUID().uuidString, name: cleanName, email: "", phone: cleanPhone, partySize: partySize, favoriteOrder: "New guest", lastVisit: "Tonight", isChewbuuMember: false, visitCount: 1)
+        customers.insert(customer, at: 0)
+        lastActionMessage = "Added \(cleanName) as a venue guest."
+        return customer
+    }
+
     public func seatParty(tableId: String, partyName: String, guestCount: Int, serverName: String, customerId: String? = nil, isChewbuuDate: Bool = false) {
         guard let index = tables.firstIndex(where: { $0.id == tableId }) else { return }
         tables[index].status = .seated
@@ -143,6 +156,7 @@ public final class SyncService: ObservableObject {
         tables[index].customerId = customerId
         if let customer = customer(for: customerId) {
             tables[index].partyName = customer.name
+            tables[index].occupiedSeats = max(tables[index].occupiedSeats, customer.partySize)
         }
     }
 
@@ -217,6 +231,30 @@ public final class SyncService: ObservableObject {
     public func toggleMenuAvailability(itemId: String) {
         guard let index = menuCatalog.firstIndex(where: { $0.id == itemId }) else { return }
         menuCatalog[index].isAvailable.toggle()
+        lastActionMessage = menuCatalog[index].isAvailable ? "\(menuCatalog[index].name) is available." : "\(menuCatalog[index].name) is unavailable."
+    }
+
+    public func updateMenuItem(itemId: String, name: String, priceCents: Int, description: String, dealName: String, comboItems: [String], substitutions: [String], availabilityNote: String, photoName: String?) {
+        guard let index = menuCatalog.firstIndex(where: { $0.id == itemId }) else { return }
+        menuCatalog[index].name = name
+        menuCatalog[index].priceCents = priceCents
+        menuCatalog[index].description = description
+        menuCatalog[index].dealName = dealName.isEmpty ? nil : dealName
+        menuCatalog[index].comboItems = comboItems
+        menuCatalog[index].substitutions = substitutions
+        menuCatalog[index].availabilityNote = availabilityNote
+        menuCatalog[index].photoName = photoName
+        lastActionMessage = "Saved \(name)."
+    }
+
+    @discardableResult
+    public func addMenuItem(category: String, name: String, priceCents: Int, description: String, photoName: String?) -> CatalogItem? {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty, priceCents > 0 else { return nil }
+        let item = CatalogItem(id: UUID().uuidString, category: category, name: cleanName, priceCents: priceCents, description: description, modifiers: [], isAvailable: true, photoName: photoName)
+        menuCatalog.append(item)
+        lastActionMessage = "Added \(cleanName) to the menu."
+        return item
     }
 
     public func toggleJobListing(jobId: String) {

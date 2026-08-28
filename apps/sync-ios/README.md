@@ -64,13 +64,14 @@ See [`docs/sync-operations-api.md`](../../docs/sync-operations-api.md) for full 
 
 ## iPad Cockpit Navigation
 
-The native cockpit is organized into five manager-friendly groups:
+The native cockpit is organized into four manager-friendly groups:
 
-- **At a glance**: Overview, service pulse, table requests, and Chewbuu Dates
-- **Operations**: Tables & Floor, Orders & Checks, Kitchen KDS
-- **People**: Team, Schedules & Attendance, Customers, Staff Chat
-- **Business**: Menu, Specials, Hiring, Analytics, and Business Settings
+- **Operations**: Overview, Tables & Floor, Reservations, Orders & Checks, Kitchen KDS
+- **People**: Team, Schedules & Attendance, Staff Chat
+- **Business**: Menu, Specials, Hiring, Analytics, Business Settings, Customers
 - **Terminal**: Kiosk Clock-In
+
+The main column stays full-width until a table, reservation, staff member, customer, or menu item is selected. That selection opens a closable right-side inspector; tapping the same item again closes it.
 
 The dummy data supports a complete tap-through demonstration:
 

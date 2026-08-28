@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Refined the native Sync iPad cockpit with Chewbuu burgundy/yellow branding, a quiet overview, grouped operations navigation, reservations, closable inspectors, table-state filters, guest contact capture, menu item metadata editing, and explicit close-out confirmation.
 - Added guided rounded venue onboarding with Stripe Identity representative verification, storefront asset uploads, venue-owned menu items, item-linked food photos, and PostgreSQL menu modifier groups/options.
 - Added venue operational timeline events for arrival, cooking start, food served, date ended, order/reservation stages, deterministic venue analytics, public aggregate metrics with sample gating, filterable specials, public spot detail pages, and native specials discovery.
 - Added Better Auth Organizations as the canonical venue organization boundary with a non-destructive bridge from existing venue memberships.

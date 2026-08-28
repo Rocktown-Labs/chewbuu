@@ -3,10 +3,12 @@ import SwiftUI
 public struct TableDetailView: View {
     @ObservedObject var syncService: SyncService
     let tableId: String?
+    let onClose: () -> Void
 
     @State private var showingAddMenuSheet = false
     @State private var showingPaymentSheet = false
     @State private var showingSeatPartySheet = false
+    @State private var showingCloseConfirmation = false
     @State private var editingItem: MockOrderItem?
 
     private var currentTable: MockTable? { syncService.table(for: tableId) }
@@ -15,90 +17,74 @@ public struct TableDetailView: View {
     public var body: some View {
         if let table = currentTable {
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                Text(table.label)
-                                    .font(.system(size: 27, weight: .bold, design: .rounded))
-                                    .foregroundStyle(ChewbuuTheme.primaryText)
-                                if table.isChewbuuDate {
-                                    Label("Chewbuu Date", systemImage: "heart.fill")
-                                        .font(.caption2.weight(.heavy))
-                                        .foregroundStyle(ChewbuuTheme.datePink)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 5)
-                                        .background(ChewbuuTheme.datePink.opacity(0.15), in: Capsule())
-                                }
-                            }
-                            Text("\(table.section)  ·  \(table.seats) seats")
-                                .font(.subheadline)
-                                .foregroundStyle(ChewbuuTheme.secondaryText)
-                            Text(table.partyName ?? "Available for seating")
-                                .font(.headline)
-                                .foregroundStyle(table.status == .available ? ChewbuuTheme.secondaryText : ChewbuuTheme.primaryText)
-                        }
-                        Spacer()
-                        SyncStatusPill(title: table.status.rawValue, color: table.status.color)
-                    }
-
-                    HStack(spacing: 12) {
-                        Label(table.serverName, systemImage: "person.badge.shield.checkmark")
-                        if let customer = currentCustomer {
-                            Label(customer.sourceLabel, systemImage: customer.isChewbuuMember ? "heart.fill" : "person.fill")
-                                .foregroundStyle(customer.isChewbuuMember ? ChewbuuTheme.datePink : ChewbuuTheme.secondaryText)
-                        }
-                        Spacer()
-                        if table.status != .available {
-                            Label("\(table.seatedTimeMinutes)m", systemImage: "clock")
-                        }
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(ChewbuuTheme.secondaryText)
-                }
-                .padding(18)
-                .background(ChewbuuTheme.surface)
+                InspectorHeader(
+                    eyebrow: "Table",
+                    title: table.label,
+                    subtitle: table.section,
+                    status: table.status.rawValue,
+                    statusColor: table.status.color,
+                    onClose: onClose
+                )
 
                 Divider().overlay(ChewbuuTheme.divider)
 
                 if table.status == .available {
-                    VStack(spacing: 15) {
+                    VStack(spacing: 14) {
                         Spacer()
-                        Image(systemName: "person.2.slash.fill")
-                            .font(.system(size: 42))
-                            .foregroundStyle(ChewbuuTheme.secondaryText.opacity(0.55))
-                        Text("Table \(table.label) is empty")
+                        Image(systemName: "person.2.slash")
+                            .font(.system(size: 38))
+                            .foregroundStyle(ChewbuuTheme.secondaryText)
+                        Text("Ready for a party")
                             .font(.title3.bold())
                             .foregroundStyle(ChewbuuTheme.primaryText)
-                        Text("Seat a party, choose a guest profile, then start tapping in their order.")
+                        Text("Seat guests here, then start their order.")
                             .font(.subheadline)
                             .foregroundStyle(ChewbuuTheme.secondaryText)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 25)
                         Button {
                             showingSeatPartySheet = true
                         } label: {
-                            Label("Seat a party", systemImage: "person.crop.circle.badge.plus")
+                            Label("Seat a party", systemImage: "person.badge.plus")
                         }
-                        .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.blue))
+                        .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.burgundy))
                         Spacer()
                     }
                     .frame(maxWidth: .infinity)
+                    .padding(20)
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 13) {
+                        VStack(alignment: .leading, spacing: 14) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(table.partyName ?? "Walk-in guest")
+                                        .font(.headline.bold())
+                                        .foregroundStyle(ChewbuuTheme.primaryText)
+                                    Text("\(table.occupiedSeats) guests  ·  \(table.serverName)")
+                                        .font(.caption)
+                                        .foregroundStyle(ChewbuuTheme.secondaryText)
+                                }
+                                Spacer()
+                                if let currentCustomer {
+                                    Text(currentCustomer.sourceLabel)
+                                        .font(.caption.bold())
+                                        .foregroundStyle(ChewbuuTheme.burgundy)
+                                }
+                            }
+                            .padding(13)
+                            .syncCard(accent: ChewbuuTheme.burgundy)
+
                             HStack {
                                 Text("Current order")
                                     .font(.headline.bold())
                                     .foregroundStyle(ChewbuuTheme.primaryText)
                                 Spacer()
-                                Text("\(table.orders.count) items")
+                                Text("\(table.orders.count) lines")
                                     .font(.caption)
                                     .foregroundStyle(ChewbuuTheme.secondaryText)
                             }
 
                             if table.orders.isEmpty {
-                                EmptyPanel(title: "Ready for the first order", detail: "Add menu items, drinks, or let the guest request an add-on.", icon: "fork.knife.circle", color: ChewbuuTheme.amber)
+                                EmptyPanel(title: "Ready for the first order", detail: "Add food, drinks, or an add-on.", icon: "fork.knife", color: ChewbuuTheme.gold)
                             } else {
                                 ForEach(table.orders) { item in
                                     OrderItemRow(item: item) {
@@ -107,12 +93,12 @@ public struct TableDetailView: View {
                                 }
                             }
                         }
-                        .padding(18)
+                        .padding(16)
                     }
 
                     Divider().overlay(ChewbuuTheme.divider)
 
-                    VStack(spacing: 12) {
+                    VStack(spacing: 11) {
                         HStack {
                             Text("Subtotal")
                                 .font(.subheadline)
@@ -122,29 +108,41 @@ public struct TableDetailView: View {
                                 .font(.title3.bold())
                                 .foregroundStyle(ChewbuuTheme.primaryText)
                         }
-                        HStack(spacing: 10) {
+                        HStack(spacing: 8) {
                             Button {
                                 showingAddMenuSheet = true
                             } label: {
-                                Label("Add items", systemImage: "plus.circle.fill")
+                                Label("Add items", systemImage: "plus")
                                     .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.amber))
+                            .buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.burgundy))
 
                             Button {
-                                showingPaymentSheet = true
+                                showingCloseConfirmation = true
                             } label: {
-                                Label("Close check", systemImage: "checkmark.seal.fill")
+                                Label("Close check", systemImage: "checkmark.seal")
                                     .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(SyncFilledButtonStyle(color: table.billTotalCents == 0 ? ChewbuuTheme.secondaryText : ChewbuuTheme.mint))
+                            .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.burgundy))
                             .disabled(table.billTotalCents == 0)
-                            .opacity(table.billTotalCents == 0 ? 0.5 : 1)
+                            .opacity(table.billTotalCents == 0 ? 0.45 : 1)
                         }
                     }
-                    .padding(18)
+                    .padding(16)
                     .background(ChewbuuTheme.surface)
                 }
+            }
+            .confirmationDialog(
+                "Review before closing",
+                isPresented: $showingCloseConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Continue to checkout") {
+                    showingPaymentSheet = true
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This is a demo close-out for Table \(table.label) totaling \(formatCurrency(table.billTotalCents)). You can choose a tip and payment method next. No card will be charged.")
             }
             .sheet(isPresented: $showingAddMenuSheet) {
                 AddMenuItemSheet(syncService: syncService, tableId: table.id)
@@ -160,20 +158,15 @@ public struct TableDetailView: View {
             }
         } else {
             VStack(spacing: 12) {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 45))
-                    .foregroundStyle(ChewbuuTheme.amber)
-                Text("Select a table")
-                    .font(.title3.bold())
-                    .foregroundStyle(ChewbuuTheme.primaryText)
-                Text("Choose a table from Tables or Orders to inspect its guests, order, and close-out.")
+                InspectorHeader(eyebrow: "Table", title: "Nothing selected", subtitle: nil, status: nil, statusColor: nil, onClose: onClose)
+                Spacer()
+                Text("Select a table to inspect its guests, order, and close-out.")
                     .font(.subheadline)
                     .foregroundStyle(ChewbuuTheme.secondaryText)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
+                    .padding(24)
+                Spacer()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(ChewbuuTheme.background)
         }
     }
 
@@ -187,10 +180,10 @@ struct OrderItemRow: View {
     let edit: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 11) {
+        HStack(alignment: .top, spacing: 9) {
             Text("\(item.quantity)x")
-                .font(.headline.bold())
-                .foregroundStyle(ChewbuuTheme.blue)
+                .font(.subheadline.bold())
+                .foregroundStyle(ChewbuuTheme.burgundy)
                 .frame(width: 28, alignment: .leading)
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.name)
@@ -199,7 +192,7 @@ struct OrderItemRow: View {
                 if !item.modifiers.isEmpty {
                     Text(item.modifiers.joined(separator: " · "))
                         .font(.caption)
-                        .foregroundStyle(ChewbuuTheme.amber)
+                        .foregroundStyle(ChewbuuTheme.secondaryText)
                 }
                 if !item.notes.isEmpty {
                     Text(item.notes)
@@ -215,24 +208,10 @@ struct OrderItemRow: View {
                     .foregroundStyle(ChewbuuTheme.primaryText)
                 Button("Modify", action: edit)
                     .font(.caption.bold())
-                    .foregroundStyle(ChewbuuTheme.blue)
+                    .foregroundStyle(ChewbuuTheme.burgundy)
             }
         }
-        .padding(13)
+        .padding(12)
         .syncCard()
-    }
-}
-
-struct SyncOutlineButtonStyle: ButtonStyle {
-    let color: Color
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.bold())
-            .foregroundStyle(color)
-            .padding(.vertical, 11)
-            .background(color.opacity(configuration.isPressed ? 0.26 : 0.12), in: Capsule())
-            .overlay(Capsule().stroke(color.opacity(0.55), lineWidth: 1))
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
     }
 }

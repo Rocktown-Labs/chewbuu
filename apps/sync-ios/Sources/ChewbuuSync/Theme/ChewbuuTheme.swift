@@ -1,23 +1,35 @@
 import SwiftUI
 
 public enum ChewbuuTheme {
-    public static let background = Color(red: 0.055, green: 0.063, blue: 0.075)
-    public static let surface = Color(red: 0.105, green: 0.118, blue: 0.137)
-    public static let elevatedSurface = Color(red: 0.145, green: 0.157, blue: 0.18)
-    public static let surfaceMuted = Color.white.opacity(0.07)
-    public static let divider = Color.white.opacity(0.11)
+    // Chewbuu is burgundy ink on a warm yellow ground. Supporting colors are
+    // reserved for operational states so the interface stays calm and legible.
+    public static let background = Color(red: 0.97, green: 0.88, blue: 0.56)
+    public static let surface = Color(red: 1.00, green: 0.95, blue: 0.73)
+    public static let elevatedSurface = Color(red: 1.00, green: 0.98, blue: 0.86)
+    public static let surfaceMuted = burgundy.opacity(0.09)
+    public static let divider = burgundy.opacity(0.18)
 
-    public static let amber = Color(red: 0.98, green: 0.67, blue: 0.18)
-    public static let blue = Color(red: 0.20, green: 0.42, blue: 0.96)
-    public static let mint = Color(red: 0.38, green: 0.82, blue: 0.42)
-    public static let orange = Color(red: 0.98, green: 0.56, blue: 0.20)
-    public static let coral = Color(red: 0.95, green: 0.31, blue: 0.32)
-    public static let violet = Color(red: 0.69, green: 0.42, blue: 0.93)
-    public static let datePink = Color(red: 0.96, green: 0.38, blue: 0.58)
-    public static let datePurple = Color(red: 0.40, green: 0.26, blue: 0.82)
+    public static let burgundy = Color(red: 0.37, green: 0.08, blue: 0.16)
+    public static let burgundyDark = Color(red: 0.25, green: 0.04, blue: 0.10)
+    public static let yellow = Color(red: 0.98, green: 0.76, blue: 0.17)
+    public static let gold = Color(red: 0.69, green: 0.40, blue: 0.07)
+    public static let success = Color(red: 0.14, green: 0.39, blue: 0.26)
+    public static let warning = Color(red: 0.72, green: 0.32, blue: 0.10)
+    public static let coral = Color(red: 0.67, green: 0.16, blue: 0.19)
 
-    public static let primaryText = Color(red: 0.96, green: 0.95, blue: 0.92)
-    public static let secondaryText = Color(red: 0.67, green: 0.68, blue: 0.72)
+    // Compatibility names for existing views. They intentionally map back to
+    // the restrained Chewbuu palette instead of introducing new neon accents.
+    public static let amber = gold
+    public static let blue = burgundy
+    public static let mint = success
+    public static let orange = warning
+    public static let violet = burgundy
+    public static let datePink = burgundy
+    public static let datePurple = burgundyDark
+
+    public static let primaryText = burgundyDark
+    public static let secondaryText = Color(red: 0.34, green: 0.17, blue: 0.19)
+    public static let warmWhite = Color(red: 1.00, green: 0.98, blue: 0.91)
 }
 
 public struct SyncCardModifier: ViewModifier {
@@ -27,18 +39,18 @@ public struct SyncCardModifier: ViewModifier {
     public func body(content: Content) -> some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(isSelected ? accent.opacity(0.16) : ChewbuuTheme.surface)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? accent.opacity(0.14) : ChewbuuTheme.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(isSelected ? accent : ChewbuuTheme.divider, lineWidth: isSelected ? 2 : 1)
             )
     }
 }
 
 public extension View {
-    func syncCard(isSelected: Bool = false, accent: Color = ChewbuuTheme.blue) -> some View {
+    func syncCard(isSelected: Bool = false, accent: Color = ChewbuuTheme.burgundy) -> some View {
         modifier(SyncCardModifier(isSelected: isSelected, accent: accent))
     }
 }
@@ -61,9 +73,9 @@ public struct SyncStatusPill: View {
                 .font(.caption.bold())
                 .foregroundStyle(color)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(color.opacity(0.16), in: Capsule())
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(color.opacity(0.13), in: Capsule())
     }
 }
 
@@ -79,13 +91,13 @@ public struct SyncSectionHeader: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(eyebrow.uppercased())
                 .font(.caption2.weight(.heavy))
-                .tracking(1.4)
-                .foregroundStyle(ChewbuuTheme.amber)
+                .tracking(1.2)
+                .foregroundStyle(ChewbuuTheme.burgundy)
             Text(title)
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 27, weight: .bold, design: .rounded))
                 .foregroundStyle(ChewbuuTheme.primaryText)
             if let subtitle {
                 Text(subtitle)
@@ -93,5 +105,50 @@ public struct SyncSectionHeader: View {
                     .foregroundStyle(ChewbuuTheme.secondaryText)
             }
         }
+    }
+}
+
+public struct SyncFilledButtonStyle: ButtonStyle {
+    let color: Color
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.bold())
+            .foregroundStyle(ChewbuuTheme.warmWhite)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(color.opacity(configuration.isPressed ? 0.75 : 1), in: Capsule())
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+    }
+}
+
+public struct SyncOutlineButtonStyle: ButtonStyle {
+    let color: Color
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.bold())
+            .foregroundStyle(color)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(color.opacity(configuration.isPressed ? 0.16 : 0.08), in: Capsule())
+            .overlay(Capsule().stroke(color.opacity(0.55), lineWidth: 1))
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+    }
+}
+
+public struct SyncChipButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    let color: Color
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption.bold())
+            .foregroundStyle(isSelected ? ChewbuuTheme.warmWhite : ChewbuuTheme.primaryText)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 8)
+            .background(isSelected ? color : ChewbuuTheme.surfaceMuted, in: Capsule())
+            .overlay(Capsule().stroke(isSelected ? color : ChewbuuTheme.divider, lineWidth: 1))
+            .opacity(configuration.isPressed ? 0.75 : 1)
     }
 }
