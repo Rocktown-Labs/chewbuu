@@ -62,6 +62,8 @@ struct SyncInspectorView: View {
             MenuItemInspectorView(syncService: syncService, itemId: itemId, onClose: onClose)
         case .staff(let staffId):
             StaffInspectorView(syncService: syncService, staffId: staffId, onClose: onClose)
+        case .job(let jobId):
+            JobInspectorView(syncService: syncService, jobId: jobId, onClose: onClose)
         }
     }
 
@@ -309,6 +311,70 @@ struct InspectorEditorField: View {
                 .foregroundStyle(ChewbuuTheme.secondaryText)
             TextField(title, text: $text, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
+        }
+    }
+}
+
+struct JobInspectorView: View {
+    @ObservedObject var syncService: SyncService
+    let jobId: String
+    let onClose: () -> Void
+    @State private var selectedApplicantId: String?
+
+    private var job: MockJobListing? { syncService.jobListings.first(where: { $0.id == jobId }) }
+    private var selectedApplicant: MockApplicant? { job?.applicantList.first(where: { $0.id == selectedApplicantId }) }
+
+    var body: some View {
+        if let job {
+            VStack(alignment: .leading, spacing: 0) {
+                InspectorHeader(eyebrow: "Hiring", title: job.title, subtitle: "\(job.location) · \(job.schedule)", status: job.isPublished ? "Published" : "Draft", statusColor: job.isPublished ? ChewbuuTheme.success : ChewbuuTheme.secondaryText, onClose: onClose)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Applicants").font(.headline.bold()).foregroundStyle(ChewbuuTheme.primaryText)
+                            Spacer()
+                            Text("\(job.applicantList.count)").font(.title3.bold()).foregroundStyle(ChewbuuTheme.yellow)
+                        }
+                        if job.applicantList.isEmpty {
+                            EmptyPanel(title: "No applicants yet", detail: "Applications will appear here.", icon: "person", color: ChewbuuTheme.secondaryText)
+                        } else {
+                            ForEach(job.applicantList) { applicant in
+                                Button {
+                                    selectedApplicantId = selectedApplicantId == applicant.id ? nil : applicant.id
+                                } label: {
+                                    HStack(spacing: 9) {
+                                        Circle()
+                                            .fill(ChewbuuTheme.yellow.opacity(0.16))
+                                            .frame(width: 34, height: 34)
+                                            .overlay(Text(String(applicant.name.prefix(1))).font(.subheadline.bold()).foregroundStyle(ChewbuuTheme.yellow))
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(applicant.name).font(.subheadline.bold()).foregroundStyle(ChewbuuTheme.primaryText)
+                                            Text("\(applicant.status) · \(applicant.availability)").font(.caption).foregroundStyle(ChewbuuTheme.secondaryText)
+                                        }
+                                        Spacer()
+                                        Image(systemName: selectedApplicantId == applicant.id ? "chevron.up" : "chevron.down")
+                                            .font(.caption.bold())
+                                            .foregroundStyle(ChewbuuTheme.secondaryText)
+                                    }
+                                    .padding(10)
+                                    .syncCard(isSelected: selectedApplicantId == applicant.id, accent: ChewbuuTheme.yellow)
+                                }
+                                .buttonStyle(.plain)
+                                if let selectedApplicant, selectedApplicant.id == applicant.id {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        InspectorValue(title: "Contact", value: "\(selectedApplicant.phone) · \(selectedApplicant.email)", icon: "phone")
+                                        InspectorValue(title: "Experience", value: selectedApplicant.experience, icon: "briefcase")
+                                        InspectorValue(title: "Application note", value: selectedApplicant.note, icon: "text.bubble")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(16)
+                }
+            }
+        } else {
+            EmptyInspector(onClose: onClose)
         }
     }
 }

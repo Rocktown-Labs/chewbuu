@@ -309,129 +309,311 @@ public struct NewMenuItemSheet: View {
     private var canSave: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && priceCents > 0 }
 
     public var body: some View {
-        NavigationStack {
-            Form {
-                Section("Item") {
-                    TextField("Name", text: $name)
-                    Picker("Category", selection: $category) {
-                        ForEach(categories, id: \.self) { Text($0).tag($0) }
+        SyncSheetScaffold(title: "New menu item", subtitle: "Add something the floor can tap immediately.") {
+            VStack(alignment: .leading, spacing: 14) {
+                SyncFormSection(title: "Item") {
+                    VStack(spacing: 10) {
+                        SyncLabeledField(title: "Name", placeholder: "Item name", text: $name)
+                        Picker("Category", selection: $category) {
+                            ForEach(categories, id: \.self) { Text($0).tag($0) }
+                        }
+                        .tint(ChewbuuTheme.yellow)
+                        SyncLabeledField(title: "Price", placeholder: "0.00", text: $price)
+                        SyncLabeledField(title: "Description", placeholder: "Short description", text: $description, axis: .vertical)
                     }
-                    TextField("Price", text: $price)
-                    TextField("Short description", text: $description, axis: .vertical)
                 }
-                Section("Photo") {
-                    Button {
-                        hasPhoto.toggle()
-                    } label: {
-                        Label(hasPhoto ? "Photo attached" : "Add a photo", systemImage: hasPhoto ? "checkmark.circle" : "photo")
+                SyncFormSection(title: "Photo") {
+                    HStack {
+                        Image(systemName: hasPhoto ? "checkmark.circle.fill" : "photo")
+                            .foregroundStyle(ChewbuuTheme.yellow)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(hasPhoto ? "Photo attached" : "No photo yet")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(ChewbuuTheme.primaryText)
+                            Text("Optional. You can add one later from the item inspector.")
+                                .font(.caption)
+                                .foregroundStyle(ChewbuuTheme.secondaryText)
+                        }
+                        Spacer()
+                        Button(hasPhoto ? "Remove" : "Add photo") { hasPhoto.toggle() }
+                            .buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.yellow))
                     }
-                    .foregroundStyle(ChewbuuTheme.burgundy)
-                    Text("Optional. The item can be published without a photo.")
-                        .font(.caption)
-                        .foregroundStyle(ChewbuuTheme.secondaryText)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(ChewbuuTheme.background)
-            .navigationTitle("New menu item")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
-                        _ = syncService.addMenuItem(category: category, name: name, priceCents: priceCents, description: description, photoName: hasPhoto ? "new-menu-photo" : nil)
-                        dismiss()
-                    }
-                    .disabled(!canSave)
+        } footer: {
+            HStack(spacing: 8) {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.yellow))
+                Button("Add item") {
+                    _ = syncService.addMenuItem(category: category, name: name, priceCents: priceCents, description: description, photoName: hasPhoto ? "new-menu-photo" : nil)
+                    dismiss()
                 }
+                .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.yellow))
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.5)
             }
         }
-        .frame(minWidth: 440, minHeight: 430)
+        .frame(minWidth: 500, minHeight: 510)
     }
 }
 
 public struct SpecialsView: View {
-    @State private var isLive = true
+    @ObservedObject var syncService: SyncService
+    @State private var showingNewSpecial = false
+    @State private var editingSpecial: MockSpecial?
 
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    SyncSectionHeader(eyebrow: "Business", title: "Specials", subtitle: "Location-specific offers shown to the right guests.")
+                    SyncSectionHeader(eyebrow: "Business", title: "Specials", subtitle: "Link a simple offer to the menu items it includes.")
                     Spacer()
                     Button {
-                        isLive.toggle()
+                        showingNewSpecial = true
                     } label: {
-                        Label(isLive ? "Pause" : "Publish", systemImage: isLive ? "pause" : "play")
+                        Label("New special", systemImage: "plus")
                     }
-                    .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.burgundy))
+                    .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.yellow))
                 }
-                SpecialCard(title: "Date Night Dessert", detail: "Complimentary molten cake for Chewbuu Date tables", status: isLive ? "Live tonight" : "Paused", color: ChewbuuTheme.burgundy)
-                SpecialCard(title: "Golden Hour", detail: "20% off selected drinks from 4–6pm", status: "Scheduled", color: ChewbuuTheme.gold)
+                if syncService.specials.isEmpty {
+                    EmptyPanel(title: "No specials yet", detail: "Create a location-specific offer and choose its menu items.", icon: "tag", color: ChewbuuTheme.yellow)
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 310, maximum: 520), spacing: 10)], spacing: 10) {
+                        ForEach(syncService.specials) { special in
+                            SpecialCard(
+                                syncService: syncService,
+                                special: special,
+                                onEdit: { editingSpecial = special },
+                                onToggle: { syncService.toggleSpecial(specialId: special.id) }
+                            )
+                        }
+                    }
+                }
             }
             .padding(24)
         }
         .background(ChewbuuTheme.background)
+        .sheet(isPresented: $showingNewSpecial) {
+            SpecialEditorSheet(syncService: syncService, special: nil)
+        }
+        .sheet(item: $editingSpecial) { special in
+            SpecialEditorSheet(syncService: syncService, special: special)
+        }
     }
 }
 
 struct SpecialCard: View {
-    let title: String
-    let detail: String
-    let status: String
-    let color: Color
+    @ObservedObject var syncService: SyncService
+    let special: MockSpecial
+    let onEdit: () -> Void
+    let onToggle: () -> Void
+
+    private var menuItems: String {
+        special.menuItemIds.compactMap { id in syncService.menuCatalog.first(where: { $0.id == id })?.name }.joined(separator: ", ")
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "tag").font(.title3).foregroundStyle(color)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.headline.bold()).foregroundStyle(ChewbuuTheme.primaryText)
-                Text(detail).font(.subheadline).foregroundStyle(ChewbuuTheme.secondaryText)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "tag.fill").font(.title3).foregroundStyle(ChewbuuTheme.yellow)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(special.title).font(.headline.bold()).foregroundStyle(ChewbuuTheme.primaryText)
+                    Text(special.discount).font(.caption.bold()).foregroundStyle(ChewbuuTheme.yellow)
+                }
+                Spacer()
+                Button(special.isPublished ? "Pause" : "Publish", action: onToggle)
+                    .buttonStyle(SyncOutlineButtonStyle(color: special.isPublished ? ChewbuuTheme.success : ChewbuuTheme.yellow))
+                Button(action: onEdit) {
+                    Image(systemName: "chevron.right")
+                        .foregroundStyle(ChewbuuTheme.secondaryText)
+                }
+                .buttonStyle(.plain)
             }
-            Spacer()
-            SyncStatusPill(title: status, color: color)
+            Text(special.detail).font(.subheadline).foregroundStyle(ChewbuuTheme.secondaryText).lineLimit(2)
+            Label(menuItems.isEmpty ? "No menu items linked" : menuItems, systemImage: "menucard")
+                .font(.caption)
+                .foregroundStyle(ChewbuuTheme.secondaryText)
+                .lineLimit(2)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(15)
-        .syncCard(accent: color)
+        .syncCard(accent: ChewbuuTheme.yellow)
+    }
+}
+
+public struct SpecialEditorSheet: View {
+    @ObservedObject var syncService: SyncService
+    let special: MockSpecial?
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+    @State private var detail: String
+    @State private var discount: String
+    @State private var selectedMenuItemIds: Set<String>
+
+    init(syncService: SyncService, special: MockSpecial?) {
+        self.syncService = syncService
+        self.special = special
+        _title = State(initialValue: special?.title ?? "")
+        _detail = State(initialValue: special?.detail ?? "")
+        _discount = State(initialValue: special?.discount ?? "")
+        _selectedMenuItemIds = State(initialValue: Set(special?.menuItemIds ?? []))
+    }
+
+    private var menuCategories: [String] { Array(Set(syncService.menuCatalog.map(\.category))).sorted() }
+    private var canSave: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !selectedMenuItemIds.isEmpty }
+
+    public var body: some View {
+        SyncSheetScaffold(title: special == nil ? "New special" : "Edit special", subtitle: "Choose the menu items this offer applies to.") {
+            VStack(alignment: .leading, spacing: 14) {
+                SyncFormSection(title: "Offer") {
+                    VStack(spacing: 10) {
+                        SyncLabeledField(title: "Name", placeholder: "e.g. Golden hour", text: $title)
+                        SyncLabeledField(title: "Discount", placeholder: "e.g. 20% off", text: $discount)
+                        SyncLabeledField(title: "Description", placeholder: "What guests receive", text: $detail, axis: .vertical)
+                    }
+                }
+                SyncFormSection(title: "Menu items · tap to include") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(menuCategories, id: \.self) { category in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(category).font(.caption.bold()).foregroundStyle(ChewbuuTheme.yellow)
+                                FlowLayout(spacing: 6) {
+                                    ForEach(syncService.menuCatalog.filter { $0.category == category }) { item in
+                                        Button(item.name) {
+                                            if selectedMenuItemIds.contains(item.id) { selectedMenuItemIds.remove(item.id) } else { selectedMenuItemIds.insert(item.id) }
+                                        }
+                                        .buttonStyle(SyncChipButtonStyle(isSelected: selectedMenuItemIds.contains(item.id), color: ChewbuuTheme.yellow))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } footer: {
+            HStack(spacing: 8) {
+                Button("Cancel") { dismiss() }.buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.yellow))
+                Button(special == nil ? "Create draft" : "Save changes") {
+                    if let special {
+                        syncService.updateSpecial(specialId: special.id, title: title, detail: detail, discount: discount, menuItemIds: Array(selectedMenuItemIds).sorted())
+                    } else {
+                        _ = syncService.addSpecial(title: title, detail: detail, discount: discount, menuItemIds: Array(selectedMenuItemIds).sorted())
+                    }
+                    dismiss()
+                }
+                .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.yellow))
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.5)
+            }
+        }
+        .frame(minWidth: 560, minHeight: 620)
     }
 }
 
 public struct HiringView: View {
     @ObservedObject var syncService: SyncService
+    let onInspect: (SyncInspectorSelection) -> Void
+    @State private var showingNewListing = false
+
+    public init(syncService: SyncService, onInspect: @escaping (SyncInspectorSelection) -> Void) {
+        self.syncService = syncService
+        self.onInspect = onInspect
+    }
 
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    SyncSectionHeader(eyebrow: "Business", title: "Hiring", subtitle: "Roles published for this location.")
+                    SyncSectionHeader(eyebrow: "Business", title: "Hiring", subtitle: "Publish roles and review who applied, in one place.")
                     Spacer()
                     Button {
-                        syncService.lastActionMessage = "New job listing flow opened."
+                        showingNewListing = true
                     } label: {
                         Label("New listing", systemImage: "plus")
                     }
-                    .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.burgundy))
+                    .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.yellow))
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 300, maximum: 500), spacing: 10)], spacing: 10) {
                     ForEach(syncService.jobListings) { job in
                         HStack(spacing: 12) {
-                            Image(systemName: "person.badge.plus").font(.title3).foregroundStyle(ChewbuuTheme.burgundy)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(job.title).font(.headline.bold()).foregroundStyle(ChewbuuTheme.primaryText)
-                                Text("\(job.location) · \(job.schedule)").font(.caption).foregroundStyle(ChewbuuTheme.secondaryText)
-                                Text("\(job.applicants) applicants").font(.caption2.bold()).foregroundStyle(ChewbuuTheme.burgundy)
+                            Button {
+                                onInspect(.job(job.id))
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "person.badge.plus")
+                                        .font(.title3)
+                                        .foregroundStyle(ChewbuuTheme.yellow)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(job.title).font(.headline.bold()).foregroundStyle(ChewbuuTheme.primaryText)
+                                        Text("\(job.location) · \(job.schedule)").font(.caption).foregroundStyle(ChewbuuTheme.secondaryText)
+                                        Text("\(job.applicantList.count) applicant\(job.applicantList.count == 1 ? "" : "s")")
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(ChewbuuTheme.yellow)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(ChewbuuTheme.secondaryText)
+                                }
                             }
-                            Spacer()
-                            Button(job.isPublished ? "Published" : "Publish") { syncService.toggleJobListing(jobId: job.id) }
-                                .buttonStyle(SyncOutlineButtonStyle(color: job.isPublished ? ChewbuuTheme.success : ChewbuuTheme.burgundy))
+                            .buttonStyle(.plain)
+                            Button(job.isPublished ? "Pause" : "Publish") {
+                                syncService.toggleJobListing(jobId: job.id)
+                            }
+                            .buttonStyle(SyncOutlineButtonStyle(color: job.isPublished ? ChewbuuTheme.success : ChewbuuTheme.yellow))
                         }
                         .padding(14)
-                        .syncCard(accent: job.isPublished ? ChewbuuTheme.success : ChewbuuTheme.burgundy)
+                        .syncCard(accent: job.isPublished ? ChewbuuTheme.success : ChewbuuTheme.yellow)
                     }
                 }
             }
             .padding(24)
         }
         .background(ChewbuuTheme.background)
+        .sheet(isPresented: $showingNewListing) {
+            NewJobListingSheet(syncService: syncService)
+        }
+    }
+}
+
+public struct NewJobListingSheet: View {
+    @ObservedObject var syncService: SyncService
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var location = "Downtown"
+    @State private var schedule = ""
+
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !schedule.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    public var body: some View {
+        SyncSheetScaffold(title: "New job listing", subtitle: "Create a draft for this venue location.") {
+            VStack(alignment: .leading, spacing: 14) {
+                SyncFormSection(title: "Role") {
+                    VStack(spacing: 10) {
+                        SyncLabeledField(title: "Title", placeholder: "e.g. Evening server", text: $title)
+                        SyncLabeledField(title: "Location", placeholder: "Venue location", text: $location)
+                        SyncLabeledField(title: "Schedule", placeholder: "e.g. Thu–Sun · 4pm–close", text: $schedule)
+                    }
+                }
+                Text("New listings start as drafts. Publish them only when the role, schedule, and location are ready.")
+                    .font(.caption)
+                    .foregroundStyle(ChewbuuTheme.secondaryText)
+            }
+        } footer: {
+            HStack(spacing: 8) {
+                Button("Cancel") { dismiss() }.buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.yellow))
+                Button("Create draft") {
+                    _ = syncService.addJobListing(title: title, location: location, schedule: schedule)
+                    dismiss()
+                }
+                .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.yellow))
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.5)
+            }
+        }
+        .frame(minWidth: 500, minHeight: 420)
     }
 }
 
@@ -497,34 +679,86 @@ struct AnalyticsMetric: View {
 
 public struct BusinessSettingsView: View {
     @ObservedObject var syncService: SyncService
+    @State private var serviceMode = "Open service"
     @State private var acceptTableRequests = true
+    @State private var acceptReservations = true
     @State private var geofenceEnabled = true
     @State private var showMemberBadges = true
+    @State private var kitchenAlerts = true
+    @State private var requestAlerts = true
+    @State private var lateStaffAlerts = true
+    @State private var allowCustomerLookup = true
+    @State private var workChatEnabled = true
+    @State private var maxPartySize = 12
 
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                SyncSectionHeader(eyebrow: "Business", title: "Settings", subtitle: "Operating rules for this location.")
-                SettingsGroup(title: "Location", icon: "mappin.and.ellipse", color: ChewbuuTheme.burgundy) {
-                    SettingsRow(title: "Venue", detail: syncService.locationName)
-                    SettingsRow(title: "Service mode", detail: syncService.serviceMode)
-                    SettingsRow(title: "Timezone", detail: "America/Los_Angeles")
-                }
-                SettingsGroup(title: "Service behavior", icon: "slider.horizontal.3", color: ChewbuuTheme.gold) {
-                    Toggle("Accept table requests", isOn: $acceptTableRequests)
-                    Toggle("One-time attendance geofence", isOn: $geofenceEnabled)
-                    Toggle("Show Chewbuu member badges", isOn: $showMemberBadges)
-                }
-                SettingsGroup(title: "Payments", icon: "creditcard", color: ChewbuuTheme.success) {
-                    SettingsRow(title: "Payment capture", detail: "Not enabled — demo close-out only")
-                    SettingsRow(title: "Tips & payouts", detail: "Capability gated")
-                    Button("Review billing capabilities") { syncService.lastActionMessage = "Billing capabilities are policy-gated until enabled." }
-                        .foregroundStyle(ChewbuuTheme.burgundy)
+                SyncSectionHeader(eyebrow: "Business", title: "Settings", subtitle: "The operating rules behind tables, guests, staff, menu, and money.")
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 330, maximum: 520), spacing: 14)], alignment: .leading, spacing: 16) {
+                    SettingsGroup(title: "Venue", icon: "mappin.and.ellipse", color: ChewbuuTheme.yellow) {
+                        SettingsRow(title: "Location", detail: syncService.locationName)
+                        SettingsRow(title: "Timezone", detail: "America/Los_Angeles")
+                        SettingsRow(title: "Viewer role", detail: syncService.viewerRole)
+                        Button("Edit venue profile") { syncService.lastActionMessage = "Venue profile editing is location-scoped." }
+                            .foregroundStyle(ChewbuuTheme.yellow)
+                    }
+
+                    SettingsGroup(title: "Service", icon: "door.left.hand.open", color: ChewbuuTheme.yellow) {
+                        Picker("Service mode", selection: $serviceMode) {
+                            Text("Pre-open").tag("Pre-open")
+                            Text("Open service").tag("Open service")
+                            Text("Closing").tag("Closing")
+                            Text("Closed").tag("Closed")
+                        }
+                        .tint(ChewbuuTheme.yellow)
+                        .onChange(of: serviceMode) { _, newValue in syncService.serviceMode = newValue }
+                        Toggle("Accept table requests", isOn: $acceptTableRequests)
+                        Toggle("Accept reservations", isOn: $acceptReservations)
+                    }
+
+                    SettingsGroup(title: "Floor & reservations", icon: "square.grid.2x2", color: ChewbuuTheme.gold) {
+                        SyncStepperControl(title: "Maximum party size", value: $maxPartySize, range: 1...30)
+                        SettingsRow(title: "Reservation model", detail: "Named table requests")
+                        SettingsRow(title: "Chewbuu Dates", detail: "Optional pre-ordered items")
+                    }
+
+                    SettingsGroup(title: "Menu & kitchen", icon: "menucard", color: ChewbuuTheme.yellow) {
+                        SettingsRow(title: "Menu source", detail: "Venue-owned catalog")
+                        SettingsRow(title: "Unavailable items", detail: "Hide from new orders")
+                        Toggle("Kitchen status alerts", isOn: $kitchenAlerts)
+                        Button("Open menu and specials") { syncService.lastActionMessage = "Use Menu and Specials to edit catalog content." }
+                            .foregroundStyle(ChewbuuTheme.yellow)
+                    }
+
+                    SettingsGroup(title: "People & privacy", icon: "person.2", color: ChewbuuTheme.yellow) {
+                        Toggle("Allow venue customer lookup", isOn: $allowCustomerLookup)
+                        Toggle("Show Chewbuu member badges", isOn: $showMemberBadges)
+                        Toggle("Enable Sync work chat", isOn: $workChatEnabled)
+                        Toggle("One-time attendance geofence", isOn: $geofenceEnabled)
+                    }
+
+                    SettingsGroup(title: "Notifications", icon: "bell", color: ChewbuuTheme.gold) {
+                        Toggle("New table request alerts", isOn: $requestAlerts)
+                        Toggle("Late staff alerts", isOn: $lateStaffAlerts)
+                        SettingsRow(title: "Delivery", detail: "Sync app + staff channel")
+                        SettingsRow(title: "Continuous tracking", detail: "Never used")
+                    }
+
+                    SettingsGroup(title: "Payments & close-out", icon: "creditcard", color: ChewbuuTheme.success) {
+                        SettingsRow(title: "Payment capture", detail: "Not enabled — demo only")
+                        SettingsRow(title: "Tips & payouts", detail: "Capability gated")
+                        SettingsRow(title: "Refunds & disputes", detail: "Policy gated")
+                        Button("Review billing capabilities") { syncService.lastActionMessage = "Billing capabilities are policy-gated until enabled." }
+                            .foregroundStyle(ChewbuuTheme.yellow)
+                    }
                 }
             }
             .padding(24)
         }
         .background(ChewbuuTheme.background)
+        .onAppear { serviceMode = syncService.serviceMode }
     }
 }
 

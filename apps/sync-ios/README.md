@@ -71,15 +71,17 @@ The native cockpit is organized into four manager-friendly groups:
 - **Business**: Menu, Specials, Hiring, Analytics, Business Settings, Customers
 - **Terminal**: Kiosk Clock-In
 
-The main column stays full-width until a table, reservation, staff member, customer, or menu item is selected. That selection opens a closable right-side inspector; tapping the same item again closes it.
+The app uses a burgundy-first Chewbuu theme with warm yellow controls and text. The main column stays full-width until a table, reservation, staff member, customer, job, or menu item is selected. That selection opens a narrow, closable right-side inspector; tapping the same item again closes it.
 
 The dummy data supports a complete tap-through demonstration:
 
-1. Seat a party and select a venue guest or Chewbuu member profile.
-2. Take an order by category, menu item, quantity, modifiers, drinks, and kitchen notes.
-3. Send the order to the kitchen, advance ticket status, modify items, or add another round.
-4. Open a table request from Overview or Orders.
-5. Close the check with the demo checkout flow and clear the table for the next guest.
+1. Use Overview → New order to open the order taker directly.
+2. Tap the table context to open a sectioned list of open tables.
+3. Add multiple named venue guests or Chewbuu members to the party; create a new guest with name, phone, and party size when needed.
+4. Add menu items by category, quantity, modifiers, drinks, and kitchen notes.
+5. Send the order to the kitchen, advance ticket status, modify items, or add another round.
+6. Create menu-linked specials, publish job listings, and inspect applicant details from the right-side inspector.
+7. Close the check with the demo checkout flow and clear the table for the next guest.
 
 The demo checkout never charges a card. Payment capture, tips, payouts, refunds, and disputes remain capability-gated in production.
 

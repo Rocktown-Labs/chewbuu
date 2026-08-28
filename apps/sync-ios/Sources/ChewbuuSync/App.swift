@@ -31,6 +31,7 @@ struct SyncRootView: View {
     @State private var selectedDestination: SyncDestination = .overview
     @State private var selectedTableId: String?
     @State private var inspectorSelection: SyncInspectorSelection?
+    @State private var showingOrderComposer = false
 
     var body: some View {
         Group {
@@ -46,6 +47,7 @@ struct SyncRootView: View {
                         onClose: closeInspector,
                         onOpenOrder: openOrder
                     )
+                    .navigationSplitViewColumnWidth(min: 270, ideal: 320, max: 370)
                 }
             } else {
                 NavigationSplitView {
@@ -55,11 +57,15 @@ struct SyncRootView: View {
                 }
             }
         }
-        .tint(ChewbuuTheme.burgundy)
-        .preferredColorScheme(.light)
+        .tint(ChewbuuTheme.yellow)
+        .preferredColorScheme(.dark)
         .onChange(of: selectedDestination) { _, _ in
             inspectorSelection = nil
         }
+        .sheet(isPresented: $showingOrderComposer) {
+            OrderComposerView(syncService: syncService)
+        }
+        .background(ChewbuuTheme.background.ignoresSafeArea())
     }
 
     private var sidebar: some View {
@@ -73,6 +79,7 @@ struct SyncRootView: View {
         destinationView
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(ChewbuuTheme.background)
+            .navigationSplitViewColumnWidth(min: 560, ideal: 920, max: 1300)
     }
 
     @ViewBuilder
@@ -82,7 +89,8 @@ struct SyncRootView: View {
             OverviewView(
                 syncService: syncService,
                 onNavigate: { destination in selectedDestination = destination },
-                onInspect: { selection in inspect(selection) }
+                onInspect: { selection in inspect(selection) },
+                onNewOrder: { showingOrderComposer = true }
             )
         case .tables:
             FloorMapView(syncService: syncService, selectedTableId: $selectedTableId) { selection in
@@ -115,9 +123,11 @@ struct SyncRootView: View {
                 inspect(selection)
             }
         case .specials:
-            SpecialsView()
+            SpecialsView(syncService: syncService)
         case .hiring:
-            HiringView(syncService: syncService)
+            HiringView(syncService: syncService) { selection in
+                inspect(selection)
+            }
         case .analytics:
             AnalyticsView(syncService: syncService)
         case .business:

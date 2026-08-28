@@ -188,19 +188,25 @@ public struct OrderComposerView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedTableId: String?
-    @State private var selectedCustomerId: String?
+    @State private var partyGuests: [PartyGuest] = []
     @State private var customerSearch = ""
     @State private var selectedCategory = "All"
     @State private var selectedItem: CatalogItem?
     @State private var draftLines: [DraftOrderLine] = []
     @State private var showingNewGuest = false
+    @State private var showingTablePicker = false
 
     public init(syncService: SyncService, initialTableId: String? = nil, initialCustomerId: String? = nil) {
         self.syncService = syncService
         self.initialTableId = initialTableId
         self.initialCustomerId = initialCustomerId
         _selectedTableId = State(initialValue: initialTableId)
-        _selectedCustomerId = State(initialValue: initialCustomerId)
+        let initialGuests = initialCustomerId.flatMap { id in
+            syncService.customer(for: id).map { customer in
+                [PartyGuest(name: customer.name, phone: customer.phone, customerId: customer.id)]
+            }
+        } ?? []
+        _partyGuests = State(initialValue: initialGuests)
     }
 
     private var categories: [String] {
@@ -222,16 +228,21 @@ public struct OrderComposerView: View {
     }
 
     private var selectedTable: MockTable? { syncService.table(for: selectedTableId) }
-    private var selectedCustomer: MockCustomer? { syncService.customer(for: selectedCustomerId) }
+    private var partyLabel: String { partyGuests.map(\.name).joined(separator: ", ") }
     private var orderTotal: Int { draftLines.reduce(0) { $0 + $1.item.priceCents * $1.quantity } }
-    private var canSubmit: Bool { selectedTableId != nil && selectedCustomerId != nil && !draftLines.isEmpty }
+    private var canSubmit: Bool { selectedTableId != nil && !partyGuests.isEmpty && !draftLines.isEmpty }
 
     public var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 HStack(spacing: 14) {
-                    ComposerContext(title: "Table", value: selectedTable?.label ?? "Choose a table", icon: "square.grid.2x2", color: ChewbuuTheme.burgundy)
-                    ComposerContext(title: "Guest", value: selectedCustomer?.name ?? "Choose or create", icon: "person.crop.circle", color: ChewbuuTheme.burgundy)
+                    Button {
+                        showingTablePicker = true
+                    } label: {
+                        ComposerContext(title: "Table", value: selectedTable?.label ?? "Choose a table", icon: "square.grid.2x2", color: ChewbuuTheme.yellow)
+                    }
+                    .buttonStyle(.plain)
+                    ComposerContext(title: "Guests", value: partyLabel.isEmpty ? "Choose or create" : partyLabel, icon: "person.2", color: ChewbuuTheme.yellow)
                     Spacer()
                     Text(formatCurrency(orderTotal))
                         .font(.title2.bold())
@@ -240,12 +251,17 @@ public struct OrderComposerView: View {
                 .padding(16)
                 .background(ChewbuuTheme.surface)
 
-                HStack(spacing: 0) {
-                    guestColumn
-                    Divider().overlay(ChewbuuTheme.divider)
-                    menuColumn
-                    Divider().overlay(ChewbuuTheme.divider)
-                    reviewColumn
+                GeometryReader { geometry in
+                    HStack(spacing: 0) {
+                        guestColumn
+                            .frame(width: min(max(geometry.size.width * 0.24, 260), 330))
+                        Divider().overlay(ChewbuuTheme.divider)
+                        menuColumn
+                            .frame(maxWidth: .infinity)
+                        Divider().overlay(ChewbuuTheme.divider)
+                        reviewColumn
+                            .frame(width: min(max(geometry.size.width * 0.24, 290), 360))
+                    }
                 }
             }
             .background(ChewbuuTheme.background)
@@ -261,17 +277,22 @@ public struct OrderComposerView: View {
             }
             .sheet(isPresented: $showingNewGuest) {
                 NewCustomerSheet(syncService: syncService) { customer in
-                    selectedCustomerId = customer.id
+                    addGuest(customer)
+                }
+            }
+            .popover(isPresented: $showingTablePicker, arrowEdge: .bottom) {
+                OpenTablePicker(syncService: syncService, selectedTableId: $selectedTableId) {
+                    showingTablePicker = false
                 }
             }
         }
-        .frame(minWidth: 1050, minHeight: 650)
+        .frame(minWidth: 900, minHeight: 620)
     }
 
     private var guestColumn: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Guest")
+                Text("Party")
                     .font(.headline.bold())
                     .foregroundStyle(ChewbuuTheme.primaryText)
                 Spacer()
@@ -279,37 +300,56 @@ public struct OrderComposerView: View {
                     showingNewGuest = true
                 }
                 .font(.caption.bold())
-                .foregroundStyle(ChewbuuTheme.burgundy)
+                .foregroundStyle(ChewbuuTheme.yellow)
             }
+
+            if partyGuests.isEmpty {
+                Text("Add each person who is dining. New guests need a name and phone.")
+                    .font(.caption)
+                    .foregroundStyle(ChewbuuTheme.secondaryText)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(partyGuests) { guest in
+                        PartyGuestRow(guest: guest) { removeGuest(guest) }
+                    }
+                }
+            }
+
             TextField("Search name or phone", text: $customerSearch)
                 .textFieldStyle(.roundedBorder)
-            Text("Contact details are required for a new guest.")
-                .font(.caption)
-                .foregroundStyle(ChewbuuTheme.secondaryText)
             ScrollView {
                 VStack(spacing: 7) {
                     ForEach(filteredCustomers) { customer in
-                        CustomerChoiceRow(customer: customer, isSelected: selectedCustomerId == customer.id) {
-                            selectedCustomerId = customer.id
+                        CustomerChoiceRow(customer: customer, isSelected: partyGuests.contains(where: { $0.customerId == customer.id })) {
+                            addGuest(customer)
                         }
                     }
                 }
             }
-            Text("Table")
-                .font(.headline.bold())
-                .foregroundStyle(ChewbuuTheme.primaryText)
-            Picker("Table", selection: $selectedTableId) {
-                Text("Select table").tag(String?.none)
-                ForEach(syncService.tables.filter { $0.status != .paid }) { table in
-                    Text("\(table.label) · \(table.partyName ?? "Available")").tag(Optional(table.id))
+
+            if let selectedTable {
+                HStack {
+                    Label("Table \(selectedTable.label)", systemImage: "square.grid.2x2")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(ChewbuuTheme.primaryText)
+                    Spacer()
+                    Button("Change") { showingTablePicker = true }
+                        .font(.caption.bold())
+                        .foregroundStyle(ChewbuuTheme.yellow)
                 }
+                .padding(11)
+                .syncCard(accent: ChewbuuTheme.yellow)
+            } else {
+                Button {
+                    showingTablePicker = true
+                } label: {
+                    Label("Choose an open table", systemImage: "square.grid.2x2")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.yellow))
             }
-            .pickerStyle(.menu)
-            .tint(ChewbuuTheme.burgundy)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
-        .frame(width: 255)
         .background(ChewbuuTheme.background)
     }
 
@@ -399,8 +439,8 @@ public struct OrderComposerView: View {
                     .font(.title3.bold())
                     .foregroundStyle(ChewbuuTheme.primaryText)
             }
-            if selectedCustomerId == nil {
-                Text("Choose an existing guest or create a new guest before sending.")
+            if partyGuests.isEmpty {
+                Text("Add at least one guest before sending.")
                     .font(.caption)
                     .foregroundStyle(ChewbuuTheme.warning)
             }
@@ -415,13 +455,21 @@ public struct OrderComposerView: View {
             .opacity(canSubmit ? 1 : 0.45)
         }
         .padding(16)
-        .frame(width: 300)
         .background(ChewbuuTheme.surface)
     }
 
+    private func addGuest(_ customer: MockCustomer) {
+        guard !partyGuests.contains(where: { $0.customerId == customer.id }) else { return }
+        partyGuests.append(PartyGuest(name: customer.name, phone: customer.phone, customerId: customer.id))
+    }
+
+    private func removeGuest(_ guest: PartyGuest) {
+        partyGuests.removeAll { $0.id == guest.id }
+    }
+
     private func submitOrder() {
-        guard let tableId = selectedTableId, let selectedCustomerId else { return }
-        syncService.assignCustomer(tableId: tableId, customerId: selectedCustomerId)
+        guard let tableId = selectedTableId, !partyGuests.isEmpty else { return }
+        syncService.assignPartyGuests(tableId: tableId, guests: partyGuests)
         for line in draftLines {
             syncService.addOrderItem(tableId: tableId, item: line.item, selectedModifiers: line.modifiers, quantity: line.quantity, notes: line.notes)
         }
@@ -452,46 +500,44 @@ public struct NewCustomerSheet: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            Form {
-                Section("Contact") {
-                    TextField("Name", text: $name)
-                    TextField("Phone", text: $phone)
+        SyncSheetScaffold(title: "New guest", subtitle: "Add the contact details needed to start this visit.") {
+            VStack(alignment: .leading, spacing: 14) {
+                SyncFormSection(title: "Contact") {
+                    VStack(spacing: 10) {
+                        SyncLabeledField(title: "Name", placeholder: "Full name", text: $name)
+                        SyncLabeledField(title: "Phone", placeholder: "Phone number", text: $phone)
+                    }
                 }
-                Section("Visit") {
-                    Stepper("Party size · \(partySize)", value: $partySize, in: 1...20)
+                SyncFormSection(title: "Party") {
+                    SyncStepperControl(title: "Party size", value: $partySize, range: 1...20)
                 }
-                Section {
-                    Text("This creates a venue guest record. Chewbuu member accounts remain separate and can be found by search.")
-                        .font(.caption)
-                        .foregroundStyle(ChewbuuTheme.secondaryText)
-                }
+                Text("Venue guest records stay separate from Chewbuu member accounts. Existing members can be found by search.")
+                    .font(.caption)
+                    .foregroundStyle(ChewbuuTheme.secondaryText)
                 if showValidation {
                     Text("Name and phone are required.")
+                        .font(.caption.bold())
                         .foregroundStyle(ChewbuuTheme.warning)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(ChewbuuTheme.background)
-            .navigationTitle("New guest")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        guard canSave, let customer = syncService.createCustomer(name: name, phone: phone, partySize: partySize) else {
-                            showValidation = true
-                            return
-                        }
-                        onSave(customer)
-                        dismiss()
+        } footer: {
+            HStack(spacing: 8) {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.yellow))
+                Button("Create guest") {
+                    guard canSave, let customer = syncService.createCustomer(name: name, phone: phone, partySize: partySize) else {
+                        showValidation = true
+                        return
                     }
-                    .disabled(!canSave)
+                    onSave(customer)
+                    dismiss()
                 }
+                .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.yellow))
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.5)
             }
         }
-        .frame(minWidth: 430, minHeight: 360)
+        .frame(minWidth: 470, minHeight: 420)
     }
 }
 
@@ -553,6 +599,109 @@ struct CustomerChoiceRow: View {
     }
 }
 
+struct PartyGuestRow: View {
+    let guest: PartyGuest
+    let remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.fill")
+                .foregroundStyle(ChewbuuTheme.yellow)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(guest.name)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(ChewbuuTheme.primaryText)
+                Text(guest.phone)
+                    .font(.caption2)
+                    .foregroundStyle(ChewbuuTheme.secondaryText)
+            }
+            Spacer()
+            Button(action: remove) {
+                Image(systemName: "minus.circle")
+                    .foregroundStyle(ChewbuuTheme.coral)
+            }
+            .buttonStyle(.plain)
+            .help("Remove guest from party")
+        }
+        .padding(9)
+        .syncCard(accent: ChewbuuTheme.yellow)
+    }
+}
+
+struct OpenTablePicker: View {
+    @ObservedObject var syncService: SyncService
+    @Binding var selectedTableId: String?
+    let onSelect: () -> Void
+
+    private let sections = ["Main Dining", "Patio", "Bar & High Tops"]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Choose a table")
+                        .font(.headline.bold())
+                        .foregroundStyle(ChewbuuTheme.primaryText)
+                    Text("Available for this order")
+                        .font(.caption)
+                        .foregroundStyle(ChewbuuTheme.secondaryText)
+                }
+                Spacer()
+                Image(systemName: "square.grid.2x2")
+                    .foregroundStyle(ChewbuuTheme.yellow)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(sections, id: \.self) { section in
+                        let tables = syncService.tables.filter { $0.section == section && $0.status != .paid }
+                        if !tables.isEmpty {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text(section)
+                                    .font(.caption.weight(.heavy))
+                                    .tracking(0.8)
+                                    .foregroundStyle(ChewbuuTheme.yellow)
+                                ForEach(tables) { table in
+                                    Button {
+                                        selectedTableId = table.id
+                                        onSelect()
+                                    } label: {
+                                        HStack(spacing: 9) {
+                                            Text(table.label)
+                                                .font(.headline.bold())
+                                                .foregroundStyle(ChewbuuTheme.primaryText)
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                Text(table.partyName ?? "Open table")
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(ChewbuuTheme.secondaryText)
+                                                Text("\(table.occupiedSeats)/\(table.seats) guests")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(ChewbuuTheme.secondaryText)
+                                            }
+                                            Spacer()
+                                            SyncStatusPill(title: table.status.rawValue, color: table.status.color)
+                                            if selectedTableId == table.id {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundStyle(ChewbuuTheme.yellow)
+                                            }
+                                        }
+                                        .padding(10)
+                                        .syncCard(isSelected: selectedTableId == table.id, accent: ChewbuuTheme.yellow)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(width: 390, height: 460)
+        .background(ChewbuuTheme.background)
+    }
+}
+
 struct DraftLineRow: View {
     let line: DraftOrderLine
     let remove: () -> Void
@@ -594,41 +743,44 @@ public struct ItemCustomizerSheet: View {
     @State private var notes = ""
 
     public var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Text(item.name).font(.title3.bold()).foregroundStyle(ChewbuuTheme.primaryText)
-                    Text(item.description).font(.subheadline).foregroundStyle(ChewbuuTheme.secondaryText)
-                }
-                Section("Modifiers") {
-                    ForEach(item.modifiers, id: \.self) { modifier in
-                        Toggle(modifier, isOn: Binding(
-                            get: { selectedModifiers.contains(modifier) },
-                            set: { enabled in
-                                if enabled { selectedModifiers.insert(modifier) } else { selectedModifiers.remove(modifier) }
-                            }
-                        ))
+        SyncSheetScaffold(title: "Add item", subtitle: item.name) {
+            VStack(alignment: .leading, spacing: 14) {
+                SyncFormSection(title: "Item") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.name).font(.title3.bold()).foregroundStyle(ChewbuuTheme.primaryText)
+                        Text(item.description).font(.subheadline).foregroundStyle(ChewbuuTheme.secondaryText)
+                        Text(formatCurrency(item.priceCents * quantity)).font(.headline).foregroundStyle(ChewbuuTheme.yellow)
                     }
                 }
-                Section("Quantity & notes") {
-                    Stepper("Quantity · \(quantity)", value: $quantity, in: 1...20)
-                    TextField("Kitchen note (optional)", text: $notes, axis: .vertical)
+                if !item.modifiers.isEmpty {
+                    SyncFormSection(title: "Modifiers · tap to toggle") {
+                        FlowLayout(spacing: 7) {
+                            ForEach(item.modifiers, id: \.self) { modifier in
+                                Button(modifier) {
+                                    if selectedModifiers.contains(modifier) { selectedModifiers.remove(modifier) } else { selectedModifiers.insert(modifier) }
+                                }
+                                .buttonStyle(SyncChipButtonStyle(isSelected: selectedModifiers.contains(modifier), color: ChewbuuTheme.yellow))
+                            }
+                        }
+                    }
+                }
+                SyncStepperControl(title: "Quantity", value: $quantity, range: 1...20)
+                SyncFormSection(title: "Kitchen note") {
+                    SyncLabeledField(title: "Optional", placeholder: "Add a note for the kitchen", text: $notes, axis: .vertical)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(ChewbuuTheme.background)
-            .navigationTitle("Add item")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add \(quantity) · \(formatCurrency(item.priceCents * quantity))") {
-                        onAdd(quantity, Array(selectedModifiers).sorted(), notes)
-                        dismiss()
-                    }
+        } footer: {
+            HStack(spacing: 8) {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.yellow))
+                Button("Add \(quantity) · \(formatCurrency(item.priceCents * quantity))") {
+                    onAdd(quantity, Array(selectedModifiers).sorted(), notes)
+                    dismiss()
                 }
+                .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.yellow))
             }
         }
-        .frame(minWidth: 450, minHeight: 450)
+        .frame(minWidth: 480, minHeight: 500)
     }
 
     private func formatCurrency(_ cents: Int) -> String {
@@ -659,49 +811,41 @@ public struct OrderItemEditorSheet: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Text(item.name).font(.title3.bold()).foregroundStyle(ChewbuuTheme.primaryText)
-                    Stepper("Quantity · \(quantity)", value: $quantity, in: 1...20)
-                }
+        SyncSheetScaffold(title: "Modify item", subtitle: item.name) {
+            VStack(alignment: .leading, spacing: 14) {
+                SyncStepperControl(title: "Quantity", value: $quantity, range: 1...20)
                 if !availableModifiers.isEmpty {
-                    Section("Modifiers") {
-                        ForEach(availableModifiers, id: \.self) { modifier in
-                            Toggle(modifier, isOn: Binding(
-                                get: { selectedModifiers.contains(modifier) },
-                                set: { enabled in
-                                    if enabled { selectedModifiers.insert(modifier) } else { selectedModifiers.remove(modifier) }
+                    SyncFormSection(title: "Modifiers · tap to toggle") {
+                        FlowLayout(spacing: 7) {
+                            ForEach(availableModifiers, id: \.self) { modifier in
+                                Button(modifier) {
+                                    if selectedModifiers.contains(modifier) { selectedModifiers.remove(modifier) } else { selectedModifiers.insert(modifier) }
                                 }
-                            ))
+                                .buttonStyle(SyncChipButtonStyle(isSelected: selectedModifiers.contains(modifier), color: ChewbuuTheme.yellow))
+                            }
                         }
                     }
                 }
-                Section("Notes") {
-                    TextField("Kitchen note", text: $notes, axis: .vertical)
+                SyncFormSection(title: "Kitchen note") {
+                    SyncLabeledField(title: "Optional", placeholder: "Add a note for the kitchen", text: $notes, axis: .vertical)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(ChewbuuTheme.background)
-            .navigationTitle("Modify item")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        syncService.updateOrderItem(tableId: tableId, itemId: item.id, quantity: quantity, modifiers: Array(selectedModifiers).sorted(), notes: notes)
-                        dismiss()
-                    }
-                }
-            }
-            .safeAreaInset(edge: .bottom) {
+        } footer: {
+            HStack(spacing: 8) {
                 Button("Delete item", role: .destructive) {
                     syncService.removeOrderItem(tableId: tableId, itemId: item.id)
                     dismiss()
                 }
-                .padding(.bottom, 8)
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(SyncOutlineButtonStyle(color: ChewbuuTheme.yellow))
+                Button("Save changes") {
+                    syncService.updateOrderItem(tableId: tableId, itemId: item.id, quantity: quantity, modifiers: Array(selectedModifiers).sorted(), notes: notes)
+                    dismiss()
+                }
+                .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.yellow))
             }
         }
-        .frame(minWidth: 450, minHeight: 430)
+        .frame(minWidth: 480, minHeight: 470)
     }
 }
 
