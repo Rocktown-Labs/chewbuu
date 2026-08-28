@@ -47,4 +47,57 @@ final class SyncSerializationTests: XCTestCase {
         XCTAssertEqual(accepted.status, .inProgress)
         XCTAssertEqual(accepted.tableId, "t3")
     }
+
+    func testChewbuuDateIsARequestWithNamedGuestsAndOptionalPreorder() throws {
+        let service = SyncService()
+        let reservation = try XCTUnwrap(service.reservationRequests.first)
+
+        XCTAssertEqual(reservation.kind, .reservation)
+        XCTAssertEqual(reservation.guestNames, "Avery Williams + Jordan Lee")
+        XCTAssertEqual(reservation.preorderedItems, ["Shared dessert"])
+        XCTAssertEqual(reservation.scheduledTime, "19:30")
+    }
+
+    func testNewGuestRequiresNameAndPhoneAndStoresPartySize() throws {
+        let service = SyncService()
+
+        XCTAssertNil(service.createCustomer(name: "", phone: "", partySize: 2))
+        let customer = try XCTUnwrap(service.createCustomer(name: "New Guest", phone: "555-0100", partySize: 4))
+
+        XCTAssertEqual(customer.partySize, 4)
+        XCTAssertEqual(customer.sourceLabel, "Venue guest")
+    }
+
+    func testMenuInspectorCanSaveAvailabilityAndComboMetadata() throws {
+        let service = SyncService()
+        let item = try XCTUnwrap(service.menuCatalog.first)
+
+        service.toggleMenuAvailability(itemId: item.id)
+        service.updateMenuItem(
+            itemId: item.id,
+            name: item.name,
+            priceCents: item.priceCents,
+            description: item.description,
+            dealName: "Dinner for two",
+            comboItems: ["Seasonal greens"],
+            substitutions: ["Wild Mushroom Risotto"],
+            availabilityNote: "Ask the kitchen",
+            photoName: "menu-photo"
+        )
+
+        let updated = try XCTUnwrap(service.menuCatalog.first(where: { $0.id == item.id }))
+        XCTAssertFalse(updated.isAvailable)
+        XCTAssertEqual(updated.dealName, "Dinner for two")
+        XCTAssertEqual(updated.comboItems, ["Seasonal greens"])
+        XCTAssertEqual(updated.substitutions, ["Wild Mushroom Risotto"])
+        XCTAssertEqual(updated.photoName, "menu-photo")
+    }
+
+    func testTableFilterMapsToFourOperationalStatuses() {
+        XCTAssertNil(TableFilter.all.tableStatus)
+        XCTAssertEqual(TableFilter.available.tableStatus, .available)
+        XCTAssertEqual(TableFilter.seated.tableStatus, .seated)
+        XCTAssertEqual(TableFilter.orders.tableStatus, .ordered)
+        XCTAssertEqual(TableFilter.paid.tableStatus, .paid)
+    }
 }

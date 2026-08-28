@@ -3,46 +3,90 @@ import SwiftUI
 public struct FloorMapView: View {
     @ObservedObject var syncService: SyncService
     @Binding var selectedTableId: String?
-    @State private var filterSection = "All"
+    let onInspect: (SyncInspectorSelection) -> Void
+    @State private var selectedFilter: TableFilter = .all
+    @State private var selectedSection = "All"
     @State private var tableToSeat: MockTable?
 
-    private let sections = ["All", "Main Dining", "Patio", "Bar & High Tops"]
+    private let sections = ["Main Dining", "Patio", "Bar & High Tops"]
 
     private var filteredTables: [MockTable] {
-        filterSection == "All" ? syncService.tables : syncService.tables.filter { $0.section == filterSection }
+        syncService.tables.filter { table in
+            let matchesStatus = selectedFilter.tableStatus.map { table.status == $0 } ?? true
+            let matchesSection = selectedSection == "All" || table.section == selectedSection
+            return matchesStatus && matchesSection
+        }
+    }
+
+    private var sectionsToShow: [String] {
+        selectedSection == "All" ? sections : [selectedSection]
     }
 
     public var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                ForEach(sections, id: \.self) { section in
-                    Button(section) {
-                        withAnimation(.easeOut(duration: 0.18)) { filterSection = section }
+                ForEach(TableFilter.allCases) { filter in
+                    Button {
+                        selectedFilter = filter
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(filter.rawValue)
+                            Text("\(tableCount(for: filter))")
+                                .font(.caption2.weight(.heavy))
+                                .opacity(0.7)
+                        }
                     }
-                    .buttonStyle(SyncChipButtonStyle(isSelected: filterSection == section, color: ChewbuuTheme.blue))
+                    .buttonStyle(SyncChipButtonStyle(isSelected: selectedFilter == filter, color: ChewbuuTheme.burgundy))
                 }
-                Spacer()
-                HStack(spacing: 10) {
-                    LegendItem(color: ChewbuuTheme.mint, label: "Available")
-                    LegendItem(color: ChewbuuTheme.orange, label: "Seated")
-                    LegendItem(color: ChewbuuTheme.violet, label: "Orders")
-                    LegendItem(color: ChewbuuTheme.blue, label: "Paid")
+                Spacer(minLength: 12)
+                Picker("Section", selection: $selectedSection) {
+                    Text("All sections").tag("All")
+                    ForEach(sections, id: \.self) { section in
+                        Text(section).tag(section)
+                    }
                 }
+                .pickerStyle(.menu)
+                .tint(ChewbuuTheme.burgundy)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 13)
-            .background(ChewbuuTheme.surface.opacity(0.7))
+            .padding(.vertical, 12)
+            .background(ChewbuuTheme.surface)
 
             Divider().overlay(ChewbuuTheme.divider)
 
             ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 190, maximum: 255), spacing: 14)], spacing: 14) {
-                    ForEach(filteredTables) { table in
-                        TableCardView(table: table, isSelected: selectedTableId == table.id) {
-                            tableToSeat = table
-                        }
-                        .onTapGesture {
-                            withAnimation(.easeOut(duration: 0.18)) { selectedTableId = table.id }
+                LazyVStack(alignment: .leading, spacing: 22) {
+                    if filteredTables.isEmpty {
+                        EmptyPanel(title: "No tables in this view", detail: "Try another service state or section.", icon: "square.grid.2x2", color: ChewbuuTheme.secondaryText)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        ForEach(sectionsToShow, id: \.self) { section in
+                            let sectionTables = filteredTables.filter { $0.section == section }
+                            if !sectionTables.isEmpty {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    HStack(spacing: 8) {
+                                        Text(section)
+                                            .font(.headline.bold())
+                                            .foregroundStyle(ChewbuuTheme.primaryText)
+                                        Text("\(sectionTables.count)")
+                                            .font(.caption.bold())
+                                            .foregroundStyle(ChewbuuTheme.secondaryText)
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 3)
+                                            .background(ChewbuuTheme.surfaceMuted, in: Capsule())
+                                    }
+                                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 210, maximum: 310), spacing: 12)], spacing: 12) {
+                                        ForEach(sectionTables) { table in
+                                            TableCardView(
+                                                table: table,
+                                                isSelected: selectedTableId == table.id,
+                                                onSelect: { onInspect(.table(table.id)) },
+                                                onSeatTap: { tableToSeat = table }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -54,40 +98,47 @@ public struct FloorMapView: View {
             SeatPartySheet(syncService: syncService, table: table)
         }
     }
-}
 
-struct LegendItem: View {
-    let color: Color
-    let label: String
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text(label).font(.caption2.bold()).foregroundStyle(ChewbuuTheme.secondaryText)
-        }
+    private func tableCount(for filter: TableFilter) -> Int {
+        guard let status = filter.tableStatus else { return syncService.tables.count }
+        return syncService.tables.filter { $0.status == status }.count
     }
 }
 
 struct TableCardView: View {
     let table: MockTable
     let isSelected: Bool
+    let onSelect: () -> Void
     let onSeatTap: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(table.label).font(.system(size: 23, weight: .bold, design: .rounded)).foregroundStyle(ChewbuuTheme.primaryText)
-                    Text(table.section).font(.caption).foregroundStyle(ChewbuuTheme.secondaryText)
+                    HStack(spacing: 7) {
+                        Text(table.label)
+                            .font(.system(size: 23, weight: .bold, design: .rounded))
+                            .foregroundStyle(ChewbuuTheme.primaryText)
+                        if table.isChewbuuDate {
+                            Image(systemName: "heart.fill")
+                                .font(.caption)
+                                .foregroundStyle(ChewbuuTheme.burgundy)
+                        }
+                    }
+                    Text(table.section)
+                        .font(.caption)
+                        .foregroundStyle(ChewbuuTheme.secondaryText)
                 }
                 Spacer()
                 SyncStatusPill(title: table.status.rawValue, color: table.status.color)
             }
 
             HStack {
-                Label("\(table.occupiedSeats)/\(table.seats)", systemImage: "person.2.fill")
+                Label("\(table.occupiedSeats)/\(table.seats)", systemImage: "person.2")
                 Spacer()
-                if table.status != .available { Label("\(table.seatedTimeMinutes)m", systemImage: "clock") }
+                if table.status != .available {
+                    Label("\(table.seatedTimeMinutes)m", systemImage: "clock")
+                }
             }
             .font(.caption.bold())
             .foregroundStyle(ChewbuuTheme.secondaryText)
@@ -95,44 +146,44 @@ struct TableCardView: View {
             Divider().overlay(ChewbuuTheme.divider)
 
             if let partyName = table.partyName, table.status != .available {
+                Text(partyName)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(ChewbuuTheme.primaryText)
+                    .lineLimit(1)
                 HStack {
-                    Text(partyName).font(.subheadline.bold()).foregroundStyle(ChewbuuTheme.primaryText).lineLimit(1)
-                    if table.isChewbuuDate { Image(systemName: "heart.fill").foregroundStyle(ChewbuuTheme.datePink) }
-                }
-                HStack {
-                    Text(table.serverName).font(.caption).foregroundStyle(ChewbuuTheme.secondaryText)
+                    Text(table.serverName)
+                        .font(.caption)
+                        .foregroundStyle(ChewbuuTheme.secondaryText)
                     Spacer()
-                    Text(formatCurrency(table.billTotalCents)).font(.subheadline.bold()).foregroundStyle(ChewbuuTheme.primaryText)
+                    Text(formatCurrency(table.billTotalCents))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(ChewbuuTheme.primaryText)
                 }
             } else {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Ready to seat").font(.caption.bold()).foregroundStyle(ChewbuuTheme.mint)
-                        Text(table.serverName).font(.caption2).foregroundStyle(ChewbuuTheme.secondaryText)
+                        Text("Ready to seat")
+                            .font(.caption.bold())
+                            .foregroundStyle(ChewbuuTheme.success)
+                        Text(table.serverName)
+                            .font(.caption2)
+                            .foregroundStyle(ChewbuuTheme.secondaryText)
                     }
                     Spacer()
-                    Button { onSeatTap() } label: {
-                        Label("Seat", systemImage: "person.crop.circle.badge.plus")
-                    }
-                    .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.mint))
+                    Button("Seat", action: onSeatTap)
+                        .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.burgundy))
                 }
             }
         }
         .padding(15)
-        .syncCard(isSelected: isSelected, accent: table.isChewbuuDate ? ChewbuuTheme.datePink : ChewbuuTheme.blue)
-        .overlay(alignment: .topTrailing) {
-            if table.isChewbuuDate {
-                Text("DATE")
-                    .font(.caption2.weight(.heavy))
-                    .tracking(0.7)
-                    .foregroundStyle(ChewbuuTheme.datePink)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(ChewbuuTheme.datePink.opacity(0.13), in: Capsule())
-                    .offset(x: -11, y: -11)
-            }
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .syncCard(isSelected: isSelected, accent: ChewbuuTheme.burgundy)
+        .onTapGesture {
+            onSelect()
         }
     }
 
-    private func formatCurrency(_ cents: Int) -> String { String(format: "$%.2f", Double(cents) / 100) }
+    private func formatCurrency(_ cents: Int) -> String {
+        String(format: "$%.2f", Double(cents) / 100)
+    }
 }

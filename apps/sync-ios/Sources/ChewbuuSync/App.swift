@@ -29,49 +29,91 @@ struct ChewbuuSyncApp: App {
 struct SyncRootView: View {
     @StateObject private var syncService = SyncService.shared
     @State private var selectedDestination: SyncDestination = .overview
-    @State private var selectedTableId: String? = "t2"
+    @State private var selectedTableId: String?
+    @State private var inspectorSelection: SyncInspectorSelection?
 
     var body: some View {
-        NavigationSplitView {
-            SyncSidebar(selectedDestination: $selectedDestination, syncService: syncService)
-        } content: {
-            VStack(spacing: 0) {
-                SyncTopBar(syncService: syncService, selectedDestination: selectedDestination)
-                Divider().overlay(ChewbuuTheme.divider)
-                destinationView
+        Group {
+            if let inspectorSelection {
+                NavigationSplitView {
+                    sidebar
+                } content: {
+                    contentColumn
+                } detail: {
+                    SyncInspectorView(
+                        syncService: syncService,
+                        selection: inspectorSelection,
+                        onClose: closeInspector,
+                        onOpenOrder: openOrder
+                    )
+                }
+            } else {
+                NavigationSplitView {
+                    sidebar
+                } detail: {
+                    contentColumn
+                }
             }
-            .background(ChewbuuTheme.background)
-        } detail: {
-            detailView
-                .background(ChewbuuTheme.background)
         }
-        .tint(ChewbuuTheme.blue)
-        .preferredColorScheme(.dark)
+        .tint(ChewbuuTheme.burgundy)
+        .preferredColorScheme(.light)
+        .onChange(of: selectedDestination) { _, _ in
+            inspectorSelection = nil
+        }
+    }
+
+    private var sidebar: some View {
+        SyncSidebar(
+            selectedDestination: $selectedDestination,
+            syncService: syncService
+        )
+    }
+
+    private var contentColumn: some View {
+        destinationView
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(ChewbuuTheme.background)
     }
 
     @ViewBuilder
     private var destinationView: some View {
         switch selectedDestination {
         case .overview:
-            OverviewView(syncService: syncService, selectedTableId: $selectedTableId) { destination in
-                selectedDestination = destination
-            }
+            OverviewView(
+                syncService: syncService,
+                onNavigate: { destination in selectedDestination = destination },
+                onInspect: { selection in inspect(selection) }
+            )
         case .tables:
-            FloorMapView(syncService: syncService, selectedTableId: $selectedTableId)
-        case .orders:
-            OrdersView(syncService: syncService, selectedTableId: $selectedTableId)
-        case .kitchen:
-            KitchenKDSView(syncService: syncService)
-        case .team:
-            StaffRosterView(syncService: syncService)
-        case .schedules:
-            ScheduleAttendanceView(syncService: syncService)
-        case .customers:
-            CustomersView(syncService: syncService, selectedTableId: $selectedTableId) {
-                selectedDestination = .orders
+            FloorMapView(syncService: syncService, selectedTableId: $selectedTableId) { selection in
+                inspect(selection)
             }
+        case .reservations:
+            ReservationsView(syncService: syncService) { selection in
+                inspect(selection)
+            }
+        case .orders:
+            OrdersView(syncService: syncService, selectedTableId: $selectedTableId) { selection in
+                inspect(selection)
+            }
+        case .kitchen:
+            KitchenKDSView(syncService: syncService) { selection in
+                inspect(selection)
+            }
+        case .team:
+            StaffRosterView(syncService: syncService) { selection in
+                inspect(selection)
+            }
+        case .schedules:
+            ScheduleAttendanceView(syncService: syncService) { selection in
+                inspect(selection)
+            }
+        case .chat:
+            SyncChatView()
         case .menu:
-            MenuManagementView(syncService: syncService)
+            MenuManagementView(syncService: syncService) { selection in
+                inspect(selection)
+            }
         case .specials:
             SpecialsView()
         case .hiring:
@@ -80,21 +122,47 @@ struct SyncRootView: View {
             AnalyticsView(syncService: syncService)
         case .business:
             BusinessSettingsView(syncService: syncService)
-        case .chat:
-            SyncChatView()
+        case .customers:
+            CustomersView(
+                syncService: syncService,
+                onInspect: { selection in inspect(selection) },
+                onOpenOrder: openOrder
+            )
         case .kiosk:
             KioskClockInView(syncService: syncService)
         }
     }
 
-    @ViewBuilder
-    private var detailView: some View {
-        switch selectedDestination {
-        case .overview, .tables, .orders, .kitchen:
-            TableDetailView(syncService: syncService, tableId: selectedTableId)
+    private func inspect(_ selection: SyncInspectorSelection) {
+        switch selection {
+        case .table(let tableId):
+            selectedTableId = tableId
         default:
-            SyncDetailPlaceholder(destination: selectedDestination)
+            break
         }
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            if inspectorSelection == selection {
+                inspectorSelection = nil
+                if case .table = selection {
+                    selectedTableId = nil
+                }
+            } else {
+                inspectorSelection = selection
+            }
+        }
+    }
+
+    private func closeInspector() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            inspectorSelection = nil
+        }
+    }
+
+    private func openOrder(tableId: String) {
+        selectedTableId = tableId
+        selectedDestination = .orders
+        inspectorSelection = .table(tableId)
     }
 }
 
@@ -104,47 +172,46 @@ struct SyncSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 11) {
+            HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .fill(ChewbuuTheme.amber.opacity(0.18))
+                        .fill(ChewbuuTheme.burgundy)
                         .frame(width: 38, height: 38)
-                    Image(systemName: "fork.knife.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(ChewbuuTheme.amber)
+                    Image(systemName: "fork.knife")
+                        .font(.headline)
+                        .foregroundStyle(ChewbuuTheme.yellow)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("SYNC BY CHEWBUU")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("CHEWBUU SYNC")
                         .font(.caption.weight(.heavy))
-                        .tracking(1.2)
+                        .tracking(1.1)
                         .foregroundStyle(ChewbuuTheme.primaryText)
-                    Text("Venue operations cockpit")
+                    Text("Venue operations")
                         .font(.caption)
                         .foregroundStyle(ChewbuuTheme.secondaryText)
                 }
                 Spacer()
             }
-            .padding(.horizontal, 17)
-            .padding(.vertical, 17)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
 
             Divider().overlay(ChewbuuTheme.divider)
 
             List(selection: $selectedDestination) {
-                SyncNavSection(title: "At a glance", destinations: [.overview])
-                SyncNavSection(title: "Operations", destinations: [.tables, .orders, .kitchen])
-                SyncNavSection(title: "People", destinations: [.team, .schedules, .customers, .chat])
-                SyncNavSection(title: "Business", destinations: [.menu, .specials, .hiring, .analytics, .business])
-                SyncNavSection(title: "Terminal", destinations: [.kiosk])
+                SyncNavSection(title: "Operations", destinations: [.overview, .tables, .reservations, .orders, .kitchen], syncService: syncService)
+                SyncNavSection(title: "People", destinations: [.team, .schedules, .chat], syncService: syncService)
+                SyncNavSection(title: "Business", destinations: [.menu, .specials, .hiring, .analytics, .business, .customers], syncService: syncService)
+                SyncNavSection(title: "Terminal", destinations: [.kiosk], syncService: syncService)
             }
             .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
 
             Divider().overlay(ChewbuuTheme.divider)
 
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 7) {
                     Circle()
-                        .fill(syncService.isConnected ? ChewbuuTheme.mint : ChewbuuTheme.orange)
+                        .fill(syncService.isConnected ? ChewbuuTheme.success : ChewbuuTheme.warning)
                         .frame(width: 8, height: 8)
                     Text(syncService.isConnected ? "Live with Sync" : "Offline demo mode")
                         .font(.caption.bold())
@@ -154,29 +221,55 @@ struct SyncSidebar: View {
                     .font(.caption2)
                     .foregroundStyle(ChewbuuTheme.secondaryText)
                     .lineLimit(1)
-                Text("Manager workspace")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(ChewbuuTheme.amber)
+                HStack(spacing: 8) {
+                    Button("Refresh") {
+                        Task { await syncService.fetchLiveBoard() }
+                    }
+                    .font(.caption2.bold())
+                    .foregroundStyle(ChewbuuTheme.burgundy)
+                    Spacer()
+                    Menu {
+                        Button("Reset demo service data", role: .destructive) {
+                            syncService.loadInitialData()
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .foregroundStyle(ChewbuuTheme.burgundy)
+                    }
+                    .menuStyle(.borderlessButton)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(15)
-            .background(ChewbuuTheme.surface.opacity(0.7))
+            .padding(14)
+            .background(ChewbuuTheme.surface)
         }
         .background(ChewbuuTheme.background)
-        .navigationSplitViewColumnWidth(min: 230, ideal: 258, max: 290)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 245, max: 275)
     }
 }
 
 struct SyncNavSection: View {
     let title: String
     let destinations: [SyncDestination]
+    @ObservedObject var syncService: SyncService
 
     var body: some View {
         Section {
             ForEach(destinations) { destination in
                 NavigationLink(value: destination) {
-                    Label(destination.title, systemImage: destination.icon)
-                        .font(.subheadline.weight(.semibold))
+                    HStack(spacing: 9) {
+                        Label(destination.title, systemImage: destination.icon)
+                            .font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 4)
+                        if let badge = badge(for: destination), badge > 0 {
+                            Text("\(badge)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(ChewbuuTheme.warmWhite)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(ChewbuuTheme.burgundy, in: Capsule())
+                        }
+                    }
                 }
             }
         } header: {
@@ -186,82 +279,21 @@ struct SyncNavSection: View {
                 .foregroundStyle(ChewbuuTheme.secondaryText)
         }
     }
-}
 
-struct SyncTopBar: View {
-    @ObservedObject var syncService: SyncService
-    let selectedDestination: SyncDestination
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 9) {
-                    Text(selectedDestination.title)
-                        .font(.system(size: 23, weight: .bold, design: .rounded))
-                        .foregroundStyle(ChewbuuTheme.primaryText)
-                    SyncStatusPill(title: syncService.serviceMode, color: ChewbuuTheme.mint)
-                }
-                Text("Sync by Chewbuu  ·  \(syncService.locationName)")
-                    .font(.caption)
-                    .foregroundStyle(ChewbuuTheme.secondaryText)
-            }
-
-            Spacer()
-
-            HStack(spacing: 12) {
-                Label("\(syncService.activeTableCount) active tables", systemImage: "square.grid.2x2")
-                Label("\(syncService.activeOrderCount) kitchen items", systemImage: "flame")
-            }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(ChewbuuTheme.secondaryText)
-
-            Button {
-                Task { await syncService.fetchLiveBoard() }
-            } label: {
-                Image(systemName: syncService.isLoading ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-                    .font(.headline)
-                    .frame(width: 34, height: 34)
-                    .background(ChewbuuTheme.surfaceMuted, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .help("Refresh live service data")
-
-            Menu {
-                Button("Reset demo service data", role: .destructive) {
-                    syncService.loadInitialData()
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.headline)
-                    .frame(width: 34, height: 34)
-                    .background(ChewbuuTheme.surfaceMuted, in: Circle())
-            }
-            .menuStyle(.borderlessButton)
-            .help("Demo controls")
+    private func badge(for destination: SyncDestination) -> Int? {
+        switch destination {
+        case .tables:
+            return syncService.activeTableCount
+        case .reservations:
+            return syncService.reservationRequests.filter { $0.status != .resolved }.count
+        case .orders:
+            return syncService.openCheckCount
+        case .kitchen:
+            return syncService.activeOrderCount
+        case .customers:
+            return syncService.customers.count
+        default:
+            return nil
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background(ChewbuuTheme.background)
-    }
-}
-
-struct SyncDetailPlaceholder: View {
-    let destination: SyncDestination
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: destination.icon)
-                .font(.system(size: 42))
-                .foregroundStyle(ChewbuuTheme.amber)
-            Text(destination.title)
-                .font(.title3.bold())
-                .foregroundStyle(ChewbuuTheme.primaryText)
-            Text("Select an item to inspect its details.")
-                .font(.subheadline)
-                .foregroundStyle(ChewbuuTheme.secondaryText)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(24)
     }
 }
