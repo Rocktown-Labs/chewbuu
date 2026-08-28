@@ -1,0 +1,15 @@
+{
+  "originHash" : "d848a23ac9402cb9dbe23b36a087db696328359a8527c513b47271a3248bb558",
+  "pins" : [
+    {
+      "identity" : "aws-blocks-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/aws-devtools-labs/aws-blocks-swift.git",
+      "state" : {
+        "revision" : "862ce681d58e247aa374f6143244bf28e77b03c4",
+        "version" : "0.1.1"
+      }
+    }
+  ],
+  "version" : 3
+}
