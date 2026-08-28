@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added the authenticated Expo Sync mobile workspace under `apps/sync` with grouped Operations, People, Business, and Account navigation; mobile Overview, Tables, Orders, Shifts, Tips, Reservations, Kitchen, Clock In, Guests, Work Chat, Menu, Specials, Jobs, Settings, and detail/create workflows.
 - Refined the native Sync iPad workspace with a burgundy-first theme, direct order taking, multi-guest parties, sectioned table picking, adaptive panes, simple creation sheets, menu-linked specials, job applicants, and expanded venue settings.
 - Refined the native Sync iPad cockpit with Chewbuu burgundy/yellow branding, a quiet overview, grouped operations navigation, reservations, closable inspectors, table-state filters, guest contact capture, menu item metadata editing, and explicit close-out confirmation.
 - Added guided rounded venue onboarding with Stripe Identity representative verification, storefront asset uploads, venue-owned menu items, item-linked food photos, and PostgreSQL menu modifier groups/options.

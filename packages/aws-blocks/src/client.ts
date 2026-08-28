@@ -86,6 +86,7 @@ export type {
   VenueSyncChannel,
   VenueSpecial,
   VenueTable,
+  VenueWorkspace,
 } from "./types";
 
 export type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middleware";

@@ -1,0 +1,34 @@
+@import "tailwindcss";
+@import "uniwind";
+@import "heroui-native/styles";
+@import "../../packages/ui/src/styles/globals.css";
+
+@source './node_modules/heroui-native/lib';
+
+.dark {
+  --background: #410d25;
+  --foreground: #fff6dd;
+  --card: #581631;
+  --card-foreground: #fff6dd;
+  --popover: #581631;
+  --popover-foreground: #fff6dd;
+  --primary: #f4c95d;
+  --primary-foreground: #410d25;
+  --secondary: #6b2342;
+  --secondary-foreground: #fff6dd;
+  --muted: #6b2342;
+  --muted-foreground: #d9bda9;
+  --accent: #f4c95d;
+  --accent-foreground: #410d25;
+  --border: rgb(244 201 93 / 18%);
+  --input: rgb(244 201 93 / 24%);
+  --ring: #f4c95d;
+  --sidebar: #35091e;
+  --sidebar-foreground: #fff6dd;
+  --sidebar-primary: #f4c95d;
+  --sidebar-primary-foreground: #410d25;
+  --sidebar-accent: #581631;
+  --sidebar-accent-foreground: #fff6dd;
+  --sidebar-border: rgb(244 201 93 / 18%);
+  --sidebar-ring: #f4c95d;
+}
