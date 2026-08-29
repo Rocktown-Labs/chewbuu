@@ -31,7 +31,7 @@ User finds a favorite venue
 A referral is payable only after the referred venue completes onboarding and its first paid invoice clears. The initial reward is $50, with a short refund or
 chargeback hold. A future experiment may split the reward into $25 at activation and $25 after 30 days active.
 
-The contribution system should reject duplicates, blurry or unusable media, and spam. Uploaded media needs consent, moderation, attribution, and takedown support.
+The contribution system should reject duplicates, blurry or unusable media, and spam. Uploaded media needs consent, moderation, attribution, and takedown support. After a completed date, a user can submit a spot photo or menu photo for review; the configured Chewbuu credit is snapshotted on the pending contribution, and only approved captures are surfaced in spot results.
 
 ## Pricing hypothesis
 
@@ -51,7 +51,7 @@ When a user selects a place, Chewbuu may use a transient official website URL to
 
 > Found online — not verified by the venue.
 
-The preview is useful for date planning and can expire. Once the venue claims the location, the operator can import the draft into an editable menu version and publish corrections. Firecrawl is an ingestion assistant, not the canonical source of truth.
+The preview is useful for date planning and can expire. It is requested explicitly from the selected spot in the date flow rather than automatically on every search, which keeps Firecrawl usage intentional. Once the venue claims the location, the operator can import the draft into an editable menu version and publish corrections. Firecrawl is an ingestion assistant, not the canonical source of truth.
 
 ## Smart venue onboarding and public spots
 

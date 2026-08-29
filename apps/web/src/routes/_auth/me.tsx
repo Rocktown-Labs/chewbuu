@@ -60,11 +60,9 @@ import {
 import {
   ArrowLeft,
   Bell,
-  Calendar as CalendarIcon,
   CalendarHeart,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   ClipboardList,
   Clock,
@@ -105,6 +103,7 @@ import {
   type StepItem,
   type StepKey,
 } from "@/components/ui/horizontal-stepper";
+import { DateListView } from "@/features/calendar/date-list-view";
 import type { ChatPerson } from "@/features/chat/chat-types";
 import { DateConfirmScreen } from "@/features/chat/date-confirm";
 import { DateWizard } from "@/features/date-wizard/date-wizard";
@@ -145,7 +144,6 @@ interface DateRecap {
 }
 
 type DashboardTab =
-  | "calendar"
   | "chats"
   | "feed"
   | "matches"
@@ -209,7 +207,6 @@ const meSearchSchema = z.object({
   step: z.enum(["request", "matcher", "choice", "date"]).optional(),
   tab: z
     .enum([
-      "calendar",
       "chats",
       "feed",
       "matches",
@@ -450,21 +447,6 @@ const formatLabel = (value: string) =>
 const getDateIntentTitle = (what: string[]) =>
   what.length > 0 ? `${what.map(formatLabel).join(", ")} date` : "Date";
 
-const getCalendarDateTitle = (request: {
-  places?: { name?: string }[];
-  theirName?: string;
-  what?: string[];
-}) => {
-  const placeNames = request.places
-    ?.map((place) => place.name)
-    .filter(Boolean)
-    .slice(0, 2);
-  const activity = placeNames?.length
-    ? placeNames.join(" and ")
-    : getDateIntentTitle(request.what ?? []);
-  return request.theirName ? `${activity} with ${request.theirName}` : activity;
-};
-
 const getAge = (birthdayString: string) => {
   const birthday = new Date(birthdayString);
   if (Number.isNaN(birthday.getTime())) return null;
@@ -561,14 +543,6 @@ const requestToHistory = (
   what: request.what,
 });
 
-const isSameDay = (date1: Date, date2: Date) => {
-  return (
-    date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate()
-  );
-};
-
 const formatStatus = (status: string) => {
   if (status === "places_selected") return "Matching";
   if (status === "review_due" || status === "Review due") return "Review Due";
@@ -576,64 +550,6 @@ const formatStatus = (status: string) => {
     .split("_")
     .join(" ")
     .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
-};
-
-const getDaysInMonth = (date: Date) => {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-
-  // First day of the month
-  const firstDay = new Date(year, month, 1);
-  const startDayOfWeek = firstDay.getDay();
-
-  // Total days in the month
-  const totalDays = new Date(year, month + 1, 0).getDate();
-
-  const days: { date: Date; isCurrentMonth: boolean }[] = [];
-
-  // Padding from previous month
-  const prevMonthTotalDays = new Date(year, month, 0).getDate();
-  for (let i = startDayOfWeek - 1; i >= 0; i -= 1) {
-    days.push({
-      date: new Date(year, month - 1, prevMonthTotalDays - i),
-      isCurrentMonth: false,
-    });
-  }
-
-  // Days of current month
-  for (let i = 1; i <= totalDays; i += 1) {
-    days.push({
-      date: new Date(year, month, i),
-      isCurrentMonth: true,
-    });
-  }
-
-  // Padding from next month
-  const remaining = days.length % 7;
-  if (remaining > 0) {
-    const nextDaysNeeded = 7 - remaining;
-    for (let i = 1; i <= nextDaysNeeded; i += 1) {
-      days.push({
-        date: new Date(year, month + 1, i),
-        isCurrentMonth: false,
-      });
-    }
-  }
-
-  // Ensure exactly 42 days (6 weeks) for layout consistency
-  while (days.length < 42) {
-    const lastDay = days.at(-1);
-    if (lastDay) {
-      const nextDate = new Date(lastDay.date);
-      nextDate.setDate(nextDate.getDate() + 1);
-      days.push({
-        date: nextDate,
-        isCurrentMonth: false,
-      });
-    }
-  }
-
-  return days;
 };
 
 function RouteComponent() {
@@ -666,7 +582,7 @@ function HomeDashboardView({
   confirmedDates: DatingSummary["requests"];
   dateStreak: number;
   monthlyBookings: number;
-  onOpenPlanDateDrawer: () => void;
+  onOpenPlanDateDrawer: (date?: Date) => void;
   onOpenAnalytics: () => void;
   onNavigateTab: (tab: DashboardTab) => void;
   profileArea?: string;
@@ -810,7 +726,7 @@ function HomeDashboardView({
             </p>
             <Button
               className="mt-4 rounded-full font-bold text-xs mx-auto"
-              onClick={onOpenPlanDateDrawer}
+              onClick={() => onOpenPlanDateDrawer(selectedCalendarDate)}
               size="sm"
               type="button"
             >
@@ -851,11 +767,11 @@ function HomeDashboardView({
           </div>
         </button>
 
-        {/* Card 2: This Month Bookings -> Calendar Tab */}
+        {/* Card 2: This Month Bookings -> Date list */}
         <button
-          aria-label="Open monthly calendar schedule"
+          aria-label="Open scheduled date list"
           className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-primary/30 bg-gradient-to-br from-primary/15 via-sky-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-primary/60 hover:shadow-md"
-          onClick={() => onNavigateTab("calendar")}
+          onClick={() => onNavigateTab("spots")}
           type="button"
         >
           <Badge className="w-fit rounded-full border-0 bg-primary/20 font-extrabold text-[10px] text-primary">
@@ -874,7 +790,7 @@ function HomeDashboardView({
                 : "No confirmed dates"}
             </h4>
             <p className="mt-1 flex items-center text-[11px] font-bold text-primary group-hover:underline">
-              Open Calendar <ChevronRight className="ml-0.5 size-3.5" />
+              View date list <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
         </button>
@@ -964,7 +880,9 @@ function HomeDashboardView({
         <Button
           className="shrink-0 self-start rounded-full font-bold text-xs sm:self-center"
           onClick={
-            canDate ? onOpenPlanDateDrawer : () => onNavigateTab("profile")
+            canDate
+              ? () => onOpenPlanDateDrawer()
+              : () => onNavigateTab("profile")
           }
           type="button"
         >
@@ -1113,6 +1031,9 @@ export function MePage({
   const [profilePhotoActionsOpen, setProfilePhotoActionsOpen] = useState(false);
   const [mediaViewer, setMediaViewer] = useState<ProfileMediaItem | null>(null);
   const [isPlanDateDrawerOpen, setIsPlanDateDrawerOpen] = useState(false);
+  const [presetDateForWizard, setPresetDateForWizard] = useState<
+    Date | undefined
+  >();
   const [presetPlaceForWizard, setPresetPlaceForWizard] = useState<
     DatePlace | undefined
   >();
@@ -1204,14 +1125,6 @@ export function MePage({
       setDateFeedFilter(initialFilter);
     }
   }, [initialFilter, dateFeedFilter]);
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<
-    Date | undefined
-  >();
-  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
-  const calendarDays = useMemo(
-    () => getDaysInMonth(currentMonth),
-    [currentMonth]
-  );
   const [userCollapsedSidebar, setUserCollapsedSidebar] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dashboardChatsComponent, setDashboardChatsComponent] =
@@ -1502,39 +1415,8 @@ export function MePage({
     0
   );
 
-  const getDatesForDay = (date: Date) => {
-    return confirmedDates.filter((req) => {
-      const reqDate = new Date(req.scheduledAt);
-      return (
-        reqDate.getFullYear() === date.getFullYear() &&
-        reqDate.getMonth() === date.getMonth() &&
-        reqDate.getDate() === date.getDate()
-      );
-    });
-  };
-
-  const filteredDates = useMemo(() => {
-    if (!selectedCalendarDate) {
-      return confirmedDates.toSorted(
-        (a, b) =>
-          new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
-      );
-    }
-    return confirmedDates
-      .filter((request) => {
-        const requestDate = new Date(request.scheduledAt);
-        return (
-          requestDate.getFullYear() === selectedCalendarDate.getFullYear() &&
-          requestDate.getMonth() === selectedCalendarDate.getMonth() &&
-          requestDate.getDate() === selectedCalendarDate.getDate()
-        );
-      })
-      .toSorted(
-        (a, b) =>
-          new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
-      );
-  }, [confirmedDates, selectedCalendarDate]);
-  const featuredSpot = spots.find((spot) => spot.photoUrl) ?? spots[0];
+  const featuredSpot =
+    spots.find((spot) => spot.communityPhotoUrl || spot.photoUrl) ?? spots[0];
   const spotsByCategory = useMemo(() => {
     const grouped: Record<Exclude<SpotCategory, "all">, DatePlace[]> = {
       drink: [],
@@ -1937,18 +1819,6 @@ export function MePage({
                 <User className="size-5 shrink-0" />
                 {!isSidebarCollapsed && <span>My Profile</span>}
               </button>
-              <button
-                type="button"
-                onClick={() => openProfileMode("edit")}
-                className={cn(
-                  "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-all duration-200 cursor-pointer w-full select-none",
-                  isSidebarCollapsed && "justify-center px-0"
-                )}
-                title="Edit Profile"
-              >
-                <ClipboardList className="size-5 shrink-0" />
-                {!isSidebarCollapsed && <span>Edit Profile</span>}
-              </button>
             </nav>
 
             {/* Plan a Date Button */}
@@ -1962,6 +1832,7 @@ export function MePage({
               )}
               onClick={() => {
                 if (canDate) {
+                  setPresetDateForWizard(undefined);
                   setPresetPlaceForWizard(undefined);
                   setIsPlanDateDrawerOpen(true);
                 } else {
@@ -2030,7 +1901,8 @@ export function MePage({
               monthlyBookings={monthlyBookings}
               onNavigateTab={(tab) => setDashboardTab(tab)}
               onOpenAnalytics={() => setIsAnalyticsOpen(true)}
-              onOpenPlanDateDrawer={() => {
+              onOpenPlanDateDrawer={(date) => {
+                setPresetDateForWizard(date);
                 setPresetPlaceForWizard(undefined);
                 setIsPlanDateDrawerOpen(true);
               }}
@@ -2412,6 +2284,15 @@ export function MePage({
               </div>
 
               <div className="p-5 flex flex-col gap-8">
+                <DateListView
+                  dates={confirmedDates}
+                  onOpenDate={openDateHistory}
+                  onPlanDate={(date) => {
+                    setPresetDateForWizard(date);
+                    setPresetPlaceForWizard(undefined);
+                    setIsPlanDateDrawerOpen(true);
+                  }}
+                />
                 {publicSpecials.length > 0 ? (
                   <section className="flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-3">
@@ -2502,371 +2383,6 @@ export function MePage({
                     </div>
                   </section>
                 )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === "calendar" && (
-            <div className="flex flex-col h-full bg-background">
-              {/* Calendar Header with Controls */}
-              <div className="border-b border-border/80 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-0 bg-background/90 backdrop-blur-md z-30">
-                <div>
-                  <h2 className="text-xl font-bold">Calendar</h2>
-                  <p className="mt-1 text-muted-foreground text-xs font-medium">
-                    Only confirmed dates show here. Block off your schedule.
-                  </p>
-                </div>
-
-                {/* Navigation controls matching screenshot_1784484597.png */}
-                <div className="flex items-center justify-between md:justify-end gap-3 flex-wrap">
-                  <div className="flex items-center bg-card border border-border rounded-lg shadow-sm p-0.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setCurrentMonth(new Date());
-                        setSelectedCalendarDate(undefined);
-                      }}
-                      className="text-xs font-semibold px-3 h-8 rounded-md hover:bg-muted"
-                    >
-                      Today
-                    </Button>
-                    <div className="w-px h-4 bg-border/60" />
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => {
-                        const prev = new Date(currentMonth);
-                        prev.setMonth(prev.getMonth() - 1);
-                        setCurrentMonth(prev);
-                      }}
-                      className="size-8 rounded-md hover:bg-muted animate-none"
-                    >
-                      <ChevronLeft className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => {
-                        const next = new Date(currentMonth);
-                        next.setMonth(next.getMonth() + 1);
-                        setCurrentMonth(next);
-                      }}
-                      className="size-8 rounded-md hover:bg-muted animate-none"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Button>
-                  </div>
-
-                  {/* Current Month & Year Display */}
-                  <span className="text-base font-bold text-foreground min-w-[120px] text-center">
-                    {currentMonth.toLocaleDateString(undefined, {
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </span>
-
-                  <div className="flex items-center gap-2 ml-auto md:ml-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs font-medium h-9 rounded-lg border-border bg-card flex items-center gap-1.5 shadow-sm"
-                    >
-                      Month
-                      <ChevronDown className="size-3.5 text-muted-foreground" />
-                    </Button>
-                    <Button
-                      size="icon-sm"
-                      className="size-9 rounded-lg shadow-sm"
-                    >
-                      <Plus className="size-4.5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 flex flex-col gap-6">
-                {/* Full-width Month Grid Calendar */}
-                <Card className="w-full bg-card/30 border-border rounded-2xl overflow-hidden shadow-lg">
-                  {/* Day of Week Labels */}
-                  <div className="grid grid-cols-7 bg-muted/30 border-b border-border/80 text-center py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                      (dayName) => (
-                        <div key={dayName}>{dayName}</div>
-                      )
-                    )}
-                  </div>
-
-                  {/* Day Grid */}
-                  <div className="grid grid-cols-7 border-l border-t border-border/30">
-                    {calendarDays.map(({ date: dayDate, isCurrentMonth }) => {
-                      const dayDates = getDatesForDay(dayDate);
-                      const isToday = isSameDay(dayDate, new Date());
-                      const isSelected =
-                        selectedCalendarDate &&
-                        isSameDay(dayDate, selectedCalendarDate);
-
-                      return (
-                        <button
-                          type="button"
-                          key={dayDate.toISOString()}
-                          onClick={() => {
-                            if (
-                              selectedCalendarDate &&
-                              isSameDay(selectedCalendarDate, dayDate)
-                            ) {
-                              setSelectedCalendarDate(undefined);
-                            } else {
-                              setSelectedCalendarDate(dayDate);
-                            }
-                          }}
-                          className={cn(
-                            "border-r border-b border-border/30 min-h-[110px] p-2 flex flex-col gap-1.5 transition duration-150 cursor-pointer select-none relative group text-left items-stretch justify-start w-full bg-transparent font-normal hover:bg-muted/10",
-                            !isCurrentMonth && "bg-muted/10 opacity-40",
-                            isSelected && "bg-primary/5 hover:bg-primary/10",
-                            isCurrentMonth && !isSelected && "hover:bg-muted/20"
-                          )}
-                        >
-                          {/* Day Number Header */}
-                          <div className="flex items-center justify-between">
-                            <span
-                              className={cn(
-                                "text-xs font-bold flex items-center justify-center size-6 rounded-full transition duration-150",
-                                isToday &&
-                                  "bg-foreground text-background font-extrabold shadow-sm",
-                                !isToday && isCurrentMonth && "text-foreground",
-                                !isToday &&
-                                  !isCurrentMonth &&
-                                  "text-muted-foreground"
-                              )}
-                            >
-                              {dayDate.getDate()}
-                            </span>
-                            {isSelected && (
-                              <span className="size-1.5 rounded-full bg-primary" />
-                            )}
-                          </div>
-
-                          {/* Event Banners / Pills */}
-                          <div className="flex flex-col gap-1 mt-auto w-full overflow-hidden">
-                            {dayDates.slice(0, 3).map((req) => {
-                              const match = getAcceptedMatchForRequest(req);
-                              const reqDate = new Date(req.scheduledAt);
-                              const hour = reqDate.getHours();
-
-                              // Meal Type Details
-                              let mealType = "Dinner";
-                              let mealColorClass =
-                                "bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-400 border-l-2 border-indigo-500";
-
-                              if (hour < 11) {
-                                mealType = "Breakfast";
-                                mealColorClass =
-                                  "bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border-l-2 border-amber-500";
-                              } else if (hour < 16) {
-                                mealType = "Lunch";
-                                mealColorClass =
-                                  "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 border-l-2 border-emerald-500";
-                              }
-
-                              return (
-                                <div
-                                  key={req.id}
-                                  className={cn(
-                                    "flex items-center gap-1.5 px-1.5 py-1 rounded text-[10px] font-bold leading-none truncate w-full shadow-sm",
-                                    mealColorClass
-                                  )}
-                                >
-                                  {match ? (
-                                    <Avatar className="size-4 shrink-0 rounded-full border border-background">
-                                      <AvatarImage
-                                        src={match.profilePhotoUrl}
-                                      />
-                                      <AvatarFallback className="text-[5px]">
-                                        {match.displayName?.[0]}
-                                      </AvatarFallback>
-                                    </Avatar>
-                                  ) : (
-                                    <CalendarHeart className="size-3 text-current/80 shrink-0" />
-                                  )}
-                                  <span className="truncate">
-                                    {match
-                                      ? getCalendarDateTitle({
-                                          places: req.places,
-                                          theirName: match.displayName,
-                                          what: "what" in req ? req.what : [],
-                                        })
-                                      : `${getDateIntentTitle("what" in req ? req.what : [])} · ${mealType}`}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                            {dayDates.length > 3 && (
-                              <div className="text-[9px] font-semibold text-muted-foreground text-center bg-muted/40 py-0.5 rounded">
-                                + {dayDates.length - 3} more
-                              </div>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Card>
-
-                {/* Filter and Date List Section */}
-                <div className="flex flex-col gap-4 mt-2">
-                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
-                    <h3 className="text-base font-bold text-foreground">
-                      {selectedCalendarDate ? (
-                        <span>
-                          Dates on{" "}
-                          <span className="text-primary">
-                            {selectedCalendarDate.toLocaleDateString(
-                              undefined,
-                              {
-                                weekday: "long",
-                                month: "short",
-                                day: "numeric",
-                              }
-                            )}
-                          </span>
-                        </span>
-                      ) : (
-                        "Upcoming meetings"
-                      )}
-                    </h3>
-                    {selectedCalendarDate && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedCalendarDate(undefined)}
-                        className="text-xs text-muted-foreground hover:text-foreground h-7 rounded-full px-3 hover:bg-muted"
-                      >
-                        Show All
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Redesigned Card List matching screenshot_1784485238.png */}
-                  <div className="flex flex-col w-full divide-y divide-border/60">
-                    {filteredDates.length === 0 ? (
-                      <div className="py-8 text-center text-sm text-muted-foreground">
-                        No dates scheduled for this day.
-                      </div>
-                    ) : (
-                      filteredDates.map((request) => {
-                        const requestId = request.id;
-                        const requestDate = new Date(request.scheduledAt);
-                        const places = request.places ?? [];
-                        const acceptedMatch =
-                          getAcceptedMatchForRequest(request);
-
-                        const formattedDate = requestDate.toLocaleDateString(
-                          undefined,
-                          {
-                            month: "long",
-                            day: "numeric",
-                            year: "numeric",
-                          }
-                        );
-                        const formattedTime = requestDate.toLocaleTimeString(
-                          [],
-                          {
-                            hour: "numeric",
-                            minute: "2-digit",
-                          }
-                        );
-
-                        return (
-                          <div
-                            key={requestId}
-                            className="py-4 flex items-center justify-between gap-4 group transition"
-                          >
-                            {/* Left part: Avatar & Info */}
-                            <div className="flex items-center gap-4 min-w-0">
-                              <Avatar className="size-12 rounded-full border border-border/80 shadow-sm shrink-0">
-                                <AvatarImage
-                                  src={acceptedMatch?.profilePhotoUrl}
-                                />
-                                <AvatarFallback className="text-base font-semibold bg-primary/10 text-primary">
-                                  {acceptedMatch?.displayName?.[0] || "?"}
-                                </AvatarFallback>
-                              </Avatar>
-
-                              <div className="min-w-0 flex flex-col gap-1.5">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <h4 className="font-bold text-base text-foreground truncate">
-                                    {getCalendarDateTitle({
-                                      places,
-                                      theirName: acceptedMatch?.displayName,
-                                      what:
-                                        "what" in request
-                                          ? request.what
-                                          : undefined,
-                                    })}
-                                  </h4>
-
-                                  <Badge
-                                    className={cn(
-                                      "rounded-full text-[10px] font-medium border-0 px-2 py-0.5 capitalize shadow-sm shrink-0",
-                                      request.status === "places_selected" &&
-                                        "bg-muted text-muted-foreground",
-                                      (request.status === "review_due" ||
-                                        request.status === "Review due") &&
-                                        "bg-destructive/10 text-destructive dark:bg-destructive/20",
-                                      request.status === "accepted" &&
-                                        "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
-                                    )}
-                                  >
-                                    {formatStatus(request.status)}
-                                  </Badge>
-                                </div>
-
-                                {/* Calendar Row */}
-                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                  <CalendarIcon className="size-4 shrink-0 opacity-70" />
-                                  <span>
-                                    {formattedDate} at {formattedTime}
-                                  </span>
-                                </div>
-
-                                {/* MapPin / Places Badges Row */}
-                                {places.length > 0 && (
-                                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                                    <MapPin className="size-4 shrink-0 opacity-70" />
-                                    <div className="flex flex-wrap gap-1">
-                                      {places.map((place) => (
-                                        <Badge
-                                          key={place.placeId}
-                                          variant="secondary"
-                                          className="text-[10px] px-2 py-0 h-5 font-medium rounded-md bg-muted/60"
-                                        >
-                                          {place.name}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Right part: Action / Menu */}
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Button
-                                className="rounded-full h-8 px-4 text-xs font-semibold"
-                                onClick={() => openDateHistory(requestId)}
-                                type="button"
-                                variant="outline"
-                              >
-                                View details
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -3542,17 +3058,6 @@ export function MePage({
 
               <div className="pt-4 border-t border-border flex flex-col gap-3">
                 <Button
-                  variant="outline"
-                  className="w-full rounded-full gap-2 font-bold justify-start"
-                  onClick={() => {
-                    openProfileMode("edit");
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  <ClipboardList className="size-4" />
-                  Edit Profile Settings
-                </Button>
-                <Button
                   variant="ghost"
                   className="w-full rounded-full gap-2 font-bold justify-start text-red-500 hover:text-red-600"
                   onClick={() => {
@@ -3737,6 +3242,7 @@ export function MePage({
 
               <div className="mt-1">
                 <DateWizard
+                  initialDate={presetDateForWizard}
                   membershipTier={tier}
                   onCancel={() => setIsPlanDateDrawerOpen(false)}
                   onCreated={(newRequestId) => {
@@ -6783,9 +6289,8 @@ function SpotCard({
   featured?: boolean;
 }) {
   const price = formatPriceLevel(spot.priceLevel);
-  const photoSrc = spot.photoUrl?.startsWith("/")
-    ? getApiUrl(spot.photoUrl)
-    : spot.photoUrl;
+  const photoUrl = spot.communityPhotoUrl ?? spot.photoUrl;
+  const photoSrc = photoUrl?.startsWith("/") ? getApiUrl(photoUrl) : photoUrl;
 
   return (
     <div
@@ -6862,6 +6367,22 @@ function SpotCard({
                 {formatPlaceType(tag)}
               </Badge>
             ))}
+            {spot.communityPhotoUrl ? (
+              <Badge
+                className="rounded-full bg-emerald-500/10 px-2 py-0 text-[9px] font-semibold text-emerald-600"
+                variant="secondary"
+              >
+                Community photo
+              </Badge>
+            ) : null}
+            {spot.menuPhotoUrl ? (
+              <Badge
+                className="rounded-full bg-primary/10 px-2 py-0 text-[9px] font-semibold text-primary"
+                variant="secondary"
+              >
+                Menu captured
+              </Badge>
+            ) : null}
           </div>
           {spot.attributions?.length ? (
             <p className="text-[9px] text-muted-foreground">

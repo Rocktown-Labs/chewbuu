@@ -49,6 +49,7 @@ import {
   datingApi,
   stripeAdminApi,
   pricingApi,
+  spotCaptureAdminApi,
   type MembershipPlan,
   type UsernameChangeRequest,
   usernameApi,
@@ -109,6 +110,11 @@ const textToList = (value: string) =>
     .split("\n")
     .map((item) => item.trim())
     .filter(Boolean);
+const formatCents = (cents: number) =>
+  new Intl.NumberFormat(undefined, {
+    currency: "USD",
+    style: "currency",
+  }).format(cents / 100);
 
 const RouteComponent = () => {
   const { data: session, isPending } = authClient.useSession();
@@ -127,6 +133,13 @@ const RouteComponent = () => {
   const [stripeHealth, setStripeHealth] = useState<Awaited<
     ReturnType<typeof stripeAdminApi.getHealth>
   > | null>(null);
+  const [spotRewardCents, setSpotRewardCents] = useState(500);
+  const [savingSpotReward, setSavingSpotReward] = useState(false);
+  const [reviewingSpotContributionId, setReviewingSpotContributionId] =
+    useState<string | null>(null);
+  const [pendingSpotContributions, setPendingSpotContributions] = useState<
+    Awaited<ReturnType<typeof spotCaptureAdminApi.listPending>>["contributions"]
+  >([]);
 
   // Users state
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -157,6 +170,50 @@ const RouteComponent = () => {
       setStripeHealth(await stripeAdminApi.getHealth());
     } catch {
       setStripeHealth(null);
+    }
+  };
+
+  const loadSpotReward = async () => {
+    try {
+      const config = await spotCaptureAdminApi.getConfig();
+      setSpotRewardCents(config.rewardCents);
+    } catch {
+      setSpotRewardCents(500);
+    }
+  };
+
+  const loadPendingSpotContributions = async () => {
+    try {
+      const result = await spotCaptureAdminApi.listPending();
+      setPendingSpotContributions(result.contributions);
+    } catch {
+      setPendingSpotContributions([]);
+    }
+  };
+
+  const reviewSpotContribution = async (
+    contributionId: string,
+    status: "approved" | "rejected"
+  ) => {
+    setReviewingSpotContributionId(contributionId);
+    try {
+      await spotCaptureAdminApi.review({ contributionId, status });
+      setPendingSpotContributions((current) =>
+        current.filter((contribution) => contribution.id !== contributionId)
+      );
+      toast.success(
+        status === "approved"
+          ? "Spot capture approved."
+          : "Spot capture rejected."
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not review spot capture."
+      );
+    } finally {
+      setReviewingSpotContributionId(null);
     }
   };
 
@@ -203,6 +260,8 @@ const RouteComponent = () => {
     void loadUsernameRequests();
     void loadConnectStatus();
     void loadStripeHealth();
+    void loadSpotReward();
+    void loadPendingSpotContributions();
   }, [isAdmin]);
 
   const handleSetRole = async (userId: string, currentRole?: string | null) => {
@@ -1028,6 +1087,168 @@ const RouteComponent = () => {
                   Connected-account onboarding, split settlement, refunds, and
                   disputes are capability-gated and webhook-audited.
                 </p>
+              </CardContent>
+            </Card>
+            <Card className="rounded-3xl border-emerald-500/20 bg-emerald-500/5">
+              <CardHeader>
+                <Badge className="mb-2 w-fit rounded-full" variant="secondary">
+                  Community capture
+                </Badge>
+                <CardTitle className="text-xl">Spot capture credit</CardTitle>
+                <CardDescription>
+                  Set the pending Chewbuu credit offered for an approved photo
+                  or menu capture. Existing submissions keep the amount they
+                  were offered.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div className="w-full max-w-xs">
+                  <label
+                    className="text-sm font-medium"
+                    htmlFor="spot-reward-cents"
+                  >
+                    Credit amount (cents)
+                  </label>
+                  <Input
+                    aria-describedby="spot-reward-help"
+                    className="mt-2"
+                    id="spot-reward-cents"
+                    min={0}
+                    onChange={(event) =>
+                      setSpotRewardCents(Number(event.target.value))
+                    }
+                    type="number"
+                    value={spotRewardCents}
+                  />
+                  <p
+                    className="mt-2 text-xs text-muted-foreground"
+                    id="spot-reward-help"
+                  >
+                    {new Intl.NumberFormat(undefined, {
+                      currency: "USD",
+                      style: "currency",
+                    }).format(spotRewardCents / 100)}{" "}
+                    per approved capture.
+                  </p>
+                </div>
+                <Button
+                  className="rounded-full"
+                  disabled={savingSpotReward || spotRewardCents < 0}
+                  onClick={async () => {
+                    setSavingSpotReward(true);
+                    try {
+                      const config = await spotCaptureAdminApi.updateConfig(
+                        Math.round(spotRewardCents)
+                      );
+                      setSpotRewardCents(config.rewardCents);
+                      toast.success("Spot capture credit saved.");
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error
+                          ? error.message
+                          : "Could not save spot capture credit."
+                      );
+                    } finally {
+                      setSavingSpotReward(false);
+                    }
+                  }}
+                  type="button"
+                >
+                  {savingSpotReward ? "Saving…" : "Save credit"}
+                </Button>
+              </CardContent>
+            </Card>
+            <Card className="rounded-3xl border-border/80 bg-card/70">
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle className="text-xl">
+                    Spot capture review queue
+                  </CardTitle>
+                  <CardDescription>
+                    Approve submitted photos before they appear in place
+                    results. Credits remain pending any future settlement
+                    policy.
+                  </CardDescription>
+                </div>
+                <Button
+                  className="rounded-full"
+                  onClick={() => void loadPendingSpotContributions()}
+                  type="button"
+                  variant="outline"
+                >
+                  <RefreshCw className="size-4" /> Refresh queue
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {pendingSpotContributions.length === 0 ? (
+                  <p className="rounded-2xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                    No spot captures are waiting for review.
+                  </p>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {pendingSpotContributions.map((contribution) => (
+                      <div
+                        className="flex gap-3 rounded-2xl border border-border bg-background/40 p-3"
+                        key={contribution.id}
+                      >
+                        <img
+                          alt={`${contribution.kind.replaceAll("_", " ")} submitted by ${contribution.submitterName}`}
+                          className="size-20 shrink-0 rounded-xl object-cover"
+                          src={contribution.mediaUrl}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-sm">
+                              {contribution.kind === "menu_photo"
+                                ? "Menu photo"
+                                : "Spot photo"}
+                            </p>
+                            <Badge className="rounded-full" variant="secondary">
+                              {formatCents(contribution.rewardCents)} credit
+                            </Badge>
+                          </div>
+                          <p className="mt-1 truncate text-xs text-muted-foreground">
+                            Place ID: {contribution.googlePlaceId}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            From {contribution.submitterName}
+                          </p>
+                          <div className="mt-2 flex gap-2">
+                            <Button
+                              className="rounded-full"
+                              disabled={reviewingSpotContributionId !== null}
+                              onClick={() =>
+                                void reviewSpotContribution(
+                                  contribution.id,
+                                  "approved"
+                                )
+                              }
+                              size="sm"
+                              type="button"
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              className="rounded-full"
+                              disabled={reviewingSpotContributionId !== null}
+                              onClick={() =>
+                                void reviewSpotContribution(
+                                  contribution.id,
+                                  "rejected"
+                                )
+                              }
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { Images, Video } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -29,6 +30,7 @@ export function RecapsPage() {
   const [recaps, setRecaps] = useState<DateRecap[]>([]);
   const [media, setMedia] = useState<DateMedia[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState("");
+  const [selectedRecapId, setSelectedRecapId] = useState("");
   const [caption, setCaption] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
@@ -70,6 +72,7 @@ export function RecapsPage() {
   const selectedDate = eligibleDates.find(
     (request) => request.id === selectedRequestId
   );
+  const selectedRecap = recaps.find((recap) => recap.id === selectedRecapId);
 
   useEffect(() => {
     if (!selectedRequestId) {
@@ -215,7 +218,17 @@ export function RecapsPage() {
         )}
       </section>
 
-      <section className="grid gap-5 md:grid-cols-2">
+      <section className="flex flex-col gap-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+            Your memories
+          </p>
+          <h2 className="mt-1 text-xl font-bold">Date folders</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Each recap keeps the photos and videos from one date together.
+            Select a folder to open the full gallery.
+          </p>
+        </div>
         {isLoading ? (
           <div className="rounded-3xl border border-border p-5 text-sm text-muted-foreground">
             Loading recaps…
@@ -225,46 +238,137 @@ export function RecapsPage() {
             No published recaps yet.
           </div>
         ) : (
-          recaps.map((recap) => {
-            const request = summary?.requests.find(
-              (candidate) => candidate.id === recap.dateRequestId
-            );
-            const imageUrl = recap.media?.[0]?.url ?? recap.thumbnailUrl;
-            return (
-              <article
-                className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm"
-                key={recap.id}
-              >
-                {imageUrl ? (
-                  <img
-                    alt={request?.places[0]?.name ?? "Date recap"}
-                    className="h-56 w-full object-cover"
-                    src={imageUrl}
-                  />
-                ) : null}
-                <div className="p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-primary">
-                    {request ? formatDate(request.scheduledAt) : "Date recap"}
-                  </p>
-                  <h2 className="mt-2 text-lg font-semibold">
-                    {request?.places[0]?.name ??
-                      request?.searchArea ??
-                      "A Chewbuu date"}
-                  </h2>
-                  {recap.caption ? (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {recap.caption}
+          <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6">
+            {recaps.map((recap) => {
+              const request = summary?.requests.find(
+                (candidate) => candidate.id === recap.dateRequestId
+              );
+              const preview =
+                recap.media?.find((item) => !item.kind.includes("video")) ??
+                recap.media?.[0];
+              const previewUrl = preview?.kind.includes("video")
+                ? recap.thumbnailUrl
+                : (preview?.url ?? recap.thumbnailUrl);
+              const selected = recap.id === selectedRecapId;
+              return (
+                <button
+                  aria-pressed={selected}
+                  className={`w-64 shrink-0 snap-start overflow-hidden rounded-3xl border bg-card text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 sm:w-72 ${
+                    selected
+                      ? "border-primary ring-2 ring-primary/20"
+                      : "border-border"
+                  }`}
+                  key={recap.id}
+                  onClick={() => setSelectedRecapId(recap.id)}
+                  type="button"
+                >
+                  <div className="relative aspect-[4/3] overflow-hidden bg-muted/40">
+                    {previewUrl ? (
+                      <img
+                        alt=""
+                        className="size-full object-cover"
+                        src={previewUrl}
+                      />
+                    ) : (
+                      <div className="grid size-full place-items-center text-primary">
+                        <Images className="size-8" />
+                      </div>
+                    )}
+                    {preview?.kind.includes("video") ? (
+                      <span className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-background/85 px-2 py-1 text-[10px] font-semibold">
+                        <Video className="size-3" /> Video
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-primary">
+                      {request ? formatDate(request.scheduledAt) : "Date recap"}
                     </p>
-                  ) : null}
-                  <p className="mt-4 text-xs text-muted-foreground">
-                    {recap.media?.length ?? 0} attached memories
-                  </p>
-                </div>
-              </article>
-            );
-          })
+                    <h3 className="mt-2 truncate font-semibold">
+                      {request?.places[0]?.name ??
+                        request?.searchArea ??
+                        "A Chewbuu date"}
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {recap.media?.length ?? 0} memories
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
+
+        {selectedRecap ? (
+          <RecapGallery
+            recap={selectedRecap}
+            request={summary?.requests.find(
+              (candidate) => candidate.id === selectedRecap.dateRequestId
+            )}
+          />
+        ) : null}
       </section>
     </main>
+  );
+}
+
+function RecapGallery({
+  recap,
+  request,
+}: {
+  recap: DateRecap;
+  request?: DatingSummary["requests"][number];
+}) {
+  const memories = recap.media ?? [];
+
+  return (
+    <section className="rounded-3xl border border-border bg-card/60 p-4 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-2 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-primary">
+            {request ? formatDate(request.scheduledAt) : "Date recap"}
+          </p>
+          <h2 className="mt-1 text-2xl font-bold">
+            {request?.places[0]?.name ??
+              request?.searchArea ??
+              "A Chewbuu date"}
+          </h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {memories.length} captured{" "}
+          {memories.length === 1 ? "memory" : "memories"}
+        </p>
+      </div>
+      {recap.caption ? (
+        <p className="py-4 text-sm text-muted-foreground">{recap.caption}</p>
+      ) : null}
+      {memories.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No captured media is attached to this recap.
+        </p>
+      ) : (
+        <div className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-3">
+          {memories.map((memory) =>
+            memory.kind.includes("video") ? (
+              <video
+                className="aspect-square w-full rounded-2xl bg-black object-cover"
+                controls
+                key={memory.id}
+                src={memory.url}
+              >
+                <track kind="captions" label="English" srcLang="en" />
+              </video>
+            ) : (
+              <img
+                alt=""
+                className="aspect-square w-full rounded-2xl object-cover"
+                key={memory.id}
+                src={memory.url}
+              />
+            )
+          )}
+        </div>
+      )}
+    </section>
   );
 }

@@ -14,6 +14,10 @@ import type {
   StripeTipAllocationInput,
   StripeVenueConnectStatus,
   StripeWebhookSyncResponse,
+  SpotCaptureOffer,
+  SpotCaptureRewardConfig,
+  SpotContributionKind,
+  SpotContributionModerationItem,
   VenueShiftAttendance as BlocksVenueShiftAttendance,
   VenueStaffRole as BlocksVenueStaffRole,
   VenueStaffStatus as BlocksVenueStaffStatus,
@@ -131,6 +135,8 @@ export interface DatePlace {
   name: string;
   openNow?: boolean;
   phone?: string;
+  communityPhotoUrl?: string;
+  menuPhotoUrl?: string;
   photoUrl?: string;
   placeId: string;
   priceLevel?: string;
@@ -437,6 +443,7 @@ export interface ReviewCriterion {
 }
 
 export interface DateReviewPayload {
+  mediaIds?: string[];
   personComment?: string;
   personCriteria: Record<string, number>;
   personRating: number;
@@ -1165,6 +1172,36 @@ export const dateMediaApi = {
     thumbnailUrl?: string;
     url: string;
   }) => blocksApi.uploadDateMedia(input),
+};
+
+export const spotCaptureApi = {
+  getOffer: (input: { dateRequestId: string; googlePlaceId: string }) =>
+    blocksApi.getSpotCaptureOffer(input) as Promise<{
+      offer: SpotCaptureOffer;
+    }>,
+  submit: (input: {
+    dateMediaId: string;
+    dateRequestId: string;
+    googlePlaceId: string;
+    kind: SpotContributionKind;
+  }) => blocksApi.submitSpotContribution(input),
+};
+
+export const spotCaptureAdminApi = {
+  getConfig: () =>
+    blocksApi.getSpotCaptureRewardConfig() as Promise<SpotCaptureRewardConfig>,
+  listPending: () =>
+    blocksApi.listSpotContributions() as Promise<{
+      contributions: SpotContributionModerationItem[];
+    }>,
+  review: (input: {
+    contributionId: string;
+    status: "approved" | "rejected";
+  }) => blocksApi.reviewSpotContribution(input),
+  updateConfig: (rewardCents: number) =>
+    blocksApi.updateSpotCaptureRewardConfig({
+      rewardCents,
+    }) as Promise<SpotCaptureRewardConfig>,
 };
 
 export const recapsApi = {
