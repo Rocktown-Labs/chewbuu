@@ -4,18 +4,21 @@ import { sentryTanstackStart } from "@sentry/tanstackstart-react/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
+import { config as loadDotenv } from "dotenv";
 import { nitro } from "nitro/vite";
 import { defineConfig, loadEnv } from "vite";
 
-try {
-  process.loadEnvFile(
-    path.resolve(import.meta.dirname, "../../apps/server/.env")
-  );
-} catch (error) {
-  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+for (const envFile of [
+  path.resolve(import.meta.dirname, "../../.env"),
+  path.resolve(import.meta.dirname, "../../apps/server/.env"),
+]) {
+  loadDotenv({ path: envFile, quiet: true });
 }
 
-export default defineConfig(({ mode }) => {
+const localDatabaseUrl = "postgres://postgres:postgres@localhost:5432/chewbuu";
+const localAuthSecret = "chewbuu-local-development-secret-do-not-use";
+
+export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const nodeObservabilityDependencies = [
     "@opentelemetry/api",
@@ -29,6 +32,13 @@ export default defineConfig(({ mode }) => {
 
   const devPort = Number(process.env.PORT) || 3001;
   const blocksDevTarget = env.BLOCKS_DEV_API_URL ?? "http://127.0.0.1:3000";
+
+  if (command === "serve") {
+    process.env.BETTER_AUTH_SECRET ??= localAuthSecret;
+    process.env.BETTER_AUTH_URL ??= `http://localhost:${devPort}/api/auth`;
+    process.env.CORS_ORIGIN ??= `http://localhost:${devPort}`;
+    process.env.DATABASE_URL ??= localDatabaseUrl;
+  }
 
   return {
     server: {

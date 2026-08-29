@@ -61,7 +61,7 @@ bun run portless:proxy
 bun run portless:dev
 ```
 
-The native app requires an Expo-compatible simulator or device. `bun run dev:blocks` starts or reuses the local `chewbuu-postgres` PostgreSQL container through Podman, waits for it to become ready, and then starts the Blocks front door. The Blocks local server uses local mocks and persists their data under `.bb-data/`.
+The native app requires an Expo-compatible simulator or device. `bun run dev:blocks` starts or reuses the local `chewbuu-postgres` PostgreSQL container through Podman, enables its disposable local TLS certificate, waits for it to become ready, and then starts the Blocks front door. The Blocks local server uses local mocks and persists their data under `.bb-data/`. If local auth values are absent, this command supplies development-only defaults; production commands still require explicit secrets.
 
 `bun run portless:dev` starts the controllable web, Expo, and email-preview workspace apps through Portless, using named URLs from each package's `package.json` Portless settings and automatically assigned internal ports. Run `bun run dev:blocks` in a separate terminal when the apps need the local Blocks API. The regular package `dev` scripts remain unchanged for fixed-port startup, while Portless uses each package's `dev:portless` wrapper.
 
@@ -76,7 +76,7 @@ The named web URL can use `/aws-blocks/api` as a same-origin path; the Vite deve
 
 ## Environment configuration
 
-Environment validation lives in `packages/env`. Use untracked environment files for local development and configure production values in the hosting provider or GitHub environment. Never commit connection strings, auth secrets, API keys, or provider certificates.
+Environment validation lives in `packages/env`. Server-side development loads the workspace `.env` and `apps/server/.env` files regardless of which workspace starts the process. Use untracked environment files for local development and configure production values in the hosting provider or GitHub environment. Never commit connection strings, auth secrets, API keys, or provider certificates.
 
 The database variables are:
 

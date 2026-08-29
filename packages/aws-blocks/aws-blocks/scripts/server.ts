@@ -23,7 +23,12 @@ for (const envFile of [".env", "apps/server/.env"]) {
 }
 
 // Keep local development usable from a fresh checkout while preserving any
-// explicitly configured database connection.
+// explicitly configured development values. This secret is only a local fallback;
+// production deployments must provide their own secret through the environment.
+process.env.BETTER_AUTH_SECRET ??=
+  "chewbuu-local-development-secret-do-not-use";
+process.env.BETTER_AUTH_URL ??= "http://localhost:3000/api/auth";
+process.env.CORS_ORIGIN ??= "http://localhost:3000";
 process.env.DATABASE_URL ??= localDatabaseUrl;
 process.env.BLOCKS_MIGRATION_DB_URL ??= localDatabaseUrl;
 

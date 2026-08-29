@@ -33,7 +33,7 @@ Start the AWS Blocks local server and database:
 bun run dev:blocks
 ```
 
-The command starts or reuses the `chewbuu-postgres` PostgreSQL container through Podman, waits for PostgreSQL to be ready, and then starts the Blocks front door. The front door listens on `http://localhost:3000` and proxies the TanStack Start application on port `3001`. Local Blocks mocks persist under `.bb-data/`.
+The command starts or reuses the `chewbuu-postgres` PostgreSQL container through Podman, enables its disposable local TLS certificate, waits for PostgreSQL to be ready, and then starts the Blocks front door. The front door listens on `http://localhost:3000` and proxies the TanStack Start application on port `3001`. Local Blocks mocks persist under `.bb-data/`. Missing local auth values receive development-only defaults; production deployments still require explicit secrets.
 
 For the complete application development environment, use:
 
@@ -48,7 +48,7 @@ bun run portless:proxy
 bun run portless:dev
 ```
 
-Podman must be installed for the managed local database (`podman machine init` is only needed for a first-time setup). If `DATABASE_URL` is not configured, the dev server defaults to `postgres://postgres:postgres@localhost:5432/chewbuu`; an explicit local or disposable PlanetScale development URL is preserved. Never put credentials in committed `.env.example` files or source code.
+Podman must be installed for the managed local database (`podman machine init` is only needed for a first-time setup). If `DATABASE_URL` is not configured, the dev server defaults to `postgres://postgres:postgres@localhost:5432/chewbuu`; an explicit local or disposable PlanetScale development URL is preserved. The managed container stores a self-signed certificate in its persistent data volume because the Blocks PostgreSQL adapter requires a TLS handshake. Local certificate verification is disabled only for loopback URLs; production verification remains strict. Never put credentials in committed `.env.example` files or source code.
 
 Keep `bun run dev:blocks` running separately for the fixed Blocks front door and database. The web development proxy forwards `/aws-blocks` requests to `http://127.0.0.1:3000`.
 
