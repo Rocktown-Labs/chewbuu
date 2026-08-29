@@ -27,6 +27,23 @@
       "cache": false,
       "persistent": true
     },
+    "dev:portless": {
+      "cache": false,
+      "persistent": true,
+      "env": [
+        "PORTLESS",
+        "PORTLESS_HTTPS",
+        "PORTLESS_LAN",
+        "PORTLESS_LAN_IP",
+        "PORTLESS_NGROK",
+        "PORTLESS_PORT",
+        "PORTLESS_STATE_DIR",
+        "PORTLESS_SYNC_HOSTS",
+        "PORTLESS_TAILSCALE",
+        "PORTLESS_TLD",
+        "PORTLESS_WILDCARD"
+      ]
+    },
     "db:migrate": {
       "cache": false,
       "env": [

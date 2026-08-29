@@ -41,7 +41,16 @@ For the complete application development environment, use:
 bun run dev
 ```
 
+The web, dating Expo, Sync Expo, and email-preview packages expose `dev:portless` wrappers while keeping their regular `dev` scripts unchanged for fixed-port startup. Start the Portless proxy and named workspace services explicitly with:
+
+```bash
+bun run portless:proxy
+bun run portless:dev
+```
+
 Podman must be installed for the managed local database (`podman machine init` is only needed for a first-time setup). If `DATABASE_URL` is not configured, the dev server defaults to `postgres://postgres:postgres@localhost:5432/chewbuu`; an explicit local or disposable PlanetScale development URL is preserved. Never put credentials in committed `.env.example` files or source code.
+
+Keep `bun run dev:blocks` running separately for the fixed Blocks front door and database. The web development proxy forwards `/aws-blocks` requests to `http://127.0.0.1:3000`.
 
 ## Database migrations
 

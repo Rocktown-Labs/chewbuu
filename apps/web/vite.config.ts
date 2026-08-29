@@ -7,6 +7,14 @@ import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig, loadEnv } from "vite";
 
+try {
+  process.loadEnvFile(
+    path.resolve(import.meta.dirname, "../../apps/server/.env")
+  );
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const nodeObservabilityDependencies = [
@@ -19,9 +27,19 @@ export default defineConfig(({ mode }) => {
     "require-in-the-middle",
   ];
 
+  const devPort = Number(process.env.PORT) || 3001;
+  const blocksDevTarget = env.BLOCKS_DEV_API_URL ?? "http://127.0.0.1:3000";
+
   return {
     server: {
-      port: 3001,
+      port: devPort,
+      proxy: {
+        "/aws-blocks": {
+          changeOrigin: true,
+          target: blocksDevTarget,
+          ws: true,
+        },
+      },
     },
     resolve: {
       alias: {

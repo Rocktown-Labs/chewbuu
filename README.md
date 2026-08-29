@@ -49,7 +49,7 @@ Start all development services:
 bun run dev
 ```
 
-The web application is normally available at `http://localhost:3001`. The Hono API and AWS Blocks local front door use the ports documented by their package scripts.
+The web, dating Expo, Sync Expo, and email preview apps use named Portless URLs when started through `bun run portless:dev`. The fixed AWS Blocks front door remains available at `http://localhost:3000`.
 
 Start individual services when needed:
 
@@ -57,9 +57,22 @@ Start individual services when needed:
 bun run dev:web
 bun run dev:native
 bun run dev:blocks
+bun run portless:proxy
+bun run portless:dev
 ```
 
 The native app requires an Expo-compatible simulator or device. `bun run dev:blocks` starts or reuses the local `chewbuu-postgres` PostgreSQL container through Podman, waits for it to become ready, and then starts the Blocks front door. The Blocks local server uses local mocks and persists their data under `.bb-data/`.
+
+`bun run portless:dev` starts the controllable web, Expo, and email-preview workspace apps through Portless, using named URLs from each package's `package.json` Portless settings and automatically assigned internal ports. Run `bun run dev:blocks` in a separate terminal when the apps need the local Blocks API. The regular package `dev` scripts remain unchanged for fixed-port startup, while Portless uses each package's `dev:portless` wrapper.
+
+Portless uses HTTPS on port 443 by default and may ask to trust its local certificate authority on first use. Start its proxy before the workspace task. For a non-privileged HTTP pilot, run:
+
+```bash
+bun run portless:proxy -- --no-tls -p 1355
+bun run portless:dev
+```
+
+The named web URL can use `/aws-blocks/api` as a same-origin path; the Vite development proxy forwards that path to the fixed Blocks front door on `http://127.0.0.1:3000`. Copy `apps/web/.env.example` to `apps/web/.env` when overriding local web variables. For physical Expo devices, use Portless LAN mode and configure the native `EXPO_PUBLIC_*` URLs explicitly; Portless does not rewrite those application API URLs.
 
 ## Environment configuration
 
@@ -182,21 +195,23 @@ import { Button } from "@chewbuu/ui/components/button";
 
 Run these from the repository root:
 
-| Command               | Purpose                                            |
-| --------------------- | -------------------------------------------------- |
-| `bun run dev`         | Start the development tasks through Turborepo      |
-| `bun run dev:web`     | Start the web application                          |
-| `bun run dev:native`  | Start the Expo application                         |
-| `bun run dev:blocks`  | Start local Postgres and the AWS Blocks server     |
-| `bun run build`       | Build workspace packages and applications          |
-| `bun run check`       | Run Ultracite lint and format checks               |
-| `bun run fix`         | Apply Ultracite fixes                              |
-| `bun run check-types` | Typecheck the workspace                            |
-| `bun test`            | Run workspace tests                                |
-| `bun run test:e2e`    | Run Playwright browser tests                       |
-| `bun run db:migrate`  | Apply SQL migrations using the direct database URL |
-| `bun run aws:sandbox` | Deploy an AWS Blocks sandbox                       |
-| `bun run aws:deploy`  | Deploy the production AWS Blocks stack             |
+| Command | Purpose |
+| --- | --- |
+| `bun run dev` | Start development tasks through Turborepo |
+| `bun run dev:web` | Start the fixed-port web development task |
+| `bun run dev:native` | Start the fixed-port dating Expo development task |
+| `bun run dev:blocks` | Start local Postgres and the AWS Blocks server |
+| `bun run portless:proxy` | Start the Portless local proxy |
+| `bun run portless:dev` | Start named web/Expo/email apps through Portless |
+| `bun run build` | Build workspace packages and applications |
+| `bun run check` | Run Ultracite lint and format checks |
+| `bun run fix` | Apply Ultracite fixes |
+| `bun run check-types` | Typecheck the workspace |
+| `bun test` | Run workspace tests |
+| `bun run test:e2e` | Run Playwright browser tests |
+| `bun run db:migrate` | Apply SQL migrations using the direct database URL |
+| `bun run aws:sandbox` | Deploy an AWS Blocks sandbox |
+| `bun run aws:deploy` | Deploy the production AWS Blocks stack |
 
 There are intentionally no Drizzle schema-generation, database-studio, or `bun run vercel` scripts. Database changes are SQL migrations reviewed with the application code, and Vercel deployment is managed by the linked Vercel project.
 

@@ -7,6 +7,7 @@
     "start": "expo start",
     "check-types": "tsc --noEmit",
     "dev": "expo start --clear",
+    "dev:portless": "portless",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
@@ -69,5 +70,9 @@
     "@types/node": "^26.0.1",
     "@types/react": "~19.2.17",
     "typescript": "~6.0.3"
+  },
+  "portless": {
+    "name": "sync",
+    "script": "dev"
   }
 }
