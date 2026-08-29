@@ -59,7 +59,7 @@ bun run dev:native
 bun run dev:blocks
 ```
 
-The native app requires an Expo-compatible simulator or device. The Blocks local server uses local mocks and persists their data under `.bb-data/`.
+The native app requires an Expo-compatible simulator or device. `bun run dev:blocks` starts or reuses the local `chewbuu-postgres` PostgreSQL container through Podman, waits for it to become ready, and then starts the Blocks front door. The Blocks local server uses local mocks and persists their data under `.bb-data/`.
 
 ## Environment configuration
 
@@ -187,7 +187,7 @@ Run these from the repository root:
 | `bun run dev`         | Start the development tasks through Turborepo      |
 | `bun run dev:web`     | Start the web application                          |
 | `bun run dev:native`  | Start the Expo application                         |
-| `bun run dev:blocks`  | Start the local AWS Blocks server                  |
+| `bun run dev:blocks`  | Start local Postgres and the AWS Blocks server     |
 | `bun run build`       | Build workspace packages and applications          |
 | `bun run check`       | Run Ultracite lint and format checks               |
 | `bun run fix`         | Apply Ultracite fixes                              |
