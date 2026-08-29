@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DATE_REQUEST_ACTION_WINDOW_MS,
   getPastRequests,
   getUpcomingRequests,
+  isDateRequestActionable,
   isRecapEligible,
 } from "./dating-utils";
 
@@ -27,6 +29,24 @@ describe("native dating utilities", () => {
       "past",
       "cancelled",
     ]);
+  });
+
+  it("expires incoming requests after two minutes", () => {
+    const createdAt = "2026-08-29T12:00:00.000Z";
+    const createdTimestamp = Date.parse(createdAt);
+
+    expect(
+      isDateRequestActionable(
+        createdAt,
+        createdTimestamp + DATE_REQUEST_ACTION_WINDOW_MS - 1
+      )
+    ).toBe(true);
+    expect(
+      isDateRequestActionable(
+        createdAt,
+        createdTimestamp + DATE_REQUEST_ACTION_WINDOW_MS
+      )
+    ).toBe(false);
   });
 
   it("only allows recaps for completed or review-due dates", () => {

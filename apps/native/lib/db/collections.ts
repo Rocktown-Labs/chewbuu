@@ -19,8 +19,10 @@ const dateMatchSchema = z.object({
 });
 
 export const dateRequestSchema = z.object({
+  createdAt: z.string(),
   filters: z.array(z.string()),
   id: z.string(),
+  isRequester: z.boolean(),
   matches: z.array(dateMatchSchema),
   partyMembers: z.array(
     z.object({
@@ -32,6 +34,11 @@ export const dateRequestSchema = z.object({
   ),
   partySize: z.number(),
   paymentMode: z.string(),
+  requester: z.object({
+    avatar: z.string().nullable(),
+    bio: z.string(),
+    name: z.string(),
+  }),
   places: z.array(
     z.object({
       address: z.string().optional(),

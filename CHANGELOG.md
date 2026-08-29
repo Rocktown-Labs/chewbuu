@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Added
 
 - Added pinned Portless development routing for the web, dating Expo, Sync Expo, and email preview apps with named URLs and a Vite proxy to the fixed Blocks API.
+- Added explicit dating availability with two-minute incoming request windows, onboarding-gated date planning, mobile parity, and robust place selection persistence.
 - Added automatic local Postgres startup and readiness gating to `bun run dev:blocks`.
 - Added responsive web date-planning accordions, compact date-list browsing under Spots, date-folder recap galleries, and authenticated spot/menu capture offers with admin-configurable pending Chewbuu credit.
 - Added API-backed mobile dating parity across Home, Dates, Google Maps spots, chats, profile, onboarding media, reviews, and Recaps; calendar is now a secondary Dates view and Recaps is the primary recap destination.

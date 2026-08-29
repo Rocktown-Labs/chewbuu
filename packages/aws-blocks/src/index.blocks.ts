@@ -1633,6 +1633,7 @@ const loadDatingSummary = async (
       .select([
         "area",
         "can_date as canDate",
+        "dating_enabled as datingEnabled",
         "latitude",
         "longitude",
         "onboarded",
@@ -1671,6 +1672,7 @@ const loadDatingSummary = async (
       pendingReviews: pendingReviews.length,
       readiness: {
         canDate: false,
+        datingEnabled: false,
         identityVerified,
         onboarded: Boolean(profile?.onboarded),
         pendingReviews: pendingReviews.length,
@@ -1679,7 +1681,7 @@ const loadDatingSummary = async (
     };
   }
 
-  const [matches, places, partyMembers] = requests.length
+  const [matches, places, partyMembers, requesters] = requests.length
     ? await Promise.all([
         db
           .selectFrom("date_match")
@@ -1719,8 +1721,34 @@ const loadDatingSummary = async (
             requests.map((request) => request.id)
           )
           .execute(),
+        db
+          .selectFrom("profile")
+          .innerJoin("user", "user.id", "profile.user_id")
+          .select([
+            "profile.bio",
+            "profile.profile_photo_url as avatar",
+            "profile.user_id as userId",
+            "user.name",
+          ])
+          .where(
+            "profile.user_id",
+            "in",
+            Array.from(new Set(requests.map((request) => request.user_id)))
+          )
+          .execute(),
       ])
-    : [[], [], []];
+    : [[], [], [], []];
+  const requesterProfiles = await Promise.all(
+    requesters.map(async (requester) => ({
+      avatar: (await mintStoredMediaUrl(requester.avatar)) ?? null,
+      bio: requester.bio ?? "",
+      name: requester.name,
+      userId: requester.userId,
+    }))
+  );
+  const requesterByUserId = new Map(
+    requesterProfiles.map((requester) => [requester.userId, requester])
+  );
   const resolvedMatches = await Promise.all(
     matches.map(async (match) => ({
       ...match,
@@ -1738,15 +1766,20 @@ const loadDatingSummary = async (
     readiness: {
       canDate:
         Boolean(profile?.canDate) &&
+        Boolean(profile?.datingEnabled) &&
+        Boolean(profile?.onboarded) &&
         identityVerified &&
         pendingReviews.length === 0,
+      datingEnabled: Boolean(profile?.datingEnabled),
       identityVerified,
       onboarded: Boolean(profile?.onboarded),
       pendingReviews: pendingReviews.length,
     },
     requests: requests.map((request) => ({
+      createdAt: new Date(request.created_at).toISOString(),
       filters: request.filters,
       id: request.id,
+      isRequester: request.user_id === sessionUser.id,
       matches: resolvedMatches
         .filter((match) => match.requestId === request.id)
         .map(({ requestId: _requestId, ...match }) => match),
@@ -1755,6 +1788,12 @@ const loadDatingSummary = async (
         .map((member) => ({ displayName: member.display_name })),
       partySize: request.party_size,
       paymentMode: request.payment_mode,
+      requester: requesterByUserId.get(request.user_id) ?? {
+        avatar: null,
+        bio: "",
+        name: "Chewbuu member",
+        userId: request.user_id,
+      },
       places: places
         .filter((place) => place.request_id === request.id)
         .map((place) => ({
@@ -1770,6 +1809,33 @@ const loadDatingSummary = async (
       what: request.what,
     })),
   };
+};
+
+const setDatingAvailability = async (
+  sessionUser: SessionUser,
+  input: unknown
+) => {
+  const body = z.object({ enabled: z.boolean() }).parse(input);
+  const db = await getDb();
+  const profile = await db
+    .selectFrom("profile")
+    .select(["can_date", "onboarded"])
+    .where("user_id", "=", sessionUser.id)
+    .executeTakeFirst();
+
+  if (!profile) throw new Error("Complete your profile before dating.");
+  if (body.enabled && (!profile.onboarded || !profile.can_date)) {
+    throw new Error("Complete onboarding before you start dating.");
+  }
+
+  await db
+    .updateTable("profile")
+    .set({ dating_enabled: body.enabled, updated_at: new Date() })
+    .where("user_id", "=", sessionUser.id)
+    .execute();
+
+  const summary = await loadDatingSummary(sessionUser);
+  return { readiness: summary.readiness };
 };
 
 const profileMediaInputSchema = z.object({
@@ -1936,15 +2002,23 @@ const saveProfile = async (
   );
   const locationReady = hasLocation(body);
   const db = await getDb();
-  const userState = await db
-    .selectFrom("user")
-    .select(["identity_status", "username"])
-    .where("id", "=", sessionUser.id)
-    .executeTakeFirst();
+  const [userState, existingProfile] = await Promise.all([
+    db
+      .selectFrom("user")
+      .select(["identity_status", "username"])
+      .where("id", "=", sessionUser.id)
+      .executeTakeFirst(),
+    db
+      .selectFrom("profile")
+      .select("dating_enabled")
+      .where("user_id", "=", sessionUser.id)
+      .executeTakeFirst(),
+  ]);
   const identityVerified = userState?.identity_status === "verified";
   const usernameToSave = userState?.username || body.username;
-  const canDate =
+  const canDateEligible =
     hasProfilePhoto && hasIntroVideo && locationReady && identityVerified;
+  const datingEnabled = existingProfile?.dating_enabled ?? false;
   const onboarded =
     !draft &&
     Boolean(
@@ -1971,9 +2045,10 @@ const saveProfile = async (
         area: body.area || null,
         bio: body.bio || null,
         birthday: body.birthday || null,
-        can_date: canDate,
+        can_date: canDateEligible,
         contribution_score: 0,
         created_at: now,
+        dating_enabled: false,
         dating_modes: jsonb(body.datingModes ?? []),
         distance_miles: body.distanceMiles ?? 25,
         favorite_things: jsonb(body.favoriteThings ?? []),
@@ -2016,7 +2091,7 @@ const saveProfile = async (
           area: body.area || null,
           bio: body.bio || null,
           birthday: body.birthday || null,
-          can_date: canDate,
+          can_date: canDateEligible,
           dating_modes: jsonb(body.datingModes ?? []),
           distance_miles: body.distanceMiles ?? 25,
           favorite_things: jsonb(body.favoriteThings ?? []),
@@ -2095,7 +2170,9 @@ const saveProfile = async (
   return {
     profile: savedProfile as DatingProfileResponse,
     readiness: {
-      canDate: canDate && pendingReviews === 0,
+      canDate:
+        canDateEligible && datingEnabled && onboarded && pendingReviews === 0,
+      datingEnabled,
       identityVerified,
       onboarded,
       pendingReviews,
@@ -2129,6 +2206,13 @@ const createDateRequest = async (
     throw new Error(
       "Add your area and enable location before requesting a date."
     );
+  }
+  if (
+    !requesterProfile.onboarded ||
+    !requesterProfile.can_date ||
+    !requesterProfile.dating_enabled
+  ) {
+    throw new Error("Complete onboarding and start dating before requesting.");
   }
   const requestId = crypto.randomUUID();
   const now = new Date();
@@ -2217,6 +2301,7 @@ const createDateRequest = async (
         ])
         .where("profile.user_id", "!=", sessionUser.id)
         .where("profile.can_date", "=", true)
+        .where("profile.dating_enabled", "=", true)
         .where("profile.onboarded", "=", true)
         .where("profile.latitude", "is not", null)
         .where("profile.longitude", "is not", null)
@@ -4834,6 +4919,13 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return observeOperation("getDatingSummary", async () => {
       const sessionUser = await requireSession(context.request.headers);
       return loadDatingSummary(sessionUser);
+    });
+  },
+
+  async setDatingAvailability(input: { enabled: boolean }) {
+    return observeOperation("setDatingAvailability", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return setDatingAvailability(sessionUser, input);
     });
   },
 

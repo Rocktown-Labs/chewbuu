@@ -47,6 +47,8 @@ export const datingApi = {
     blocksApi.getReviewPrompt(dateRequestId),
   getRooms: () => blocksApi.getRooms(),
   getSummary: () => blocksApi.getDatingSummary(),
+  setDatingAvailability: (enabled: boolean) =>
+    blocksApi.setDatingAvailability({ enabled }),
   markChatRead: (roomId: string) => blocksApi.markChatRead(roomId),
   markNotificationsRead: (notificationIds: string[]) =>
     blocksApi.markNotificationsRead(notificationIds),

@@ -154,6 +154,7 @@ export interface ProfileTable {
   birthday: string | null;
   can_date: boolean;
   created_at: Timestamp;
+  dating_enabled: boolean;
   contribution_score: number;
   dating_modes: JsonColumn<string[]>;
   distance_miles: number;

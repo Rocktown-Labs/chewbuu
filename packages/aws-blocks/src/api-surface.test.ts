@@ -26,6 +26,7 @@ describe("AWS Blocks API surface", () => {
       "getDateMedia",
       "getDateMeeting",
       "getDatingSummary",
+      "setDatingAvailability",
       "createIdentityVerificationSession",
       "getIdentityVerificationStatus",
       "getUsernameChangeStatus",
@@ -133,7 +134,7 @@ describe("AWS Blocks API surface", () => {
       "inviteVenueMembers",
     ];
 
-    expect(methodNames).toHaveLength(126);
+    expect(methodNames).toHaveLength(127);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {

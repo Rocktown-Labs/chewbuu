@@ -7,7 +7,7 @@ import {
   MapPin,
   RefreshCw,
 } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -16,7 +16,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { authClient } from "@/lib/auth-client";
 import { datingApi } from "@/lib/dating-api";
-import { getPastRequests, getUpcomingRequests } from "@/lib/dating-utils";
+import {
+  getPastRequests,
+  getUpcomingRequests,
+  isDateRequestActionable,
+} from "@/lib/dating-utils";
 import {
   dateRequestsCollection,
   refreshDatingData,
@@ -139,11 +143,38 @@ export default function DatesScreen() {
         : undefined,
   });
   const requestList = useMemo(() => requests ?? [], [requests]);
-  const upcoming = useMemo(
-    () => getUpcomingRequests(requestList),
-    [requestList]
+  const [requestWindowNow, setRequestWindowNow] = useState(() => Date.now());
+  const [handledRequestIds, setHandledRequestIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const hasIncomingRequest = requestList.some(
+      (request) =>
+        !request.isRequester && !handledRequestIds.includes(request.id)
+    );
+    if (!hasIncomingRequest) return;
+
+    const interval = setInterval(() => setRequestWindowNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [handledRequestIds, requestList]);
+
+  const visibleRequests = useMemo(
+    () =>
+      requestList.filter(
+        (request) =>
+          request.isRequester ||
+          (!handledRequestIds.includes(request.id) &&
+            isDateRequestActionable(request.createdAt, requestWindowNow))
+      ),
+    [handledRequestIds, requestList, requestWindowNow]
   );
-  const past = useMemo(() => getPastRequests(requestList), [requestList]);
+  const upcoming = useMemo(
+    () => getUpcomingRequests(visibleRequests),
+    [visibleRequests]
+  );
+  const past = useMemo(
+    () => getPastRequests(visibleRequests),
+    [visibleRequests]
+  );
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -310,12 +341,17 @@ export default function DatesScreen() {
           return (
             <Pressable
               className="mb-3"
-              onPress={() =>
+              onPress={() => {
+                if (!item.isRequester) {
+                  setHandledRequestIds((current) =>
+                    current.includes(item.id) ? current : [...current, item.id]
+                  );
+                }
                 router.push({
                   pathname: "/date/[date-id]",
                   params: { "date-id": item.id },
-                })
-              }
+                });
+              }}
             >
               <Card className={`p-4 ${!isPast ? "border-amber-500/40" : ""}`}>
                 <View className="flex-row items-start justify-between gap-3">

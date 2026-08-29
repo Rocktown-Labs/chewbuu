@@ -527,6 +527,9 @@ export interface AwsBlocksApi {
   publishTyping: (roomId: string, isTyping: boolean) => Promise<{ ok: true }>;
   getDatingSummary: () => Promise<DatingSummaryResponse>;
   getProfile: () => Promise<{ profile: DatingProfileResponse | null }>;
+  setDatingAvailability: (input: { enabled: boolean }) => Promise<{
+    readiness: DatingReadiness;
+  }>;
   createIdentityVerificationSession: () => Promise<IdentityVerificationSession>;
   getIdentityVerificationStatus: () => Promise<IdentityVerificationSession>;
   requestUsernameChange: (input: { username: string }) => Promise<{
@@ -1278,6 +1281,7 @@ export interface RecapResponse extends PublishRecapInput {
 
 export interface DatingReadiness {
   canDate: boolean;
+  datingEnabled: boolean;
   identityVerified: boolean;
   onboarded: boolean;
   pendingReviews: number;
@@ -1309,13 +1313,16 @@ export interface DatingSummaryResponse {
   pendingReviews: number;
   readiness: {
     canDate: boolean;
+    datingEnabled: boolean;
     identityVerified: boolean;
     onboarded: boolean;
     pendingReviews: number;
   };
   requests: {
+    createdAt: string;
     filters: string[];
     id: string;
+    isRequester: boolean;
     matches: {
       compatibility: number;
       distanceMiles?: number;
@@ -1336,6 +1343,11 @@ export interface DatingSummaryResponse {
     }[];
     partySize: number;
     paymentMode: string;
+    requester: {
+      avatar: string | null;
+      bio: string;
+      name: string;
+    };
     places: {
       address?: string;
       name: string;
