@@ -89,6 +89,53 @@ describe("_auth route guard", () => {
     expect(result).toEqual({ session: { data: expect.anything() } });
   });
 
+  it("allows un-onboarded users to access nearby spots", async () => {
+    mocks.getSession.mockResolvedValue({
+      data: {
+        user: {
+          email: "newuser@example.com",
+          hasCompletedOnboarding: false,
+          id: "user-1",
+        },
+      },
+    });
+
+    const { beforeLoad } = Route.options;
+    if (!beforeLoad) {
+      throw new Error("beforeLoad is required");
+    }
+
+    const result = await beforeLoad({
+      location: { pathname: "/me/spots/eat" },
+    } as any);
+
+    expect(result).toEqual({ session: { data: expect.anything() } });
+  });
+
+  it("allows onboarded users without a dating location to access nearby spots", async () => {
+    mocks.getSession.mockResolvedValue({
+      data: {
+        user: {
+          email: "onboarded@example.com",
+          hasCompletedOnboarding: true,
+          id: "user-1",
+        },
+      },
+    });
+    mocks.getProfile.mockResolvedValue({ profile: null });
+
+    const { beforeLoad } = Route.options;
+    if (!beforeLoad) {
+      throw new Error("beforeLoad is required");
+    }
+
+    const result = await beforeLoad({
+      location: { pathname: "/me/spots/drink" },
+    } as any);
+
+    expect(result).toEqual({ session: { data: expect.anything() } });
+  });
+
   it("allows un-onboarded users to access /onboarding", async () => {
     const sessionData = {
       user: {

@@ -13,10 +13,13 @@ export const Route = createFileRoute("/_auth")({
     }
     const { user } = session.data;
     const needsOnboarding = !user.hasCompletedOnboarding;
+    const isSpotsRoute = location.pathname.startsWith("/me/spots/");
 
     if (needsOnboarding) {
       const canViewIncompleteDashboard =
-        location.pathname === "/me" || location.pathname === "/me/profile";
+        location.pathname === "/me" ||
+        location.pathname === "/me/profile" ||
+        isSpotsRoute;
       if (!canViewIncompleteDashboard && location.pathname !== "/onboarding") {
         throw redirect({
           to: "/onboarding",
@@ -24,7 +27,9 @@ export const Route = createFileRoute("/_auth")({
       }
     } else {
       const isProfileRoute =
-        location.pathname === "/me" || location.pathname === "/me/profile";
+        location.pathname === "/me" ||
+        location.pathname === "/me/profile" ||
+        isSpotsRoute;
       if (!isProfileRoute && location.pathname !== "/onboarding") {
         const profileResult = await blocksApi.getProfile();
         const { profile } = profileResult;

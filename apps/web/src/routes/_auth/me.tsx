@@ -112,6 +112,10 @@ import {
 } from "@/features/date-requests/date-request-window";
 import { DateWizard } from "@/features/date-wizard/date-wizard";
 import { RecapsPage } from "@/features/recaps/recaps-page";
+import {
+  getNearbySpotsArea,
+  getNearbySpotsFilters,
+} from "@/features/spots/spot-search";
 import { getMatchAgeBounds } from "@/lib/age-rules";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -206,6 +210,7 @@ interface DateHistoryItem {
 }
 
 const meSearchSchema = z.object({
+  category: z.enum(["all", "eat", "drink", "play"]).optional(),
   dateId: z.string().optional(),
   usernameToken: z.string().optional(),
   filter: z.enum(["all", "received", "sent", "active"]).optional(),
@@ -568,6 +573,7 @@ function RouteComponent() {
     <MePage
       initialDateId={search.dateId}
       initialFilter={search.filter}
+      initialSpotsCategory={search.category}
       initialStep={search.step}
       initialTab={search.tab ?? "feed"}
       initialUsernameToken={search.usernameToken}
@@ -1189,7 +1195,7 @@ export function MePage({
 
   const isFullView = activeTab === "chats" || activeTab === "matches";
   const isSidebarCollapsed = isFullView || userCollapsedSidebar;
-  const showRightSidebar = !isFullView;
+  const showRightSidebar = activeTab !== "spots" && !isFullView;
 
   // Local state for user's own uploaded date recaps (persisted to localStorage)
   const [userRecaps, setUserRecaps] = useState<DateRecap[]>([]);
@@ -1748,8 +1754,11 @@ export function MePage({
     void loadSpecials();
   }, [activeTab]);
 
+  const spotsSearchArea = getNearbySpotsArea(userCity, profile?.area);
+
   useEffect(() => {
-    if (!profile?.area) {
+    if (activeTab !== "spots") return;
+    if (!spotsSearchArea) {
       setSpots([]);
       return;
     }
@@ -1757,24 +1766,24 @@ export function MePage({
     const fetchSpots = async () => {
       setIsLoadingSpots(true);
       try {
-        const filters = spotsQuery.trim() ? [spotsQuery.trim()] : ["date spot"];
+        const filters = getNearbySpotsFilters(spotsQuery);
         const requests =
           spotsCategory === "all"
             ? (["eat", "drink", "play"] as const).map((what) =>
                 datingApi.suggestPlaces({
-                  area: profile.area,
+                  area: spotsSearchArea,
                   filters,
-                  latitude: profile.latitude || undefined,
-                  longitude: profile.longitude || undefined,
+                  latitude: profile?.latitude || undefined,
+                  longitude: profile?.longitude || undefined,
                   what: [what],
                 })
               )
             : [
                 datingApi.suggestPlaces({
-                  area: profile.area,
+                  area: spotsSearchArea,
                   filters,
-                  latitude: profile.latitude || undefined,
-                  longitude: profile.longitude || undefined,
+                  latitude: profile?.latitude || undefined,
+                  longitude: profile?.longitude || undefined,
                   what: [spotsCategory],
                 }),
               ];
@@ -1791,7 +1800,7 @@ export function MePage({
         toast.error(
           error instanceof Error
             ? error.message
-            : "Could not load nearby date spots."
+            : "Could not load nearby spots."
         );
       } finally {
         setIsLoadingSpots(false);
@@ -1804,11 +1813,12 @@ export function MePage({
 
     return () => window.clearTimeout(timeout);
   }, [
-    profile?.area,
+    activeTab,
     profile?.latitude,
     profile?.longitude,
     spotsCategory,
     spotsQuery,
+    spotsSearchArea,
   ]);
 
   const ChatView = dashboardChatsComponent;
@@ -2104,6 +2114,11 @@ export function MePage({
                   />
                 ) : (
                   <>
+                    <DateListView
+                      dates={confirmedDates}
+                      onOpenDate={openDateHistory}
+                      onPlanDate={openPlanDateDrawer}
+                    />
                     {summary?.readiness.onboarded &&
                     !receivingDateRequests &&
                     summary.readiness.pendingReviews === 0 ? (
@@ -2453,7 +2468,9 @@ export function MePage({
                     type="button"
                   >
                     <MapPin className="size-3.5" />
-                    <span>{userCity}</span>
+                    <span>
+                      {userCity || profile?.area || "Choose location"}
+                    </span>
                     <span className="text-[10px] text-muted-foreground opacity-80">
                       (Change)
                     </span>
@@ -2468,7 +2485,7 @@ export function MePage({
                   <Input
                     className="pl-10 rounded-full h-11 bg-card/60"
                     onChange={(event) => setSpotsQuery(event.target.value)}
-                    placeholder={`Search Eat, Drink, Play spots in ${profile?.area || "Nashville, TN"}...`}
+                    placeholder={`Search nearby Eat, Drink, or Play spots in ${spotsSearchArea || "your area"}...`}
                     value={spotsQuery}
                   />
                 </div>
@@ -2493,22 +2510,13 @@ export function MePage({
               </div>
 
               <div className="p-5 flex flex-col gap-8">
-                <DateListView
-                  dates={confirmedDates}
-                  onOpenDate={openDateHistory}
-                  onPlanDate={(date) => {
-                    setPresetDateForWizard(date);
-                    setPresetPlaceForWizard(undefined);
-                    setIsPlanDateDrawerOpen(true);
-                  }}
-                />
                 {publicSpecials.length > 0 ? (
                   <section className="flex flex-col gap-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <h3 className="font-bold text-lg">Live specials</h3>
                         <p className="text-sm text-muted-foreground">
-                          Venue-published offers near your next date.
+                          Venue-published offers nearby.
                         </p>
                       </div>
                       <Link
@@ -2527,13 +2535,13 @@ export function MePage({
                 ) : null}
                 {isLoadingSpots ? (
                   <p className="text-sm text-muted-foreground">
-                    Finding nearby date spots...
+                    Finding nearby spots...
                   </p>
                 ) : spots.length === 0 ? (
                   <Card className="rounded-2xl border-border bg-card/45">
                     <CardContent className="p-6 text-sm text-muted-foreground">
-                      Add your dating location in onboarding to fetch real spots
-                      near you.
+                      Choose a location or allow location access to fetch real
+                      spots near you.
                     </CardContent>
                   </Card>
                 ) : spotsCategory === "all" ? (
@@ -2546,11 +2554,7 @@ export function MePage({
                             Spot partner
                           </Badge>
                         </div>
-                        <SpotCard
-                          canDate={canDate}
-                          featured
-                          spot={featuredSpot}
-                        />
+                        <SpotCard featured spot={featuredSpot} />
                       </section>
                     )}
                     {(["eat", "drink", "play"] as const).map((category) => {
@@ -2563,7 +2567,6 @@ export function MePage({
 
                       return (
                         <SpotSection
-                          canDate={canDate}
                           category={category}
                           key={category}
                           onViewAll={() => setSpotCategory(category)}
@@ -2577,17 +2580,13 @@ export function MePage({
                     <h3 className="font-bold text-lg text-foreground flex items-center justify-between">
                       <span className="capitalize">
                         {spotsCategory} spots near{" "}
-                        {profile?.area || "your saved area"}
+                        {spotsSearchArea || "your area"}
                       </span>
                       <ChevronRight className="size-4 text-muted-foreground" />
                     </h3>
                     <div className="grid gap-4 md:grid-cols-2">
                       {spots.map((spot) => (
-                        <SpotCard
-                          key={spot.placeId}
-                          spot={spot}
-                          canDate={canDate}
-                        />
+                        <SpotCard key={spot.placeId} spot={spot} />
                       ))}
                     </div>
                   </section>
@@ -3531,7 +3530,7 @@ export function MePage({
                 Change Your Location
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Set a city or area to find local date spots and recaps.
+                Set a city or area to find nearby spots and local specials.
               </DialogDescription>
             </DialogHeader>
 
@@ -6426,12 +6425,10 @@ function MatchStatusBadge({ status }: { status: DateHistoryMatchStatus }) {
 function SpotSection({
   category,
   spots,
-  canDate,
   onViewAll,
 }: {
   category: Exclude<SpotCategory, "all">;
   spots: DatePlace[];
-  canDate: boolean;
   onViewAll: () => void;
 }) {
   if (spots.length === 0) {
@@ -6456,7 +6453,7 @@ function SpotSection({
       <div className="-mx-5 flex gap-4 overflow-x-auto px-5 pb-1">
         {spots.map((spot) => (
           <div className="w-72 shrink-0" key={spot.placeId}>
-            <SpotCard canDate={canDate} spot={spot} />
+            <SpotCard spot={spot} />
           </div>
         ))}
       </div>
@@ -6508,11 +6505,9 @@ const formatPriceLevel = (value?: string) => {
 
 function SpotCard({
   spot,
-  canDate,
   featured = false,
 }: {
   spot: DatePlace;
-  canDate: boolean;
   featured?: boolean;
 }) {
   const price = formatPriceLevel(spot.priceLevel);
@@ -6617,63 +6612,37 @@ function SpotCard({
             </p>
           ) : null}
         </div>
-        <div className="grid gap-2">
-          {canDate ? (
-            <Link
+        <div className="flex gap-2">
+          {spot.googleMapsUri && (
+            <a
               className={buttonVariants({
-                className: "w-full rounded-full text-xs font-bold h-9",
+                className: "flex-1 rounded-full text-xs font-semibold h-8",
                 size: "sm",
+                variant: "outline",
               })}
-              search={{ placeId: spot.placeId, placeName: spot.name }}
-              to="/date/new"
+              href={spot.googleMapsUri}
+              rel="noopener"
+              target="_blank"
             >
-              <MapPin className="mr-1.5 size-4" />
-              Plan Date Here
-            </Link>
-          ) : (
-            <Link
-              className={buttonVariants({
-                className: "w-full rounded-full text-xs font-bold h-9",
-                size: "sm",
-              })}
-              to="/onboarding"
-            >
-              <MapPin className="mr-1.5 size-4" />
-              Finish Profile
-            </Link>
+              Maps
+              <ExternalLink className="size-3.5" />
+            </a>
           )}
-          <div className="flex gap-2">
-            {spot.googleMapsUri && (
-              <a
-                className={buttonVariants({
-                  className: "flex-1 rounded-full text-xs font-semibold h-8",
-                  size: "sm",
-                  variant: "outline",
-                })}
-                href={spot.googleMapsUri}
-                rel="noopener"
-                target="_blank"
-              >
-                Maps
-                <ExternalLink className="size-3.5" />
-              </a>
-            )}
-            {spot.websiteUri && (
-              <a
-                className={buttonVariants({
-                  className: "flex-1 rounded-full text-xs font-semibold h-8",
-                  size: "sm",
-                  variant: "outline",
-                })}
-                href={spot.websiteUri}
-                rel="noopener"
-                target="_blank"
-              >
-                Site
-                <ExternalLink className="size-3.5" />
-              </a>
-            )}
-          </div>
+          {spot.websiteUri && (
+            <a
+              className={buttonVariants({
+                className: "flex-1 rounded-full text-xs font-semibold h-8",
+                size: "sm",
+                variant: "outline",
+              })}
+              href={spot.websiteUri}
+              rel="noopener"
+              target="_blank"
+            >
+              Site
+              <ExternalLink className="size-3.5" />
+            </a>
+          )}
         </div>
       </div>
     </div>
