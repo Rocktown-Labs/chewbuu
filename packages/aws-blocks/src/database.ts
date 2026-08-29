@@ -1055,19 +1055,39 @@ export const getDatabaseUrl = async (): Promise<string> => {
 const configuredDatabaseUrl = normalizeConnectionString(
   process.env.DATABASE_URL
 );
+const configuredDatabaseCa = process.env.DATABASE_CA_CERT ?? DATABASE_CA_CERT;
+
+const isLocalDatabaseUrl = (value: string | undefined): boolean => {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    return (
+      ["localhost", "127.0.0.1", "::1"].includes(url.hostname) &&
+      (!url.port || url.port === "5432")
+    );
+  } catch {
+    return false;
+  }
+};
+
+// The local Postgres container is configured with TLS by dev-postgres.mjs, but
+// its certificate is intentionally not trusted by the Node process. Keep
+// production verification strict while allowing the disposable local
+// self-signed certificate to complete the TLS handshake.
+const databaseSsl =
+  isLocalDatabaseUrl(configuredDatabaseUrl) && !configuredDatabaseCa
+    ? { rejectUnauthorized: false as const }
+    : configuredDatabaseCa
+      ? { ca: configuredDatabaseCa, rejectUnauthorized: true as const }
+      : { rejectUnauthorized: true as const };
 
 const database = new Database(scope, "postgres", {
   connection: fromExisting({
     connectionString: configuredDatabaseUrl ?? {
       get: getDatabaseUrl,
     },
-    ssl:
-      (process.env.DATABASE_CA_CERT ?? DATABASE_CA_CERT)
-        ? {
-            ca: process.env.DATABASE_CA_CERT ?? DATABASE_CA_CERT,
-            rejectUnauthorized: true,
-          }
-        : { rejectUnauthorized: true },
+    ssl: databaseSsl,
   }),
 });
 

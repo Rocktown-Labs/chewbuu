@@ -52,19 +52,68 @@ if (!exists) {
   log(`${CONTAINER} already running`);
 }
 
-// 3. Wait for readiness (up to 30s)
-log("waiting for postgres to be ready...");
-for (let i = 0; i < 30; i += 1) {
-  const ready = podman(`exec ${CONTAINER} pg_isready -U ${USER} -d ${DB}`);
-  if (ready && ready.includes("accepting connections")) {
-    log("postgres ready");
-    break;
+const waitForReady = async () => {
+  log("waiting for postgres to be ready...");
+  for (let i = 0; i < 30; i += 1) {
+    const ready = podman(`exec ${CONTAINER} pg_isready -U ${USER} -d ${DB}`);
+    if (ready && ready.includes("accepting connections")) {
+      log("postgres ready");
+      return true;
+    }
+    await sleep(1000);
   }
-  await sleep(1000);
-  if (i === 29) log("warning: postgres not ready after 30s, continuing anyway");
+
+  log("warning: postgres not ready after 30s, continuing anyway");
+  return false;
+};
+
+// 3. Wait for readiness (up to 30s)
+await waitForReady();
+
+// 4. The Blocks Postgres adapter uses TLS for direct PostgreSQL connections.
+// Enable a disposable self-signed certificate in the managed local container so
+// local API calls and migrations exercise the same encrypted connection path.
+const SSL_CERT = "/var/lib/postgresql/data/server.crt";
+const SSL_KEY = "/var/lib/postgresql/data/server.key";
+const hasLocalCertificate = podman(
+  `exec ${CONTAINER} sh -c "test -s ${SSL_CERT} && test -s ${SSL_KEY} && echo ready"`
+);
+
+if (!hasLocalCertificate) {
+  log("generating local PostgreSQL TLS certificate...");
+  execSync(
+    `podman exec ${CONTAINER} openssl req -new -x509 -nodes -days 3650 -subj "/CN=chewbuu.local" -keyout ${SSL_KEY} -out ${SSL_CERT}`,
+    { stdio: "inherit" }
+  );
+  execSync(
+    `podman exec ${CONTAINER} chown postgres:postgres ${SSL_CERT} ${SSL_KEY}`,
+    { stdio: "inherit" }
+  );
+  execSync(`podman exec ${CONTAINER} chmod 600 ${SSL_KEY}`, {
+    stdio: "inherit",
+  });
 }
 
-// 4. Auto-migrate if DATABASE_URL points to localhost
+const sslStatus = podman(
+  `exec ${CONTAINER} psql -U ${USER} -d ${DB} -Atc "show ssl"`
+);
+if (sslStatus !== "on") {
+  log("enabling local PostgreSQL TLS...");
+  for (const setting of [
+    "ssl = 'on'",
+    `ssl_cert_file = '${SSL_CERT}'`,
+    `ssl_key_file = '${SSL_KEY}'`,
+  ]) {
+    execSync(
+      `podman exec ${CONTAINER} psql -U ${USER} -d ${DB} -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET ${setting};"`,
+      { stdio: "inherit" }
+    );
+  }
+  execSync(`podman restart ${CONTAINER}`, { stdio: "inherit" });
+  await waitForReady();
+}
+
+// 5. Auto-migrate if DATABASE_URL points to localhost
 const dbUrl =
   process.env.DATABASE_URL ||
   `postgres://${USER}:${PASSWORD}@localhost:${PORT}/${DB}`;

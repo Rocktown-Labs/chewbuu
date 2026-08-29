@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added automatic local environment loading and TLS-enabled PostgreSQL setup for Blocks development, including local-only auth/database defaults and strict production certificate verification.
 - Added pinned Portless development routing for the web, dating Expo, Sync Expo, and email preview apps with named URLs and a Vite proxy to the fixed Blocks API.
 - Added explicit dating availability with two-minute incoming request windows, onboarding-gated date planning, mobile parity, and robust place selection persistence.
 - Added automatic local Postgres startup and readiness gating to `bun run dev:blocks`.

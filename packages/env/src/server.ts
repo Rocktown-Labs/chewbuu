@@ -1,6 +1,17 @@
-import "dotenv/config";
+import path from "node:path";
+
 import { createEnv } from "@t3-oss/env-core";
+import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
+
+const workspaceRoot = path.resolve(import.meta.dirname, "../../../");
+
+for (const envFile of [
+  path.join(workspaceRoot, ".env"),
+  path.join(workspaceRoot, "apps/server/.env"),
+]) {
+  loadDotenv({ path: envFile, quiet: true });
+}
 
 const getVercelOrigin = () => {
   const vercelUrl =
