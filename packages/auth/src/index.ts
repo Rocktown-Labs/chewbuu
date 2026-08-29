@@ -3,11 +3,11 @@ import { passkey } from "@better-auth/passkey";
 import { stripe } from "@better-auth/stripe";
 import { createDb } from "@chewbuu/db";
 import { env } from "@chewbuu/env/server";
+import { createStripeClient } from "@chewbuu/stripe";
 import { APIError, betterAuth } from "better-auth";
 import { admin } from "better-auth/plugins/admin";
 import { organization } from "better-auth/plugins/organization";
 import { username } from "better-auth/plugins/username";
-import Stripe from "stripe";
 
 import { sendPasswordResetEmail, sendVerificationEmail } from "./email";
 import {
@@ -51,6 +51,19 @@ export const buildStripePlans = async (db?: ReturnType<typeof createDb>) => {
       .selectAll()
       .where("active", "=", true)
       .execute();
+    let syncPlan:
+      | { max_staff: number; monthly_stripe_price_id: string | null }
+      | undefined;
+    try {
+      syncPlan = await executor
+        .selectFrom("sync_plan")
+        .select(["max_staff", "monthly_stripe_price_id"])
+        .where("active", "=", true)
+        .where("code", "=", "sync_50")
+        .executeTakeFirst();
+    } catch {
+      // The Sync plan table is introduced after the legacy membership tables.
+    }
 
     const planByTier = new Map(plans.map((plan) => [plan.tier, plan]));
     const minglePlan = planByTier.get("mingle");
@@ -80,6 +93,16 @@ export const buildStripePlans = async (db?: ReturnType<typeof createDb>) => {
         name: MEMBERSHIP_TIERS.sugar.name,
         priceId: sugarPlan?.stripe_price_id || env.STRIPE_SUGAR_PRICE_ID,
       },
+      ...(syncPlan?.monthly_stripe_price_id
+        ? [
+            {
+              group: "sync",
+              limits: { maxStaff: syncPlan.max_staff },
+              name: "sync",
+              priceId: syncPlan.monthly_stripe_price_id,
+            },
+          ]
+        : []),
     ];
   } catch {
     return [
@@ -114,9 +137,9 @@ export const createAuth = () => {
       process.env.ADMIN_EMAILS ??
       env.BETTER_AUTH_ADMIN_EMAILS
   );
-  const stripeEnabled = Boolean(
-    env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET
-  );
+  const stripeWebhookSecret =
+    env.STRIPE_BILLING_WEBHOOK_SECRET ?? env.STRIPE_WEBHOOK_SECRET;
+  const stripeEnabled = Boolean(env.STRIPE_SECRET_KEY && stripeWebhookSecret);
   return betterAuth({
     advanced: {
       defaultCookieAttributes: {
@@ -290,8 +313,29 @@ export const createAuth = () => {
         ? [
             stripe({
               createCustomerOnSignUp: true,
-              stripeClient: new Stripe(env.STRIPE_SECRET_KEY as string),
-              stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET as string,
+              getCheckoutSessionParams: (data: {
+                subscription: { plan: string; referenceId: string };
+              }) => ({
+                params: {
+                  metadata: {
+                    app: "chewbuu",
+                    plan: data.subscription.plan,
+                    reference_id: data.subscription.referenceId,
+                  },
+                },
+              }),
+              organization: {
+                enabled: true,
+                getCustomerCreateParams: async (organization) => ({
+                  metadata: {
+                    app: "chewbuu",
+                    organization_id: organization.id,
+                  },
+                  name: organization.name,
+                }),
+              },
+              stripeClient: createStripeClient(env.STRIPE_SECRET_KEY as string),
+              stripeWebhookSecret: stripeWebhookSecret as string,
               subscription: {
                 enabled: true,
                 plans: () => buildStripePlans(db),
@@ -318,6 +362,11 @@ export const createAuth = () => {
                   },
                 },
                 user: {
+                  fields: {
+                    stripeCustomerId: "stripe_customer_id",
+                  },
+                },
+                organization: {
                   fields: {
                     stripeCustomerId: "stripe_customer_id",
                   },

@@ -37,7 +37,9 @@
                 "format": "date-time"
               }
             },
-            "required": ["locationId"]
+            "required": [
+              "locationId"
+            ]
           }
         }
       ],
@@ -81,7 +83,11 @@
                 "description": "Optional staff user ID when clocking in via tablet kiosk"
               }
             },
-            "required": ["locationId", "shiftId", "code"]
+            "required": [
+              "locationId",
+              "shiftId",
+              "code"
+            ]
           }
         }
       ],
@@ -94,7 +100,9 @@
               "$ref": "#/components/schemas/VenueShiftAttendance"
             }
           },
-          "required": ["attendance"]
+          "required": [
+            "attendance"
+          ]
         }
       }
     },
@@ -123,7 +131,10 @@
                 ]
               }
             },
-            "required": ["attendanceId", "action"]
+            "required": [
+              "attendanceId",
+              "action"
+            ]
           }
         }
       ],
@@ -136,7 +147,9 @@
               "$ref": "#/components/schemas/VenueShiftAttendance"
             }
           },
-          "required": ["attendance"]
+          "required": [
+            "attendance"
+          ]
         }
       }
     },
@@ -162,7 +175,10 @@
                 "format": "date-time"
               }
             },
-            "required": ["attendanceId", "lateMinutes"]
+            "required": [
+              "attendanceId",
+              "lateMinutes"
+            ]
           }
         }
       ],
@@ -175,7 +191,9 @@
               "$ref": "#/components/schemas/VenueShiftAttendance"
             }
           },
-          "required": ["attendance"]
+          "required": [
+            "attendance"
+          ]
         }
       }
     },
@@ -209,7 +227,10 @@
               },
               "source": {
                 "type": "string",
-                "enum": ["preorder", "staff"]
+                "enum": [
+                  "preorder",
+                  "staff"
+                ]
               },
               "tipCents": {
                 "type": "integer"
@@ -247,11 +268,18 @@
                       }
                     }
                   },
-                  "required": ["name", "quantity", "unitPriceCents"]
+                  "required": [
+                    "name",
+                    "quantity",
+                    "unitPriceCents"
+                  ]
                 }
               }
             },
-            "required": ["locationId", "items"]
+            "required": [
+              "locationId",
+              "items"
+            ]
           }
         }
       ],
@@ -264,7 +292,9 @@
               "$ref": "#/components/schemas/VenueServiceOrder"
             }
           },
-          "required": ["order"]
+          "required": [
+            "order"
+          ]
         }
       }
     },
@@ -287,7 +317,10 @@
               },
               "paymentStatus": {
                 "type": "string",
-                "enum": ["paid", "unpaid"]
+                "enum": [
+                  "paid",
+                  "unpaid"
+                ]
               },
               "tipCents": {
                 "type": "integer"
@@ -296,7 +329,9 @@
                 "type": "string"
               }
             },
-            "required": ["orderId"]
+            "required": [
+              "orderId"
+            ]
           }
         }
       ],
@@ -309,7 +344,9 @@
               "$ref": "#/components/schemas/VenueServiceOrder"
             }
           },
-          "required": ["order"]
+          "required": [
+            "order"
+          ]
         }
       }
     },
@@ -351,7 +388,11 @@
               },
               "experienceKind": {
                 "type": "string",
-                "enum": ["date", "dine_in", "pickup"]
+                "enum": [
+                  "date",
+                  "dine_in",
+                  "pickup"
+                ]
               },
               "orderId": {
                 "type": "string",
@@ -368,7 +409,11 @@
                 }
               }
             },
-            "required": ["cancelUrl", "orderId", "successUrl"]
+            "required": [
+              "cancelUrl",
+              "orderId",
+              "successUrl"
+            ]
           }
         }
       ],
@@ -394,7 +439,9 @@
                 "format": "uuid"
               }
             },
-            "required": ["locationId"]
+            "required": [
+              "locationId"
+            ]
           }
         }
       ],
@@ -420,7 +467,9 @@
                 "format": "uuid"
               }
             },
-            "required": ["locationId"]
+            "required": [
+              "locationId"
+            ]
           }
         }
       ],
@@ -450,7 +499,10 @@
                 "format": "uuid"
               }
             },
-            "required": ["locationId", "userId"]
+            "required": [
+              "locationId",
+              "userId"
+            ]
           }
         }
       ],
@@ -522,7 +574,9 @@
                 "type": "string"
               }
             },
-            "required": ["orderId"]
+            "required": [
+              "orderId"
+            ]
           }
         }
       ],
@@ -558,7 +612,9 @@
               }
             }
           },
-          "required": ["channels"]
+          "required": [
+            "channels"
+          ]
         }
       }
     },
@@ -587,7 +643,9 @@
               }
             }
           },
-          "required": ["staff"]
+          "required": [
+            "staff"
+          ]
         }
       }
     },
@@ -616,7 +674,9 @@
               }
             }
           },
-          "required": ["listings"]
+          "required": [
+            "listings"
+          ]
         }
       }
     },
@@ -645,7 +705,9 @@
               }
             }
           },
-          "required": ["items"]
+          "required": [
+            "items"
+          ]
         }
       }
     },
@@ -663,7 +725,10 @@
               "properties": {
                 "role": {
                   "type": "string",
-                  "enum": ["assistant", "user"]
+                  "enum": [
+                    "assistant",
+                    "user"
+                  ]
                 },
                 "parts": {
                   "type": "array",
@@ -672,17 +737,25 @@
                     "properties": {
                       "type": {
                         "type": "string",
-                        "enum": ["text"]
+                        "enum": [
+                          "text"
+                        ]
                       },
                       "text": {
                         "type": "string"
                       }
                     },
-                    "required": ["type", "text"]
+                    "required": [
+                      "type",
+                      "text"
+                    ]
                   }
                 }
               },
-              "required": ["role", "parts"]
+              "required": [
+                "role",
+                "parts"
+              ]
             }
           }
         }
@@ -696,7 +769,9 @@
               "type": "string"
             }
           },
-          "required": ["text"]
+          "required": [
+            "text"
+          ]
         }
       }
     }
@@ -728,7 +803,12 @@
       },
       "VenueServiceMode": {
         "type": "string",
-        "enum": ["closed", "closing", "open", "pre_open"]
+        "enum": [
+          "closed",
+          "closing",
+          "open",
+          "pre_open"
+        ]
       },
       "VenueAttendanceSegment": {
         "type": "object",
@@ -739,7 +819,10 @@
           },
           "kind": {
             "type": "string",
-            "enum": ["rest_break", "lunch"]
+            "enum": [
+              "rest_break",
+              "lunch"
+            ]
           },
           "startedAt": {
             "type": "string",
@@ -750,7 +833,11 @@
             "format": "date-time"
           }
         },
-        "required": ["id", "kind", "startedAt"]
+        "required": [
+          "id",
+          "kind",
+          "startedAt"
+        ]
       },
       "VenueShiftAttendance": {
         "type": "object",
@@ -783,7 +870,10 @@
           },
           "currentSegmentKind": {
             "type": "string",
-            "enum": ["rest_break", "lunch"]
+            "enum": [
+              "rest_break",
+              "lunch"
+            ]
           },
           "currentSegmentStartedAt": {
             "type": "string",
@@ -834,13 +924,22 @@
           },
           "status": {
             "type": "string",
-            "enum": ["active", "invited", "removed", "suspended"]
+            "enum": [
+              "active",
+              "invited",
+              "removed",
+              "suspended"
+            ]
           },
           "attendance": {
             "$ref": "#/components/schemas/VenueShiftAttendance"
           }
         },
-        "required": ["displayName", "role", "status"]
+        "required": [
+          "displayName",
+          "role",
+          "status"
+        ]
       },
       "VenueServiceCustomer": {
         "type": "object",
@@ -870,7 +969,11 @@
             "type": "string"
           }
         },
-        "required": ["id", "locationId", "displayName"]
+        "required": [
+          "id",
+          "locationId",
+          "displayName"
+        ]
       },
       "VenueServiceOrderItem": {
         "type": "object",
@@ -901,7 +1004,13 @@
             }
           }
         },
-        "required": ["id", "name", "quantity", "unitPriceCents", "modifiers"]
+        "required": [
+          "id",
+          "name",
+          "quantity",
+          "unitPriceCents",
+          "modifiers"
+        ]
       },
       "VenueServiceOrder": {
         "type": "object",
@@ -945,7 +1054,11 @@
           },
           "source": {
             "type": "string",
-            "enum": ["guest", "preorder", "staff"]
+            "enum": [
+              "guest",
+              "preorder",
+              "staff"
+            ]
           },
           "customer": {
             "$ref": "#/components/schemas/VenueServiceCustomer"
@@ -1096,7 +1209,12 @@
             "type": "string"
           }
         },
-        "required": ["id", "locationId", "roomId", "title"]
+        "required": [
+          "id",
+          "locationId",
+          "roomId",
+          "title"
+        ]
       },
       "VenueJobListing": {
         "type": "object",
@@ -1129,7 +1247,11 @@
           },
           "status": {
             "type": "string",
-            "enum": ["archived", "draft", "published"]
+            "enum": [
+              "archived",
+              "draft",
+              "published"
+            ]
           },
           "publishedAt": {
             "type": "string",
@@ -1183,7 +1305,11 @@
           },
           "status": {
             "type": "string",
-            "enum": ["draft", "published", "archived"]
+            "enum": [
+              "draft",
+              "published",
+              "archived"
+            ]
           }
         },
         "required": [
@@ -1204,13 +1330,20 @@
           },
           "beneficiaryKind": {
             "type": "string",
-            "enum": ["cook", "house", "server"]
+            "enum": [
+              "cook",
+              "house",
+              "server"
+            ]
           },
           "beneficiaryUserId": {
             "type": "string"
           }
         },
-        "required": ["amountCents", "beneficiaryKind"]
+        "required": [
+          "amountCents",
+          "beneficiaryKind"
+        ]
       },
       "StripeCheckoutSessionResponse": {
         "type": "object",
@@ -1315,7 +1448,10 @@
             "type": "string"
           }
         },
-        "required": ["amountCents", "refundId"]
+        "required": [
+          "amountCents",
+          "refundId"
+        ]
       }
     }
   }

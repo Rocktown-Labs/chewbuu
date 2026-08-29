@@ -104,7 +104,7 @@ Embeddings are deliberately not used for timestamp or cost analytics. A future q
 
 Stripe Connect onboarding is a venue capability, not an automatic side effect of claiming a listing. The initial payment architecture should support one venue per checkout, application fees, webhook-driven fulfillment, refunds, disputes, and payout readiness.
 
-For tipping, the first version records the customer tip and a venue-configured allocation ledger (house, kitchen, service, or a tip pool). The venue can export or settle the allocation through its existing payroll process. Direct payouts to each chef or server require additional identity verification, tax, payout, dispute, and consent handling, so they remain a later capability.
+For tipping, the platform creates separate Connect transfers for the venue, house, cook, and server allocations after the customer payment succeeds. Every worker receiving direct tips must complete Connect recipient onboarding and have active transfer capability. Allocation changes after settlement are represented as reversals and replacement records. Card issuance and payroll integrations remain separate capabilities.
 
 Chewbuu-branded cards through Stripe Issuing/Treasury are a later financial-product track. They are not required for reservations, ordering, or venue onboarding.
 
@@ -156,5 +156,5 @@ Invitations are email-backed, tokenized, and email-matched on acceptance. Existi
 2. Venue workspace with menu, media, hours, staff, shifts, and shift swaps.
 3. Reservations, dine-now sessions, table labels, feedback, and specials.
 4. Timing event capture, operational analytics, and public metrics.
-5. Stripe Connect onboarding, ordering, tips ledger, refunds, and payouts.
+5. Stripe Connect onboarding, multi-recipient ordering, tip transfers, refunds, disputes, and payout reconciliation.
 6. Multi-location enterprise controls, integrations, featured listings, and Crew events.

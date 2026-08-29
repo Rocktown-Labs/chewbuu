@@ -13,9 +13,17 @@ import type { VenueLocation } from "@/lib/dating-api";
 import { SyncWorkspace } from "./sync-workspace";
 
 const mocks = vi.hoisted(() => ({
+  connectApi: {
+    getVenueStatus: vi.fn(),
+    startVenueOnboarding: vi.fn(),
+    startWorkerOnboarding: vi.fn(),
+  },
   chatApi: {
     getMessages: vi.fn(),
     sendMessage: vi.fn(),
+  },
+  paymentsApi: {
+    checkout: vi.fn(),
   },
   venueApi: {
     clockIn: vi.fn(),
@@ -45,7 +53,11 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("@/lib/chat-api", () => ({ chatApi: mocks.chatApi }));
-vi.mock("@/lib/dating-api", () => ({ venueApi: mocks.venueApi }));
+vi.mock("@/lib/dating-api", () => ({
+  connectApi: mocks.connectApi,
+  paymentsApi: mocks.paymentsApi,
+  venueApi: mocks.venueApi,
+}));
 
 const location: VenueLocation = {
   address: "123 Main Street",
@@ -98,6 +110,12 @@ const board = (
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.connectApi.getVenueStatus.mockResolvedValue({
+    accountId: null,
+    onboardingStatus: "not_started",
+    requirements: {},
+    transferCapabilityStatus: "inactive",
+  });
   mocks.venueApi.getServiceBoard.mockResolvedValue(board("manager"));
   mocks.venueApi.listServiceCustomers.mockResolvedValue({ customers: [] });
   mocks.venueApi.listMenuItems.mockResolvedValue({ items: [] });

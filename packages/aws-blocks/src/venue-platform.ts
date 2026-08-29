@@ -20,6 +20,7 @@ import type {
   VenueWorkspace,
 } from "./types";
 import { previewVenueMenu } from "./venue-menu";
+import { validateVenueOrderItems } from "./venue-pricing";
 import {
   brandStyleSchema,
   handleSchema,
@@ -98,6 +99,11 @@ const createReferral = async (
   locationId: string,
   userId: string
 ) => {
+  const syncPlan = await db
+    .selectFrom("sync_plan")
+    .select("referral_reward_cents")
+    .where("code", "=", "sync_50")
+    .executeTakeFirst();
   const id = randomUUID();
   await db
     .insertInto("venue_referral")
@@ -105,7 +111,7 @@ const createReferral = async (
       id,
       location_id: locationId,
       referrer_user_id: userId,
-      reward_amount_cents: 5000,
+      reward_amount_cents: syncPlan?.referral_reward_cents ?? 5000,
       status: "referred",
     })
     .onConflict((builder) =>
@@ -499,6 +505,42 @@ export const inviteVenueMembers = async (
     .where("id", "=", body.locationId)
     .executeTakeFirst();
   if (!location) throw new Error("Venue not found.");
+  const [syncPlan, organizationSubscription, legacySubscription, activeStaff] =
+    await Promise.all([
+      db
+        .selectFrom("sync_plan")
+        .select("max_staff")
+        .where("code", "=", "sync_50")
+        .executeTakeFirst(),
+      db
+        .selectFrom("subscription")
+        .select("status")
+        .where("reference_id", "=", location.organization_id)
+        .where("plan", "=", "sync")
+        .where("status", "in", ["active", "trialing"])
+        .executeTakeFirst(),
+      db
+        .selectFrom("sync_subscription")
+        .select("status")
+        .where("organization_id", "=", location.organization_id)
+        .where("status", "in", ["active", "trialing"])
+        .executeTakeFirst(),
+      db
+        .selectFrom("venue_member")
+        .select("id")
+        .where("organization_id", "=", location.organization_id)
+        .where("status", "=", "active")
+        .execute(),
+    ]);
+  if (!organizationSubscription && !legacySubscription) {
+    throw new Error("An active Chewbuu Sync subscription is required.");
+  }
+  const maxStaff = syncPlan?.max_staff ?? 50;
+  if (activeStaff.length + body.members.length > maxStaff) {
+    throw new Error(
+      `This Sync plan supports up to ${maxStaff} active staff members.`
+    );
+  }
 
   const invites: CommunityInviteResponse[] = [];
   for (const member of body.members) {
@@ -1354,6 +1396,7 @@ export const createVenueOrder = async (userId: string, input: unknown) => {
       items: z
         .array(
           z.object({
+            menuItemId: z.string().min(1).optional(),
             name: z.string().trim().min(1).max(200),
             notes: z.string().trim().max(500).optional(),
             quantity: z.number().int().min(1).max(100),
@@ -1364,6 +1407,15 @@ export const createVenueOrder = async (userId: string, input: unknown) => {
         .max(100),
       locationId: z.string().min(1),
       reservationId: z.string().min(1).optional(),
+      tipAllocations: z
+        .array(
+          z.object({
+            amountCents: z.number().int().positive(),
+            beneficiaryKind: z.enum(["cook", "house", "server"]),
+            beneficiaryUserId: z.string().min(1).optional(),
+          })
+        )
+        .optional(),
       tipCents: z.number().int().min(0).max(1_000_000).default(0),
     })
     .parse(input);
@@ -1375,10 +1427,37 @@ export const createVenueOrder = async (userId: string, input: unknown) => {
     .executeTakeFirst();
   if (!location) throw new Error("Venue not found");
 
-  const subtotalCents = orderInput.items.reduce(
-    (total, item) => total + item.quantity * item.unitPriceCents,
-    0
+  const subtotalCents = await validateVenueOrderItems(
+    db,
+    orderInput.locationId,
+    orderInput.items
   );
+  const tipAllocations =
+    orderInput.tipAllocations ??
+    (orderInput.tipCents > 0
+      ? [
+          {
+            amountCents: orderInput.tipCents,
+            beneficiaryKind: "house" as const,
+          },
+        ]
+      : []);
+  if (
+    tipAllocations.reduce(
+      (total, allocation) => total + allocation.amountCents,
+      0
+    ) !== orderInput.tipCents
+  ) {
+    throw new Error("Tip allocations must equal the order tip.");
+  }
+  if (
+    tipAllocations.some(
+      (allocation) =>
+        allocation.beneficiaryKind !== "house" && !allocation.beneficiaryUserId
+    )
+  ) {
+    throw new Error("Worker tip allocations require a staff member.");
+  }
   const orderId = randomUUID();
   const totalCents = subtotalCents + orderInput.tipCents;
   await db.transaction().execute(async (transaction) => {
@@ -1405,6 +1484,8 @@ export const createVenueOrder = async (userId: string, input: unknown) => {
       .values(
         orderInput.items.map((item) => ({
           id: randomUUID(),
+          menu_item_id: item.menuItemId ?? null,
+          modifiers: jsonb([]),
           name: item.name,
           notes: item.notes,
           order_id: orderId,
@@ -1413,6 +1494,25 @@ export const createVenueOrder = async (userId: string, input: unknown) => {
         }))
       )
       .execute();
+    if (tipAllocations.length) {
+      await transaction
+        .insertInto("venue_tip_allocation")
+        .values(
+          tipAllocations.map((allocation) => ({
+            amount_cents: allocation.amountCents,
+            beneficiary_kind: allocation.beneficiaryKind,
+            beneficiary_user_id: allocation.beneficiaryUserId ?? null,
+            created_at: new Date(),
+            id: randomUUID(),
+            order_id: orderId,
+            reversal_id: null,
+            settled_at: null,
+            status: "recorded",
+            stripe_transfer_id: null,
+          }))
+        )
+        .execute();
+    }
   });
   return {
     order: {

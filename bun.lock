@@ -230,6 +230,7 @@
         "@chewbuu/db": "workspace:*",
         "@chewbuu/emails": "workspace:*",
         "@chewbuu/env": "workspace:*",
+        "@chewbuu/stripe": "workspace:*",
         "@simplewebauthn/server": "^13.3.2",
         "better-auth": "catalog:",
         "resend": "^6.6.0",
@@ -261,6 +262,7 @@
         "@aws-sdk/client-chime-sdk-meetings": "^3.1101.0",
         "@chewbuu/auth": "workspace:*",
         "@chewbuu/db": "workspace:*",
+        "@chewbuu/stripe": "workspace:*",
         "ai": "catalog:",
         "kysely": "^0.28.12",
         "stripe": "^22.3.1",
@@ -325,6 +327,17 @@
         "@chewbuu/config": "workspace:*",
         "@types/node": "^22.13.14",
         "typescript": "^6",
+      },
+    },
+    "packages/stripe": {
+      "name": "@chewbuu/stripe",
+      "dependencies": {
+        "stripe": "^22.3.1",
+      },
+      "devDependencies": {
+        "@chewbuu/config": "workspace:*",
+        "typescript": "^6",
+        "vitest": "^4.1.10",
       },
     },
     "packages/ui": {
@@ -766,6 +779,8 @@
     "@chewbuu/emails": ["@chewbuu/emails@workspace:packages/emails"],
 
     "@chewbuu/env": ["@chewbuu/env@workspace:packages/env"],
+
+    "@chewbuu/stripe": ["@chewbuu/stripe@workspace:packages/stripe"],
 
     "@chewbuu/ui": ["@chewbuu/ui@workspace:packages/ui"],
 

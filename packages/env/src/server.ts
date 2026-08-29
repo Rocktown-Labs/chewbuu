@@ -54,11 +54,21 @@ export const env = createEnv({
     R2_BUCKET_NAME: z.string().optional(),
     R2_PUBLIC_URL: z.url().optional(),
     R2_SECRET_ACCESS_KEY: z.string().optional(),
+    STRIPE_BILLING_WEBHOOK_SECRET: z.string().optional(),
+    STRIPE_COMMERCE_WEBHOOK_SECRET: z.string().optional(),
+    STRIPE_CONNECT_WEBHOOK_SECRET: z.string().optional(),
     STRIPE_MINGLE_ANNUAL_PRICE_ID: z.string().optional(),
     STRIPE_MINGLE_PRICE_ID: z.string().optional(),
+    STRIPE_PLATFORM_FEE_BPS: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(10_000)
+      .default(500),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_SUGAR_ANNUAL_PRICE_ID: z.string().optional(),
     STRIPE_SUGAR_PRICE_ID: z.string().optional(),
+    STRIPE_WEBHOOK_BASE_URL: z.url().default("https://chewbuu.com"),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
     STREAM_API_KEY: z.string().optional(),
     STREAM_API_SECRET: z.string().optional(),
