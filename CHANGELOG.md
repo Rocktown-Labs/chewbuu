@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added pinned Portless development routing for the web, dating Expo, Sync Expo, and email preview apps with named URLs and a Vite proxy to the fixed Blocks API.
 - Added explicit dating availability with two-minute incoming request windows, onboarding-gated date planning, mobile parity, and robust place selection persistence.
 - Added automatic local Postgres startup and readiness gating to `bun run dev:blocks`.
-- Added responsive web date-planning accordions, compact date-list browsing under Spots, date-folder recap galleries, and authenticated spot/menu capture offers with admin-configurable pending Chewbuu credit.
+- Added responsive web date-planning accordions, compact date-list browsing under Dates, date-folder recap galleries, and authenticated spot/menu capture offers with admin-configurable pending Chewbuu credit.
 - Added API-backed mobile dating parity across Home, Dates, Google Maps spots, chats, profile, onboarding media, reviews, and Recaps; calendar is now a secondary Dates view and Recaps is the primary recap destination.
 - Added server support for image-only recaps with attached date media and idempotent pending spot/menu contribution submissions.
 - Added server-only Stripe billing and marketplace foundations: Better Auth organization subscriptions with the Chewbuu Sync $60/50-seat plan, idempotent catalog and webhook reconciliation, Connect onboarding for venues/workers/referrers, platform Checkout, multi-recipient tip settlement, refund/dispute reversal ledgers, admin Stripe health visibility, and hosted iPad checkout handoff.
@@ -53,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Removed date planning and dating-readiness widgets from the authenticated Spots view; nearby spots now use the selected or device location before dating onboarding is complete.
 - Provisioned the Sync attendance signing secret as platform-managed production configuration and passed it into the AWS Blocks runtime, so venues and staff never need to configure it.
 - Added the missing `venue_location.style` migration, required venue contact details in the venue portal, and removed the ordinary-member Chewbuu Sync brand shortcut. The portal now explains that any signed-in member can submit a venue, while venue operations require an approved claim, team invitation, or admin access.
 
