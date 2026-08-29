@@ -103,7 +103,6 @@ import {
   type StepItem,
   type StepKey,
 } from "@/components/ui/horizontal-stepper";
-import { DateListView } from "@/features/calendar/date-list-view";
 import type { ChatPerson } from "@/features/chat/chat-types";
 import { DateConfirmScreen } from "@/features/chat/date-confirm";
 import {
@@ -791,11 +790,11 @@ function HomeDashboardView({
           </div>
         </button>
 
-        {/* Card 2: This Month Bookings -> Date list */}
+        {/* Card 2: This Month Bookings -> Dates */}
         <button
-          aria-label="Open scheduled date list"
+          aria-label="Open scheduled dates and requests"
           className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-primary/30 bg-gradient-to-br from-primary/15 via-sky-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-primary/60 hover:shadow-md"
-          onClick={() => onNavigateTab("spots")}
+          onClick={() => onNavigateTab("matches")}
           type="button"
         >
           <Badge className="w-fit rounded-full border-0 bg-primary/20 font-extrabold text-[10px] text-primary">
@@ -803,7 +802,6 @@ function HomeDashboardView({
               ? `📅 ${monthlyBookings} Booked`
               : "No bookings yet"}
           </Badge>
-
           <div className="mt-5">
             <span className="font-extrabold text-[10px] uppercase text-muted-foreground">
               Monthly Schedule
@@ -814,7 +812,7 @@ function HomeDashboardView({
                 : "No confirmed dates"}
             </h4>
             <p className="mt-1 flex items-center text-[11px] font-bold text-primary group-hover:underline">
-              View date list <ChevronRight className="ml-0.5 size-3.5" />
+              View dates <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
         </button>
@@ -2114,11 +2112,6 @@ export function MePage({
                   />
                 ) : (
                   <>
-                    <DateListView
-                      dates={confirmedDates}
-                      onOpenDate={openDateHistory}
-                      onPlanDate={openPlanDateDrawer}
-                    />
                     {summary?.readiness.onboarded &&
                     !receivingDateRequests &&
                     summary.readiness.pendingReviews === 0 ? (
