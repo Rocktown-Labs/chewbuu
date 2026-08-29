@@ -8,13 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added API-backed mobile dating parity across Home, Dates, Google Maps spots, chats, profile, onboarding media, reviews, and Recaps; calendar is now a secondary Dates view and Recaps is the primary recap destination.
+- Added server support for image-only recaps with attached date media and idempotent pending spot/menu contribution submissions.
+- Added server-only Stripe billing and marketplace foundations: Better Auth organization subscriptions with the Chewbuu Sync $60/50-seat plan, idempotent catalog and webhook reconciliation, Connect onboarding for venues/workers/referrers, platform Checkout, multi-recipient tip settlement, refund/dispute reversal ledgers, admin Stripe health visibility, and hosted iPad checkout handoff.
 - Added the authenticated Expo Sync mobile workspace under `apps/sync` with grouped Operations, People, Business, and Account navigation; mobile Overview, Tables, Orders, Shifts, Tips, Reservations, Kitchen, Clock In, Guests, Work Chat, Menu, Specials, Jobs, Settings, and detail/create workflows.
 - Refined the native Sync iPad workspace with a burgundy-first theme, direct order taking, multi-guest parties, sectioned table picking, adaptive panes, simple creation sheets, menu-linked specials, job applicants, and expanded venue settings.
 - Refined the native Sync iPad cockpit with Chewbuu burgundy/yellow branding, a quiet overview, grouped operations navigation, reservations, closable inspectors, table-state filters, guest contact capture, menu item metadata editing, and explicit close-out confirmation.
 - Added guided rounded venue onboarding with Stripe Identity representative verification, storefront asset uploads, venue-owned menu items, item-linked food photos, and PostgreSQL menu modifier groups/options.
 - Added venue operational timeline events for arrival, cooking start, food served, date ended, order/reservation stages, deterministic venue analytics, public aggregate metrics with sample gating, filterable specials, public spot detail pages, and native specials discovery.
 - Added Better Auth Organizations as the canonical venue organization boundary with a non-destructive bridge from existing venue memberships.
-- Added admin Stripe Connect credential verification with SSM SecureString storage; connected-account creation and money movement remain capability-gated pending policy decisions.
+- Added deployment-managed Stripe Connect health, recipient onboarding, multi-recipient settlement, refund/dispute handling, and webhook reconciliation; raw Stripe credentials are not accepted from browser forms.
 - Added branded Chewbuu Sync venue and Crew workflows with admin Sugar/Sync test entitlements, reserved brand handles, styled community metadata, people invitations, venue staff invitations, lifecycle emails, venue operations pages, and the branded-community migration.
 - Added debounced Google venue lookup with Place ID retention, editable prefill, Chewbuu-hosted menu planning, and public Sync-verified spot listings and detail pages.
 - Added the platform-neutral Sync service operations API for location-scoped staff assignments, shift attendance, breaks/lunches, daily-code and optional geofence clock-in, late/ETA reporting, service boards, tables, service customers, staff orders with modifiers, kitchen/payment state, shared Sync channels, staff removal, and location job listings.

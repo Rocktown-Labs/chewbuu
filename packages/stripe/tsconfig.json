@@ -1,0 +1,4 @@
+{
+  "extends": "@chewbuu/config/tsconfig.base.json",
+  "include": ["src/**/*.ts"]
+}

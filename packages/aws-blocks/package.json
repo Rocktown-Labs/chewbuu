@@ -15,6 +15,7 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "db:migrate": "bb-data migrate ./migrations --url \"$BLOCKS_MIGRATION_DB_URL\" --stage \"${CHEWBUU_STAGE:-production}\"",
+    "export:spec": "tsx scripts/export-spec.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -35,6 +36,7 @@
     "@aws-sdk/client-chime-sdk-meetings": "^3.1101.0",
     "@chewbuu/auth": "workspace:*",
     "@chewbuu/db": "workspace:*",
+    "@chewbuu/stripe": "workspace:*",
     "ai": "catalog:",
     "kysely": "^0.28.12",
     "stripe": "^22.3.1",

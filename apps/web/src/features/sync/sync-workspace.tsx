@@ -84,10 +84,13 @@ import { toast } from "sonner";
 
 import { chatApi } from "@/lib/chat-api";
 import {
+  connectApi,
+  paymentsApi,
   venueApi,
   type VenueLocation,
   type VenueMenuItem,
 } from "@/lib/dating-api";
+import { syncBillingApi } from "@/lib/sync-billing-api";
 
 const MANAGER_ROLES = new Set<VenueStaffRole>([
   "admin",
@@ -204,6 +207,9 @@ export function SyncWorkspace({
   const [menuItems, setMenuItems] = useState<VenueMenuItem[]>([]);
   const [listings, setListings] = useState<VenueJobListing[]>([]);
   const [channel, setChannel] = useState<VenueSyncChannel | null>(null);
+  const [connectStatus, setConnectStatus] = useState<Awaited<
+    ReturnType<typeof connectApi.getVenueStatus>
+  > | null>(null);
   const [messages, setMessages] = useState<
     Awaited<ReturnType<typeof chatApi.getMessages>>["messages"]
   >([]);
@@ -292,6 +298,21 @@ export function SyncWorkspace({
     }
     setSelectedLocationId(locations[0]?.id ?? "");
   }, [locations, selectedLocationId]);
+
+  useEffect(() => {
+    if (!selectedLocationId) {
+      setConnectStatus(null);
+      return;
+    }
+    const loadConnectStatus = async () => {
+      try {
+        setConnectStatus(await connectApi.getVenueStatus(selectedLocationId));
+      } catch {
+        setConnectStatus(null);
+      }
+    };
+    void loadConnectStatus();
+  }, [selectedLocationId]);
 
   useEffect(() => {
     if (!config) return;
@@ -506,6 +527,70 @@ export function SyncWorkspace({
       },
       "Order sent to the service board."
     );
+  };
+
+  const startSyncSubscription = async () => {
+    setPendingAction("sync-subscription");
+    try {
+      const result = await syncBillingApi.upgrade(
+        selectedLocation?.organizationId ?? ""
+      );
+      if (result.error) throw new Error(result.error.message);
+      if (result.data?.url) window.location.assign(result.data.url);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not start Sync billing."));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const startVenueOnboarding = async () => {
+    setPendingAction("connect-venue");
+    try {
+      const result = await connectApi.startVenueOnboarding(selectedLocationId);
+      setConnectStatus({
+        accountId: result.accountId,
+        onboardingStatus: "requires_input",
+        requirements: result.requirements,
+        transferCapabilityStatus: result.transferCapabilityStatus,
+      });
+      if (result.url) window.location.assign(result.url);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not start Stripe onboarding."));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const startWorkerOnboarding = async (workerUserId: string) => {
+    setPendingAction(`connect-worker-${workerUserId}`);
+    try {
+      const result = await connectApi.startWorkerOnboarding(
+        selectedLocationId,
+        workerUserId
+      );
+      if (result.url) window.location.assign(result.url);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not start worker onboarding."));
+    } finally {
+      setPendingAction(null);
+    }
+  };
+
+  const startOrderCheckout = async (orderId: string) => {
+    setPendingAction(`payment-${orderId}`);
+    try {
+      const result = await paymentsApi.checkout({
+        cancelUrl: `${window.location.origin}/sync?payment=cancelled`,
+        experienceKind: "dine_in",
+        orderId,
+        successUrl: `${window.location.origin}/sync?payment=success&orderId=${encodeURIComponent(orderId)}`,
+      });
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not start checkout."));
+      setPendingAction(null);
+    }
   };
 
   const updateOrder = async (input: {
@@ -952,6 +1037,7 @@ export function SyncWorkspace({
                             orderId: order.id,
                           })
                         }
+                        onCheckout={() => void startOrderCheckout(order.id)}
                         onAdvance={() => {
                           const status = nextOrderStatus(order.status);
                           if (status) {
@@ -1101,9 +1187,11 @@ export function SyncWorkspace({
           >
             <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
               <StaffPanel
+                currentUserId={currentUserId}
                 isManager={isManager}
                 pendingAction={pendingAction}
                 staff={staff}
+                onConnect={(userId) => void startWorkerOnboarding(userId)}
                 onRoleChange={(userId, role) =>
                   void updateStaff(userId, { role })
                 }
@@ -1203,6 +1291,13 @@ export function SyncWorkspace({
                     }))
                   }
                   onSubmit={(event) => void saveServiceSettings(event)}
+                />
+                <ConnectSettings
+                  billingPending={pendingAction === "sync-subscription"}
+                  onSubscribe={() => void startSyncSubscription()}
+                  pending={pendingAction === "connect-venue"}
+                  status={connectStatus}
+                  onStart={() => void startVenueOnboarding()}
                 />
                 <HiringPanel
                   form={jobForm}
@@ -1785,8 +1880,8 @@ function OrderComposer({
                 value={form.tip}
               />
               <FieldDescription>
-                Orders remain unpaid test records until payment capture is
-                enabled.
+                Checkout uses Chewbuu payments; tip distribution can be assigned
+                before settlement.
               </FieldDescription>
             </Field>
             <Button disabled={disabled} type="submit">
@@ -1805,6 +1900,7 @@ function OrderRow({
   isManager,
   onAdvance,
   onAssign,
+  onCheckout,
   order,
   pending,
   staff,
@@ -1813,6 +1909,7 @@ function OrderRow({
   isManager: boolean;
   onAdvance: () => void;
   onAssign: (userId: string) => void;
+  onCheckout: () => void;
   order: VenueServiceOrder;
   pending: boolean;
   staff: VenueStaffStatus[];
@@ -1842,9 +1939,7 @@ function OrderRow({
         </div>
         <div className="text-right">
           <p className="font-semibold">{formatMoney(order.totalCents)}</p>
-          <p className="text-xs text-muted-foreground">
-            {order.paymentStatus} · capture gated
-          </p>
+          <p className="text-xs text-muted-foreground">{order.paymentStatus}</p>
         </div>
       </div>
       <div className="mt-3 flex flex-col gap-2 border-t pt-3">
@@ -1863,6 +1958,11 @@ function OrderRow({
         ))}
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">
+        {order.paymentStatus !== "paid" ? (
+          <Button onClick={onCheckout} size="sm" variant="outline">
+            Pay / send checkout
+          </Button>
+        ) : null}
         {nextStatus ? (
           <Button disabled={pending} onClick={onAdvance} size="sm">
             Move to {statusLabel(nextStatus)}
@@ -1931,13 +2031,17 @@ function TableTile({ table }: { table: VenueServiceTable }) {
 }
 
 function StaffPanel({
+  currentUserId,
   isManager,
+  onConnect,
   onRoleChange,
   onStatusChange,
   pendingAction,
   staff,
 }: {
+  currentUserId: string;
   isManager: boolean;
+  onConnect: (userId: string) => void;
   onRoleChange: (userId: string, role: VenueStaffRole) => void;
   onStatusChange: (
     userId: string,
@@ -2021,6 +2125,17 @@ function StaffPanel({
                         </SelectGroup>
                       </SelectContent>
                     </Select>
+                    <Button
+                      disabled={pendingAction === `connect-worker-${userId}`}
+                      onClick={() => onConnect(userId)}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                    >
+                      {pendingAction === `connect-worker-${userId}`
+                        ? "Opening…"
+                        : "Connect payouts"}
+                    </Button>
                     <Select
                       disabled={pendingAction === `staff-${userId}`}
                       onValueChange={(value) => {
@@ -2048,6 +2163,18 @@ function StaffPanel({
                       </SelectContent>
                     </Select>
                   </div>
+                ) : userId === currentUserId ? (
+                  <Button
+                    disabled={pendingAction === `connect-worker-${userId}`}
+                    onClick={() => onConnect(userId)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    {pendingAction === `connect-worker-${userId}`
+                      ? "Opening…"
+                      : "Connect payouts"}
+                  </Button>
                 ) : (
                   <Badge variant="outline">{statusLabel(person.role)}</Badge>
                 )}
@@ -2284,6 +2411,76 @@ function WorkChat({
             <ArrowUpRight data-icon="inline-start" /> Send
           </Button>
         </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConnectSettings({
+  billingPending,
+  onStart,
+  onSubscribe,
+  pending,
+  status,
+}: {
+  billingPending: boolean;
+  onStart: () => void;
+  onSubscribe: () => void;
+  pending: boolean;
+  status: {
+    accountId: string | null;
+    onboardingStatus: string;
+    requirements: Record<string, unknown>;
+    transferCapabilityStatus: string;
+  } | null;
+}) {
+  const ready = status?.transferCapabilityStatus === "active";
+  return (
+    <Card className="border-primary/20 bg-primary/5">
+      <CardHeader>
+        <CardDescription className="uppercase tracking-[0.16em]">
+          Payments
+        </CardDescription>
+        <CardTitle className="mt-2">Venue payouts</CardTitle>
+        <CardDescription>
+          Connect the venue before collecting date, dine-in, or pickup payments.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap gap-2 text-sm">
+          <Badge variant={status?.accountId ? "secondary" : "outline"}>
+            {status?.accountId ? "Account created" : "Not connected"}
+          </Badge>
+          <Badge variant={ready ? "default" : "outline"}>
+            {ready
+              ? "Payouts ready"
+              : (status?.onboardingStatus ?? "Not started")}
+          </Badge>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={pending || ready} onClick={onStart} type="button">
+            {pending
+              ? "Opening Stripe…"
+              : ready
+                ? "Stripe payouts ready"
+                : "Connect venue to Stripe"}
+          </Button>
+          <Button
+            disabled={billingPending}
+            onClick={onSubscribe}
+            type="button"
+            variant="outline"
+          >
+            {billingPending ? "Opening billing…" : "Subscribe to Sync · $60/mo"}
+          </Button>
+        </div>
+        {!ready &&
+        status?.requirements &&
+        Object.keys(status.requirements).length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Stripe has outstanding onboarding requirements.
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );

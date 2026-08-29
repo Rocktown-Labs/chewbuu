@@ -39,12 +39,16 @@ These workflow inputs were not present in the GitHub `production` secret list wh
 | `REDIS_URL` | No current active source usage found; Better Auth rate limiting uses PostgreSQL |
 | `STREAM_API_KEY` | No current active source usage found; video uses Amazon Chime |
 | `STREAM_API_SECRET` | No current active source usage found; video uses Amazon Chime |
-| `STRIPE_SECRET_KEY` | Billing plugin remains disabled unless this and the webhook secret are both set |
-| `STRIPE_WEBHOOK_SECRET` | Billing plugin remains disabled unless this and the Stripe secret are both set |
-| `STRIPE_MINGLE_PRICE_ID` | Mingle checkout cannot be configured |
-| `STRIPE_MINGLE_ANNUAL_PRICE_ID` | Mingle annual checkout cannot be configured |
-| `STRIPE_SUGAR_PRICE_ID` | Sugar checkout cannot be configured |
-| `STRIPE_SUGAR_ANNUAL_PRICE_ID` | Sugar annual checkout cannot be configured |
+| `STRIPE_SECRET_KEY` | Billing and venue commerce are disabled |
+| `STRIPE_BILLING_WEBHOOK_SECRET` | Better Auth subscription webhooks cannot be verified |
+| `STRIPE_COMMERCE_WEBHOOK_SECRET` | Venue payment webhooks cannot be verified |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | Venue/worker account webhooks cannot be verified |
+| `STRIPE_WEBHOOK_BASE_URL` | Webhook reconciliation uses the wrong public origin |
+| `STRIPE_PLATFORM_FEE_BPS` | Uses the default 5% platform fee when omitted |
+| `STRIPE_MINGLE_PRICE_ID` | Temporary legacy fallback before catalog sync |
+| `STRIPE_MINGLE_ANNUAL_PRICE_ID` | Temporary legacy fallback before catalog sync |
+| `STRIPE_SUGAR_PRICE_ID` | Temporary legacy fallback before catalog sync |
+| `STRIPE_SUGAR_ANNUAL_PRICE_ID` | Temporary legacy fallback before catalog sync |
 
 These production variables are optional but should be deliberately reviewed:
 
@@ -53,10 +57,10 @@ These production variables are optional but should be deliberately reviewed:
 - `VENUE_EMAIL_FROM` — verified SES sender used by AWS Blocks venue notification jobs
 - `SYNC_ATTENDANCE_SECRET` — platform-managed server-only secret used to derive daily Sync clock-in codes; provisioned once in the GitHub `production` environment and never configured by venues or staff
 - `VENUE_APP_URL` — base URL used for clickable venue notification links; defaults to `https://chewbuu.com`
-- `BLOCKS_STRIPE_CONNECT_SECRET_PARAMETER` — optional SSM SecureString path for the admin-configured Stripe restricted/secret platform key; defaults to `/chewbuu-prod-stripe-connect-secret-key`
-- `BLOCKS_STRIPE_CONNECT_WEBHOOK_PARAMETER` — optional SSM SecureString path for the admin-configured Stripe Connect webhook secret; defaults to `/chewbuu-prod-stripe-connect-webhook-secret`
+- `BLOCKS_STRIPE_CONNECT_SECRET_PARAMETER` — optional legacy SSM path for the server-side Stripe key fallback
+- `BLOCKS_STRIPE_CONNECT_WEBHOOK_PARAMETER` — optional legacy SSM path for the Connect webhook secret fallback
 
-Stripe Connect credentials can be entered from the admin Billing & Plans control room. The server verifies the key and stores both values in SSM SecureString; raw values are never returned or logged. A server-side Stripe key with Identity permissions also creates Stripe-hosted document-verification sessions for personal and venue onboarding; Chewbuu stores only the session status and verified name. Username changes are email-verified, rate-limited, queued, and approved from the admin control room. Account creation, charges, transfers, payouts, refunds, disputes, and webhook fulfillment remain disabled until the platform/venue countries and Connect responsibility and charge-pattern decisions are approved.
+Stripe credentials are deployment-managed and cannot be entered from the browser. A server-side Stripe key with Identity permissions creates Stripe-hosted document-verification sessions for personal and venue onboarding; Chewbuu stores only the session status and verified name. Venue and worker onboarding, platform Checkout, separate charge settlement, refunds, disputes, and webhook fulfillment are capability-gated. Review tax, worker payout, tip, and merchant-of-record obligations before enabling live commerce.
 
 - `R2_PUBLIC_URL`
 - `CORS_ALLOWED_ORIGINS`

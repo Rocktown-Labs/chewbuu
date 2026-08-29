@@ -2,7 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Link } from "expo-router";
 import { Drawer } from "expo-router/drawer";
 import { useThemeColor } from "heroui-native";
-import { Flame, Sparkles } from "lucide-react-native";
+import { BookOpen, Flame, Sparkles } from "lucide-react-native";
 import React, { useCallback } from "react";
 import { Pressable, Text, View } from "react-native";
 
@@ -45,10 +45,25 @@ function DrawerLayout() {
                 fontWeight: "600",
               }}
             >
-              Chewbuu Feed & Spots
+              Home
             </Text>
           ),
           headerTitle: "Chewbuu",
+        }}
+      />
+      <Drawer.Screen
+        name="recaps"
+        options={{
+          drawerIcon: ({ size, focused }) => (
+            <BookOpen
+              size={size}
+              color={focused ? "#f59e0b" : themeColorForeground}
+            />
+          ),
+          drawerLabel: ({ color, focused }) => (
+            <Text style={{ color: focused ? "#f59e0b" : color }}>Recaps</Text>
+          ),
+          headerTitle: "Recaps",
         }}
       />
       <Drawer.Screen

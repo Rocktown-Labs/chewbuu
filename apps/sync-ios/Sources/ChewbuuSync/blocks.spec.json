@@ -214,6 +214,12 @@
               "tipCents": {
                 "type": "integer"
               },
+              "tipAllocations": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StripeTipAllocationInput"
+                }
+              },
               "items": {
                 "type": "array",
                 "items": {
@@ -304,6 +310,226 @@
             }
           },
           "required": ["order"]
+        }
+      }
+    },
+    {
+      "name": "api.getStripeIntegrationHealth",
+      "description": "Read admin-only Stripe catalog, webhook, and Connect health.",
+      "params": [],
+      "result": {
+        "name": "response",
+        "schema": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "name": "api.syncStripeWebhookEndpoints",
+      "description": "Reconcile the three Chewbuu Stripe webhook endpoints.",
+      "params": [],
+      "result": {
+        "name": "response",
+        "schema": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "name": "api.createVenueCheckoutSession",
+      "description": "Create a hosted platform Checkout Session for a date, dine-in, or pickup order.",
+      "params": [
+        {
+          "name": "input",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "cancelUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "experienceKind": {
+                "type": "string",
+                "enum": ["date", "dine_in", "pickup"]
+              },
+              "orderId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "successUrl": {
+                "type": "string",
+                "format": "uri"
+              },
+              "tipAllocations": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StripeTipAllocationInput"
+                }
+              }
+            },
+            "required": ["cancelUrl", "orderId", "successUrl"]
+          }
+        }
+      ],
+      "result": {
+        "name": "response",
+        "schema": {
+          "$ref": "#/components/schemas/StripeCheckoutSessionResponse"
+        }
+      }
+    },
+    {
+      "name": "api.createReferrerConnectOnboarding",
+      "description": "Create or resume referral reward recipient onboarding.",
+      "params": [
+        {
+          "name": "input",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "locationId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": ["locationId"]
+          }
+        }
+      ],
+      "result": {
+        "name": "response",
+        "schema": {
+          "$ref": "#/components/schemas/StripeConnectedAccountResponse"
+        }
+      }
+    },
+    {
+      "name": "api.createVenueConnectOnboarding",
+      "description": "Create or resume venue Connect recipient onboarding.",
+      "params": [
+        {
+          "name": "input",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "locationId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": ["locationId"]
+          }
+        }
+      ],
+      "result": {
+        "name": "response",
+        "schema": {
+          "$ref": "#/components/schemas/StripeConnectedAccountResponse"
+        }
+      }
+    },
+    {
+      "name": "api.createWorkerConnectOnboarding",
+      "description": "Create or resume worker Connect recipient onboarding.",
+      "params": [
+        {
+          "name": "input",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "locationId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "required": ["locationId", "userId"]
+          }
+        }
+      ],
+      "result": {
+        "name": "response",
+        "schema": {
+          "$ref": "#/components/schemas/StripeConnectedAccountResponse"
+        }
+      }
+    },
+    {
+      "name": "api.getVenueConnectStatus",
+      "description": "Read the venue Connect onboarding and transfer capability state.",
+      "params": [
+        {
+          "name": "locationId",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "result": {
+        "name": "response",
+        "schema": {
+          "$ref": "#/components/schemas/StripeVenueConnectStatus"
+        }
+      }
+    },
+    {
+      "name": "api.getStripePayment",
+      "description": "Read an authorized order's Stripe payment and transfer ledger.",
+      "params": [
+        {
+          "name": "orderId",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "result": {
+        "name": "response",
+        "schema": {
+          "type": "object"
+        }
+      }
+    },
+    {
+      "name": "api.createVenueRefund",
+      "description": "Create an idempotent venue order refund and reverse transfers.",
+      "params": [
+        {
+          "name": "input",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "amountCents": {
+                "type": "integer"
+              },
+              "orderId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["orderId"]
+          }
+        }
+      ],
+      "result": {
+        "name": "response",
+        "schema": {
+          "$ref": "#/components/schemas/StripeRefundResponse"
         }
       }
     },
@@ -969,6 +1195,127 @@
           "sortOrder",
           "status"
         ]
+      },
+      "StripeTipAllocationInput": {
+        "type": "object",
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "beneficiaryKind": {
+            "type": "string",
+            "enum": ["cook", "house", "server"]
+          },
+          "beneficiaryUserId": {
+            "type": "string"
+          }
+        },
+        "required": ["amountCents", "beneficiaryKind"]
+      },
+      "StripeCheckoutSessionResponse": {
+        "type": "object",
+        "properties": {
+          "checkoutSessionId": {
+            "type": "string"
+          },
+          "checkoutUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recipientCount": {
+            "type": "integer"
+          },
+          "transferGroup": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkoutSessionId",
+          "checkoutUrl",
+          "orderId",
+          "paymentId",
+          "recipientCount",
+          "transferGroup"
+        ]
+      },
+      "StripeConnectedAccountResponse": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "dashboard": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "livemode": {
+            "type": "boolean"
+          },
+          "requirements": {
+            "type": "object"
+          },
+          "transferCapabilityStatus": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "required": [
+          "accountId",
+          "livemode",
+          "requirements",
+          "transferCapabilityStatus"
+        ]
+      },
+      "StripeVenueConnectStatus": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "onboardingStatus": {
+            "type": "string"
+          },
+          "requirements": {
+            "type": "object"
+          },
+          "transferCapabilityStatus": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "onboardingStatus",
+          "requirements",
+          "transferCapabilityStatus"
+        ]
+      },
+      "StripeRefundResponse": {
+        "type": "object",
+        "properties": {
+          "amountCents": {
+            "type": "integer"
+          },
+          "refundId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": ["amountCents", "refundId"]
       }
     }
   }

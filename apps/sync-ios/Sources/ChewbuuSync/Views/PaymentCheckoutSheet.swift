@@ -4,14 +4,11 @@ public struct PaymentCheckoutSheet: View {
     @ObservedObject var syncService: SyncService
     let table: MockTable
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     @State private var selectedTipPercent = 20
-    @State private var paymentMethod = "Apple Pay"
     @State private var isProcessing = false
-    @State private var paymentComplete = false
     @State private var showingCloseConfirmation = false
-
-    private let paymentMethods = ["Apple Pay", "Card", "Cash", "Split"]
     private let tipOptions = [15, 18, 20, 25, 0]
 
     private var taxCents: Int { Int(Double(table.billTotalCents) * 0.0825) }
@@ -20,13 +17,7 @@ public struct PaymentCheckoutSheet: View {
 
     public var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if paymentComplete {
-                    closeoutSuccess
-                } else {
-                    checkoutForm
-                }
-            }
+            checkoutForm
             .background(ChewbuuTheme.background)
             .navigationTitle("Close Table \(table.label)")
             .toolbar {
@@ -36,12 +27,12 @@ public struct PaymentCheckoutSheet: View {
             }
         }
         .confirmationDialog("Confirm close-out", isPresented: $showingCloseConfirmation, titleVisibility: .visible) {
-            Button("Confirm demo close-out") {
+            Button("Open secure Stripe checkout") {
                 processCloseout()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Close Table \(table.label) for \(formatCurrency(totalCents)) using \(paymentMethod) with a \(selectedTipPercent)% tip? No card will be charged.")
+            Text("Open secure Stripe checkout for Table \(table.label) totaling \(formatCurrency(totalCents)) with a \(selectedTipPercent)% tip. The table closes after payment is confirmed.")
         }
         .frame(minWidth: 560, minHeight: 620)
     }
@@ -87,15 +78,6 @@ public struct PaymentCheckoutSheet: View {
                         }
                     }
 
-                    CheckoutSection(title: "Payment method", icon: "creditcard", color: ChewbuuTheme.burgundy) {
-                        HStack(spacing: 7) {
-                            ForEach(paymentMethods, id: \.self) { method in
-                                Button(method) { paymentMethod = method }
-                                    .buttonStyle(SyncChipButtonStyle(isSelected: paymentMethod == method, color: ChewbuuTheme.burgundy))
-                            }
-                        }
-                    }
-
                     VStack(spacing: 8) {
                         SummaryRow(title: "Food & beverage", amount: formatCurrency(table.billTotalCents))
                         SummaryRow(title: "Sales tax", amount: formatCurrency(taxCents))
@@ -110,7 +92,7 @@ public struct PaymentCheckoutSheet: View {
                     .padding(15)
                     .syncCard(accent: ChewbuuTheme.burgundy)
 
-                    Label("Demo close-out only · no card is charged.", systemImage: "info.circle")
+                    Label("Stripe hosts card and Apple Pay checkout. Payment and transfers are confirmed by webhooks.", systemImage: "lock.shield")
                         .font(.caption)
                         .foregroundStyle(ChewbuuTheme.secondaryText)
                 }
@@ -124,7 +106,7 @@ public struct PaymentCheckoutSheet: View {
             } label: {
                 HStack(spacing: 8) {
                     if isProcessing { ProgressView() }
-                    Label(isProcessing ? "Closing check…" : "Review and close · \(formatCurrency(totalCents))", systemImage: "checkmark.seal")
+                    Label(isProcessing ? "Opening Stripe…" : "Pay securely · \(formatCurrency(totalCents))", systemImage: "lock.shield")
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -134,39 +116,14 @@ public struct PaymentCheckoutSheet: View {
         }
     }
 
-    private var closeoutSuccess: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(ChewbuuTheme.success)
-            Text("Check closed")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(ChewbuuTheme.primaryText)
-            Text("Table \(table.label) is ready for the next guest.")
-                .font(.subheadline)
-                .foregroundStyle(ChewbuuTheme.secondaryText)
-            Text("\(formatCurrency(totalCents)) · \(paymentMethod) · \(selectedTipPercent)% tip")
-                .font(.headline)
-                .foregroundStyle(ChewbuuTheme.burgundy)
-            Spacer()
-            Button {
-                syncService.closeAndClearTable(tableId: table.id)
-                dismiss()
-            } label: {
-                Label("Clear table and finish", systemImage: "arrow.right")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(SyncFilledButtonStyle(color: ChewbuuTheme.burgundy))
-        }
-        .padding(24)
-    }
-
     private func processCloseout() {
         isProcessing = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+        Task {
+            let checkoutURL = await syncService.startCheckout(tableId: table.id)
             isProcessing = false
-            paymentComplete = true
+            if let checkoutURL {
+                openURL(checkoutURL)
+            }
         }
     }
 

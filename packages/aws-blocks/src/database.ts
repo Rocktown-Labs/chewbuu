@@ -117,8 +117,32 @@ export interface MembershipPlanTable {
   name: string;
   sort_order: number;
   stats: JsonColumn<string[]>;
+  stripe_currency: ColumnType<string, string | undefined, string>;
+  stripe_mode: string | null;
   stripe_price_id: string | null;
+  stripe_product_id: string | null;
+  stripe_sync_status: ColumnType<string, string | undefined, string>;
+  stripe_synced_at: Timestamp | null;
   tier: string;
+  updated_at: Timestamp;
+}
+
+export interface SyncPlanTable {
+  active: boolean;
+  code: string;
+  created_at: Timestamp;
+  description: string;
+  id: string;
+  max_staff: number;
+  monthly_price_cents: number;
+  monthly_stripe_price_id: string | null;
+  name: string;
+  referral_reward_cents: number;
+  stripe_currency: ColumnType<string, string | undefined, string>;
+  stripe_mode: string | null;
+  stripe_product_id: string | null;
+  stripe_sync_status: ColumnType<string, string | undefined, string>;
+  stripe_synced_at: Timestamp | null;
   updated_at: Timestamp;
 }
 
@@ -346,7 +370,27 @@ export interface RecapTable {
   review_id: string | null;
   story_expires_at: Timestamp | null;
   thumbnail_url: string | null;
-  video_url: string;
+  video_url: string | null;
+}
+
+export interface RecapMediaTable {
+  created_at: Timestamp;
+  date_media_id: string;
+  recap_id: string;
+}
+
+export interface SpotContributionTable {
+  created_at: Timestamp;
+  date_media_id: string;
+  date_request_id: string;
+  google_place_id: string;
+  id: string;
+  kind: string;
+  reward_points: number;
+  reward_status: string;
+  reviewed_at: Timestamp | null;
+  status: string;
+  submitted_by_user_id: string;
 }
 
 export interface NotificationTable {
@@ -382,6 +426,7 @@ export interface OrganizationTable {
   metadata: string | null;
   name: string;
   slug: string;
+  stripe_customer_id: string | null;
 }
 
 export interface MemberTable {
@@ -425,6 +470,14 @@ export interface VenueLocationTable {
   stripe_identity_verification_session_id: string | null;
   stripe_identity_verified_at: Timestamp | null;
   stripe_identity_verified_name: string | null;
+  stripe_account_updated_at: Timestamp | null;
+  stripe_onboarding_status: ColumnType<string, string | undefined, string>;
+  stripe_requirements: JsonColumn<Record<string, unknown>>;
+  stripe_transfer_capability_status: ColumnType<
+    string,
+    string | undefined,
+    string
+  >;
   style: JsonColumn<Record<string, string>>;
   submitted_by_user_id: string | null;
   stripe_account_id: string | null;
@@ -457,12 +510,16 @@ export interface VenueMemberTable {
 }
 
 export interface SyncSubscriptionTable {
+  billing_interval: string | null;
   created_at: Timestamp;
   ended_at: Timestamp | null;
   id: string;
   organization_id: string | null;
+  period_end: Timestamp | null;
+  period_start: Timestamp | null;
   plan: string;
   status: string;
+  stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   updated_at: Timestamp;
   user_id: string;
@@ -656,16 +713,20 @@ export interface VenueOrderTable {
   created_at: Timestamp;
   currency: string;
   dining_session_id: string | null;
+  experience_kind: ColumnType<string, string | undefined, string>;
   id: string;
   location_id: string;
   payment_status: string;
+  platform_fee_cents: ColumnType<number, number | undefined, number>;
   reservation_id: string | null;
   service_customer_id: string | null;
   source: string;
   status: string;
+  stripe_transfer_group: string | null;
   table_id: string | null;
   stripe_payment_intent_id: string | null;
   subtotal_cents: number;
+  tax_cents: ColumnType<number, number | undefined, number>;
   tip_cents: number;
   total_cents: number;
   updated_at: Timestamp;
@@ -728,7 +789,125 @@ export interface VenueTipAllocationTable {
   created_at: Timestamp;
   id: string;
   order_id: string;
+  reversal_id: string | null;
+  settled_at: Timestamp | null;
   status: string;
+  stripe_transfer_id: string | null;
+}
+
+export interface StripeConnectedAccountTable {
+  account_kind: string;
+  account_status: string;
+  created_at: Timestamp;
+  dashboard_type: string | null;
+  id: string;
+  livemode: boolean;
+  location_id: string | null;
+  metadata: JsonColumn<Record<string, unknown>>;
+  onboarding_status: string;
+  organization_id: string;
+  requirements: JsonColumn<Record<string, unknown>>;
+  stripe_account_id: string;
+  transfer_capability_status: string;
+  updated_at: Timestamp;
+  user_id: string | null;
+}
+
+export interface StripePaymentTable {
+  amount_cents: number;
+  charge_id: string | null;
+  checkout_session_id: string | null;
+  created_at: Timestamp;
+  currency: string;
+  id: string;
+  livemode: boolean;
+  order_id: string;
+  payment_intent_id: string | null;
+  platform_fee_cents: number;
+  status: string;
+  transfer_group: string;
+  updated_at: Timestamp;
+}
+
+export interface StripeTransferTable {
+  amount_cents: number;
+  connected_account_id: string;
+  created_at: Timestamp;
+  currency: string;
+  id: string;
+  idempotency_key: string;
+  kind: string;
+  payment_id: string;
+  reversal_id: string | null;
+  status: string;
+  stripe_transfer_id: string | null;
+  tip_allocation_id: string | null;
+  updated_at: Timestamp;
+}
+
+export interface StripeTransferReversalTable {
+  amount_cents: number;
+  created_at: Timestamp;
+  id: string;
+  reason: string;
+  stripe_reversal_id: string;
+  transfer_id: string;
+}
+
+export interface StripeRefundTable {
+  amount_cents: number;
+  created_at: Timestamp;
+  id: string;
+  payment_id: string;
+  refund_application_fee: boolean;
+  reverse_transfer: boolean;
+  status: string;
+  stripe_refund_id: string;
+  updated_at: Timestamp;
+}
+
+export interface StripeDisputeTable {
+  amount_cents: number;
+  created_at: Timestamp;
+  due_by: Timestamp | null;
+  id: string;
+  payment_id: string | null;
+  reason: string | null;
+  status: string;
+  stripe_dispute_id: string;
+  updated_at: Timestamp;
+}
+
+export interface StripeEventTable {
+  attempt_count: number;
+  created_at: Timestamp;
+  error_message: string | null;
+  event_type: string;
+  id: string;
+  livemode: boolean;
+  payload: JsonColumn<Record<string, unknown>>;
+  processed_at: Timestamp | null;
+  received_at: Timestamp;
+  status: string;
+  stripe_account_id: string | null;
+  stripe_event_id: string;
+  updated_at: Timestamp;
+  webhook_kind: string;
+}
+
+export interface StripeWebhookEndpointTable {
+  connect: boolean;
+  created_at: Timestamp;
+  enabled_events: JsonColumn<string[]>;
+  id: string;
+  last_verified_at: Timestamp | null;
+  mode: string;
+  purpose: string;
+  secret_configured: boolean;
+  status: string;
+  stripe_endpoint_id: string;
+  updated_at: Timestamp;
+  url: string;
 }
 
 export interface VenueOperationalEventTable {
@@ -800,10 +979,13 @@ export interface BlocksDatabase {
   invitation: InvitationTable;
   notification: NotificationTable;
   subscription: SubscriptionTable;
+  spot_contribution: SpotContributionTable;
+  sync_plan: SyncPlanTable;
   sync_subscription: SyncSubscriptionTable;
   profile: ProfileTable;
   profile_media: ProfileMediaTable;
   recap: RecapTable;
+  recap_media: RecapMediaTable;
   referral: ReferralTable;
   trusted_contact: TrustedContactTable;
   user: UserTable;
@@ -836,6 +1018,14 @@ export interface BlocksDatabase {
   venue_job_listing: VenueJobListingTable;
   venue_tip_allocation: VenueTipAllocationTable;
   venue_attendance_segment: VenueAttendanceSegmentTable;
+  stripe_connected_account: StripeConnectedAccountTable;
+  stripe_dispute: StripeDisputeTable;
+  stripe_event: StripeEventTable;
+  stripe_payment: StripePaymentTable;
+  stripe_refund: StripeRefundTable;
+  stripe_transfer: StripeTransferTable;
+  stripe_transfer_reversal: StripeTransferReversalTable;
+  stripe_webhook_endpoint: StripeWebhookEndpointTable;
 }
 
 const scope = new Scope("chewbuu");

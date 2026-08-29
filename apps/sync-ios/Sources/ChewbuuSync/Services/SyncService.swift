@@ -129,6 +129,29 @@ public final class SyncService: ObservableObject {
         ]
     }
 
+    public func startCheckout(tableId: String) async -> URL? {
+        guard let orderId = UUID(uuidString: tableId),
+              UUID(uuidString: currentLocationId) != nil else {
+            lastActionMessage = "This demo table has no live order ID for Stripe checkout."
+            return nil
+        }
+        do {
+            let result = try await api.createVenueCheckoutSession(
+                input: Api.CreateVenueCheckoutSession.Input(
+                    cancelUrl: URL(string: "https://chewbuu.com/sync?payment=cancelled")!,
+                    experienceKind: .dine_In,
+                    orderId: orderId,
+                    successUrl: URL(string: "https://chewbuu.com/sync?payment=success")!
+                )
+            )
+            lastActionMessage = "Stripe checkout opened for Table \(tableId)."
+            return result.checkoutUrl
+        } catch {
+            lastActionMessage = "Stripe checkout could not start: \(error.localizedDescription)"
+            return nil
+        }
+    }
+
     public func fetchLiveBoard() async {
         guard let locUuid = UUID(uuidString: currentLocationId) else { return }
         isLoading = true

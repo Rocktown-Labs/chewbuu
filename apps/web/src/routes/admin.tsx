@@ -47,6 +47,7 @@ import { authClient } from "@/lib/auth-client";
 import {
   connectApi,
   datingApi,
+  stripeAdminApi,
   pricingApi,
   type MembershipPlan,
   type UsernameChangeRequest,
@@ -123,11 +124,9 @@ const RouteComponent = () => {
   const [runningJob, setRunningJob] = useState(false);
   const [connectStatus, setConnectStatus] =
     useState<StripeConnectStatus | null>(null);
-  const [connectForm, setConnectForm] = useState({
-    secretKey: "",
-    webhookSecret: "",
-  });
-  const [savingConnect, setSavingConnect] = useState(false);
+  const [stripeHealth, setStripeHealth] = useState<Awaited<
+    ReturnType<typeof stripeAdminApi.getHealth>
+  > | null>(null);
 
   // Users state
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -150,6 +149,14 @@ const RouteComponent = () => {
       toast.error(
         error instanceof Error ? error.message : "Could not load plans."
       );
+    }
+  };
+
+  const loadStripeHealth = async () => {
+    try {
+      setStripeHealth(await stripeAdminApi.getHealth());
+    } catch {
+      setStripeHealth(null);
     }
   };
 
@@ -195,6 +202,7 @@ const RouteComponent = () => {
     void loadUsers();
     void loadUsernameRequests();
     void loadConnectStatus();
+    void loadStripeHealth();
   }, [isAdmin]);
 
   const handleSetRole = async (userId: string, currentRole?: string | null) => {
@@ -685,7 +693,8 @@ const RouteComponent = () => {
                   </CardTitle>
                   <CardDescription>
                     Edit tier details, monthly/annual rates, and synchronize
-                    with Stripe product/price catalog.
+                    with Stripe product/price catalog. Sync is $60/month for up
+                    to 50 staff seats, with a $50 referral reward.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -866,14 +875,8 @@ const RouteComponent = () => {
                             <Input
                               aria-label={`${plan.name} Stripe price ID`}
                               className="mt-1 font-mono text-xs"
-                              onChange={(event) =>
-                                setPlans(
-                                  updatePlan(plans, plan.tier, {
-                                    stripePriceId: event.target.value,
-                                  })
-                                )
-                              }
                               placeholder="price_..."
+                              readOnly
                               value={plan.stripePriceId ?? ""}
                             />
                           </div>
@@ -884,14 +887,8 @@ const RouteComponent = () => {
                             <Input
                               aria-label={`${plan.name} annual Stripe price ID`}
                               className="mt-1 font-mono text-xs"
-                              onChange={(event) =>
-                                setPlans(
-                                  updatePlan(plans, plan.tier, {
-                                    annualStripePriceId: event.target.value,
-                                  })
-                                )
-                              }
                               placeholder="price_..."
+                              readOnly
                               value={plan.annualStripePriceId ?? ""}
                             />
                           </div>
@@ -944,9 +941,8 @@ const RouteComponent = () => {
                 </Badge>
                 <CardTitle className="text-xl">Platform connection</CardTitle>
                 <CardDescription>
-                  Store the platform key and webhook secret in AWS SSM
-                  SecureString, then verify the connection from this control
-                  room. Keys never return to the browser after saving.
+                  Stripe credentials are deployment-managed. This panel only
+                  exposes health and mode; secrets never enter browser state.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -968,71 +964,69 @@ const RouteComponent = () => {
                       : "Webhook secret missing"}
                   </Badge>
                 </div>
-                <form
-                  className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end"
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    setSavingConnect(true);
-                    try {
-                      const result = await connectApi.configure(connectForm);
-                      setConnectStatus(result);
-                      setConnectForm({ secretKey: "", webhookSecret: "" });
-                      toast.success(
-                        "Stripe Connect credentials verified and stored."
-                      );
-                    } catch (error) {
-                      toast.error(
-                        error instanceof Error
-                          ? error.message
-                          : "Could not configure Stripe Connect."
-                      );
-                    } finally {
-                      setSavingConnect(false);
-                    }
-                  }}
-                >
-                  <label className="space-y-2 text-sm font-medium">
-                    <span>Restricted or secret platform key</span>
-                    <Input
-                      autoComplete="off"
-                      onChange={(event) =>
-                        setConnectForm((current) => ({
-                          ...current,
-                          secretKey: event.target.value,
-                        }))
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={async () => {
+                      try {
+                        const [nextConnectStatus, nextHealth] =
+                          await Promise.all([
+                            connectApi.getStatus(),
+                            stripeAdminApi.getHealth(),
+                          ]);
+                        setConnectStatus(nextConnectStatus);
+                        setStripeHealth(nextHealth);
+                        toast.success("Stripe status refreshed.");
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Could not refresh Stripe status."
+                        );
                       }
-                      placeholder="rk_test_…"
-                      required
-                      type="password"
-                      value={connectForm.secretKey}
-                    />
-                  </label>
-                  <label className="space-y-2 text-sm font-medium">
-                    <span>Connect webhook secret</span>
-                    <Input
-                      autoComplete="off"
-                      onChange={(event) =>
-                        setConnectForm((current) => ({
-                          ...current,
-                          webhookSecret: event.target.value,
-                        }))
-                      }
-                      placeholder="whsec_…"
-                      required
-                      type="password"
-                      value={connectForm.webhookSecret}
-                    />
-                  </label>
-                  <Button disabled={savingConnect} type="submit">
-                    {savingConnect ? "Verifying…" : "Save & verify"}
+                    }}
+                    type="button"
+                    variant="outline"
+                  >
+                    <RefreshCw className="size-4" /> Refresh status
                   </Button>
-                </form>
+                  <Button
+                    onClick={async () => {
+                      try {
+                        await pricingApi.syncPlans();
+                        await stripeAdminApi.syncWebhooks();
+                        await loadStripeHealth();
+                        toast.success(
+                          "Stripe catalog and webhooks synchronized."
+                        );
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Could not synchronize Stripe."
+                        );
+                      }
+                    }}
+                    type="button"
+                  >
+                    Sync catalog & webhooks
+                  </Button>
+                </div>
+                <div className="grid gap-2 text-sm sm:grid-cols-3">
+                  <span>
+                    Catalog: {stripeHealth?.catalog.synced ?? 0} synced
+                  </span>
+                  <span>
+                    Connect:{" "}
+                    {stripeHealth?.connectedAccounts.transferReady ?? 0}/
+                    {stripeHealth?.connectedAccounts.total ?? 0} ready
+                  </span>
+                  <span>
+                    Failed webhooks: {stripeHealth?.failedWebhookEvents ?? 0}
+                  </span>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  This config only verifies access and stores credentials.
-                  Connected-account creation, onboarding, charges, payouts,
-                  refunds, and disputes stay capability-gated until the platform
-                  country, venue country, responsibility model, and charge
-                  pattern are approved.
+                  Connected-account onboarding, split settlement, refunds, and
+                  disputes are capability-gated and webhook-audited.
                 </p>
               </CardContent>
             </Card>

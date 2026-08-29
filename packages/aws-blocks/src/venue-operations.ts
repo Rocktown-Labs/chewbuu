@@ -20,6 +20,7 @@ import type {
   VenueStaffStatus,
   VenueSyncChannel,
 } from "./types";
+import { validateVenueOrderItems } from "./venue-pricing";
 
 type Db = Kysely<BlocksDatabase>;
 type Access = {
@@ -46,6 +47,7 @@ const roleSchema: z.ZodType<VenueStaffRole> = z.enum([
 ]);
 const attendanceStatusSchema = z.enum([
   "break",
+  "rest_break",
   "clocked_in",
   "clocked_out",
   "lunch",
@@ -91,6 +93,15 @@ const serviceOrderSchema = z.object({
   locationId: z.string().min(1),
   source: z.enum(["preorder", "staff"]).default("staff"),
   tableId: z.string().min(1).optional(),
+  tipAllocations: z
+    .array(
+      z.object({
+        amountCents: z.number().int().positive(),
+        beneficiaryKind: z.enum(["cook", "house", "server"]),
+        beneficiaryUserId: z.string().min(1).optional(),
+      })
+    )
+    .optional(),
   tipCents: z.number().int().min(0).max(1_000_000).default(0),
 });
 
@@ -134,8 +145,8 @@ const dailyCode = (locationId: string, date: Date) => {
   const digest = createHmac("sha256", secret)
     .update(`${locationId}:${dateKey}`)
     .digest("hex");
-  return String(Number.parseInt(digest.slice(0, 8), 16) % 1_000_000).padStart(
-    6,
+  return String(Number.parseInt(digest.slice(0, 8), 16) % 1000).padStart(
+    3,
     "0"
   );
 };
@@ -840,14 +851,24 @@ export const clockInVenueShift = async (
 ) => {
   const body = z
     .object({
-      code: z.string().regex(/^\d{6}$/),
+      code: z.string().regex(/^\d{3,6}$/),
       latitude: z.number().min(-90).max(90).optional(),
       locationId: z.string().min(1),
       longitude: z.number().min(-180).max(180).optional(),
       shiftId: z.string().min(1),
+      targetUserId: z.string().min(1).optional(),
     })
     .parse(input);
-  await assertAccess(userId, body.locationId, isAdmin);
+  const access = await assertAccess(userId, body.locationId, isAdmin);
+  const effectiveUserId = body.targetUserId ?? userId;
+  if (
+    body.targetUserId &&
+    body.targetUserId !== userId &&
+    !isManager(access.role) &&
+    !isAdmin
+  ) {
+    throw new Error("Manager permission required to clock in other staff.");
+  }
   const db = await getDb();
   const [location, shift] = await Promise.all([
     db
@@ -862,8 +883,8 @@ export const clockInVenueShift = async (
       .where("location_id", "=", body.locationId)
       .executeTakeFirst(),
   ]);
-  if (!shift || shift.user_id !== userId)
-    throw new Error("This shift is not assigned to you.");
+  if (!shift || shift.user_id !== effectiveUserId)
+    throw new Error("This shift is not assigned to the specified user.");
   if (body.code !== dailyCode(body.locationId, new Date()))
     throw new Error("The daily attendance code is incorrect.");
   if (location.latitude !== null && location.longitude !== null) {
@@ -895,7 +916,7 @@ export const clockInVenueShift = async (
       shift_id: body.shiftId,
       status: "clocked_in",
       updated_at: now,
-      user_id: userId,
+      user_id: effectiveUserId,
     })
     .onConflict((conflict) =>
       conflict.column("shift_id").doUpdateSet({
@@ -1254,10 +1275,37 @@ export const createVenueServiceOrder = async (
       .executeTakeFirst();
     if (!table) throw new Error("Table not found.");
   }
-  const subtotalCents = body.items.reduce(
-    (sum, item) => sum + item.quantity * item.unitPriceCents,
-    0
+  const subtotalCents = await validateVenueOrderItems(
+    db,
+    body.locationId,
+    body.items
   );
+  const tipAllocations =
+    body.tipAllocations ??
+    (body.tipCents > 0
+      ? [
+          {
+            amountCents: body.tipCents,
+            beneficiaryKind: "house" as const,
+          },
+        ]
+      : []);
+  if (
+    tipAllocations.reduce(
+      (sum, allocation) => sum + allocation.amountCents,
+      0
+    ) !== body.tipCents
+  ) {
+    throw new Error("Tip allocations must equal the order tip.");
+  }
+  if (
+    tipAllocations.some(
+      (allocation) =>
+        allocation.beneficiaryKind !== "house" && !allocation.beneficiaryUserId
+    )
+  ) {
+    throw new Error("Worker tip allocations require a staff member.");
+  }
   const orderId = randomUUID();
   await db.transaction().execute(async (tx) => {
     await tx
@@ -1295,6 +1343,25 @@ export const createVenueServiceOrder = async (
         }))
       )
       .execute();
+    if (tipAllocations.length) {
+      await tx
+        .insertInto("venue_tip_allocation")
+        .values(
+          tipAllocations.map((allocation) => ({
+            amount_cents: allocation.amountCents,
+            beneficiary_kind: allocation.beneficiaryKind,
+            beneficiary_user_id: allocation.beneficiaryUserId ?? null,
+            created_at: new Date(),
+            id: randomUUID(),
+            order_id: orderId,
+            reversal_id: null,
+            settled_at: null,
+            status: "recorded",
+            stripe_transfer_id: null,
+          }))
+        )
+        .execute();
+    }
   });
   const order = await db
     .selectFrom("venue_order")
@@ -1353,10 +1420,39 @@ export const updateVenueServiceOrder = async (
     throw new Error("This order is assigned to another staff member.");
   const currentOrder = await db
     .selectFrom("venue_order")
-    .select(["subtotal_cents", "tip_cents"])
+    .select(["payment_status", "subtotal_cents", "tip_cents"])
     .where("id", "=", body.orderId)
     .executeTakeFirstOrThrow();
+  if (
+    body.tipCents !== undefined &&
+    ["paid", "processing"].includes(currentOrder.payment_status)
+  ) {
+    throw new Error("Paid orders cannot be changed.");
+  }
   const nextTipCents = body.tipCents ?? currentOrder.tip_cents;
+  if (body.tipCents !== undefined && body.tipCents !== currentOrder.tip_cents) {
+    await db
+      .deleteFrom("venue_tip_allocation")
+      .where("order_id", "=", body.orderId)
+      .execute();
+    if (nextTipCents > 0) {
+      await db
+        .insertInto("venue_tip_allocation")
+        .values({
+          amount_cents: nextTipCents,
+          beneficiary_kind: "house",
+          beneficiary_user_id: null,
+          created_at: new Date(),
+          id: randomUUID(),
+          order_id: body.orderId,
+          reversal_id: null,
+          settled_at: null,
+          status: "recorded",
+          stripe_transfer_id: null,
+        })
+        .execute();
+    }
+  }
   const updated = await db
     .updateTable("venue_order")
     .set({

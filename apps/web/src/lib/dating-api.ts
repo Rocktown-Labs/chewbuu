@@ -6,6 +6,14 @@ import type {
   VenueServiceCustomer as BlocksVenueServiceCustomer,
   VenueServiceMode as BlocksVenueServiceMode,
   VenueServiceOrder as BlocksVenueServiceOrder,
+  StripeCheckoutSessionResponse,
+  StripeConnectedAccountResponse,
+  StripeIntegrationHealth,
+  StripePaymentResponse,
+  StripeRefundResponse,
+  StripeTipAllocationInput,
+  StripeVenueConnectStatus,
+  StripeWebhookSyncResponse,
   VenueShiftAttendance as BlocksVenueShiftAttendance,
   VenueStaffRole as BlocksVenueStaffRole,
   VenueStaffStatus as BlocksVenueStaffStatus,
@@ -519,7 +527,8 @@ export interface DateRecap {
   storyExpiresAt: string | null;
   storyHours?: number;
   thumbnailUrl?: string;
-  videoUrl: string;
+  videoUrl?: string;
+  media?: DateMedia[];
 }
 
 export const getServerUrl = (url: string) => {
@@ -802,6 +811,7 @@ export const venueApi = {
     locationId: string;
     source?: "preorder" | "staff";
     tableId?: string;
+    tipAllocations?: StripeTipAllocationInput[];
     tipCents?: number;
   }) =>
     blocksApi.createVenueServiceOrder(input) as Promise<{
@@ -927,6 +937,7 @@ export const venueApi = {
   createOrder: (input: {
     diningSessionId?: string;
     items: {
+      menuItemId?: string;
       name: string;
       notes?: string;
       quantity: number;
@@ -934,6 +945,7 @@ export const venueApi = {
     }[];
     locationId: string;
     reservationId?: string;
+    tipAllocations?: StripeTipAllocationInput[];
     tipCents?: number;
   }) => blocksApi.createVenueOrder(input),
 };
@@ -1021,9 +1033,50 @@ export const usernameApi = {
 };
 
 export const connectApi = {
-  configure: (input: { secretKey: string; webhookSecret: string }) =>
-    blocksApi.configureStripeConnect(input),
   getStatus: () => blocksApi.getStripeConnectStatus(),
+  getVenueStatus: (locationId: string) =>
+    blocksApi.getVenueConnectStatus(
+      locationId
+    ) as Promise<StripeVenueConnectStatus>,
+  startReferrerOnboarding: (locationId: string) =>
+    blocksApi.createReferrerConnectOnboarding({
+      locationId,
+    }) as Promise<StripeConnectedAccountResponse>,
+  startVenueOnboarding: (locationId: string) =>
+    blocksApi.createVenueConnectOnboarding({
+      locationId,
+    }) as Promise<StripeConnectedAccountResponse>,
+  startWorkerOnboarding: (locationId: string, userId: string) =>
+    blocksApi.createWorkerConnectOnboarding({
+      locationId,
+      userId,
+    }) as Promise<StripeConnectedAccountResponse>,
+};
+
+export const paymentsApi = {
+  checkout: (input: {
+    cancelUrl: string;
+    experienceKind?: "date" | "dine_in" | "pickup";
+    orderId: string;
+    successUrl: string;
+    tipAllocations?: StripeTipAllocationInput[];
+  }) =>
+    blocksApi.createVenueCheckoutSession(
+      input
+    ) as Promise<StripeCheckoutSessionResponse>,
+  get: (orderId: string) =>
+    blocksApi.getStripePayment(
+      orderId
+    ) as Promise<StripePaymentResponse | null>,
+  refund: (input: { amountCents?: number; orderId: string; reason?: string }) =>
+    blocksApi.createVenueRefund(input) as Promise<StripeRefundResponse>,
+};
+
+export const stripeAdminApi = {
+  getHealth: () =>
+    blocksApi.getStripeIntegrationHealth() as Promise<StripeIntegrationHealth>,
+  syncWebhooks: () =>
+    blocksApi.syncStripeWebhookEndpoints() as Promise<StripeWebhookSyncResponse>,
 };
 
 export const pricingApi = {
@@ -1119,9 +1172,10 @@ export const recapsApi = {
   publish: (input: {
     caption?: string;
     dateRequestId: string;
+    mediaIds?: string[];
     reviewId?: string;
     storyHours?: number;
     thumbnailUrl?: string;
-    videoUrl: string;
+    videoUrl?: string;
   }) => blocksApi.publishRecap(input),
 };

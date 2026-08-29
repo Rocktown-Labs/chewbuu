@@ -400,6 +400,7 @@ export type VenueStaffRole =
   | "staff";
 export type VenueAttendanceStatus =
   | "break"
+  | "rest_break"
   | "clocked_in"
   | "clocked_out"
   | "lunch"
@@ -409,14 +410,14 @@ export type VenueServiceMode = "closed" | "closing" | "open" | "pre_open";
 export interface VenueAttendanceSegment {
   endedAt?: string;
   id: string;
-  kind: "break" | "lunch";
+  kind: "break" | "rest_break" | "lunch";
   startedAt: string;
 }
 
 export interface VenueShiftAttendance {
   clockInAt?: string;
   clockOutAt?: string;
-  currentSegmentKind?: "break" | "lunch";
+  currentSegmentKind?: "break" | "rest_break" | "lunch";
   currentSegmentStartedAt?: string;
   etaAt?: string;
   id: string;
@@ -563,6 +564,9 @@ export interface AwsBlocksApi {
     profile: DatingProfileResponse;
     readiness: DatingReadiness;
   }>;
+  submitSpotContribution: (input: SpotContributionInput) => Promise<{
+    contribution: SpotContributionResponse;
+  }>;
   createDateRequest: (input: DateRequestInput) => Promise<{
     matches: DatingMatchResponse[];
     request: DatingRequestResponse;
@@ -592,13 +596,37 @@ export interface AwsBlocksApi {
   getPricingPlans: () => Promise<{ plans: MembershipPlan[] }>;
   seedPricingPlans: () => Promise<{ plans: MembershipPlan[] }>;
   syncPricingPlans: () => Promise<SyncPricingPlansResponse>;
+  getStripeIntegrationHealth: () => Promise<StripeIntegrationHealth>;
+  syncStripeWebhookEndpoints: () => Promise<StripeWebhookSyncResponse>;
+  createVenueCheckoutSession: (input: {
+    cancelUrl: string;
+    experienceKind?: "date" | "dine_in" | "pickup";
+    orderId: string;
+    successUrl: string;
+    tipAllocations?: StripeTipAllocationInput[];
+  }) => Promise<StripeCheckoutSessionResponse>;
+  createReferrerConnectOnboarding: (input: {
+    locationId: string;
+  }) => Promise<StripeConnectedAccountResponse>;
+  createVenueConnectOnboarding: (input: {
+    locationId: string;
+  }) => Promise<StripeConnectedAccountResponse>;
+  createWorkerConnectOnboarding: (input: {
+    locationId: string;
+    userId: string;
+  }) => Promise<StripeConnectedAccountResponse>;
+  getVenueConnectStatus: (
+    locationId: string
+  ) => Promise<StripeVenueConnectStatus>;
+  getStripePayment: (orderId: string) => Promise<StripePaymentResponse | null>;
+  createVenueRefund: (input: {
+    amountCents?: number;
+    orderId: string;
+    reason?: string;
+  }) => Promise<StripeRefundResponse>;
   updatePricingPlans: (input: {
     plans: MembershipPlan[];
   }) => Promise<{ plans: MembershipPlan[] }>;
-  configureStripeConnect: (input: {
-    secretKey: string;
-    webhookSecret: string;
-  }) => Promise<StripeConnectStatus>;
   getStripeConnectStatus: () => Promise<StripeConnectStatus>;
   getFriendships: () => Promise<{ friendships: FriendshipResponse[] }>;
   requestFriendship: (friendUserId: string) => Promise<{
@@ -772,6 +800,7 @@ export interface AwsBlocksApi {
     locationId: string;
     longitude?: number;
     shiftId: string;
+    targetUserId?: string;
   }) => Promise<{ attendance: VenueShiftAttendance }>;
   updateVenueAttendance: (input: {
     action: "break_in" | "break_out" | "clock_out" | "lunch_in" | "lunch_out";
@@ -819,6 +848,7 @@ export interface AwsBlocksApi {
     locationId: string;
     source?: "preorder" | "staff";
     tableId?: string;
+    tipAllocations?: StripeTipAllocationInput[];
     tipCents?: number;
   }) => Promise<{ order: VenueServiceOrder }>;
   updateVenueServiceOrder: (input: {
@@ -912,6 +942,7 @@ export interface AwsBlocksApi {
   createVenueOrder: (input: {
     diningSessionId?: string;
     items: {
+      menuItemId?: string;
       name: string;
       notes?: string;
       quantity: number;
@@ -919,6 +950,7 @@ export interface AwsBlocksApi {
     }[];
     locationId: string;
     reservationId?: string;
+    tipAllocations?: StripeTipAllocationInput[];
     tipCents?: number;
   }) => Promise<{ order: VenueOrder }>;
   requestVenueShiftSwap: (input: {
@@ -1151,6 +1183,24 @@ export interface AccountEntitlementsResponse {
   sync: { plan: string; status: string };
 }
 
+export type SpotContributionKind = "menu_photo" | "spot_photo";
+export type SpotContributionStatus = "approved" | "pending" | "rejected";
+
+export interface SpotContributionInput {
+  dateMediaId: string;
+  dateRequestId: string;
+  googlePlaceId: string;
+  kind: SpotContributionKind;
+}
+
+export interface SpotContributionResponse extends SpotContributionInput {
+  createdAt: string;
+  id: string;
+  rewardPoints: number;
+  rewardStatus: "pending" | "paid";
+  status: SpotContributionStatus;
+}
+
 export interface DateMediaResponse {
   createdAt: string;
   dateRequestId: string;
@@ -1171,16 +1221,18 @@ export interface UploadDateMediaInput {
 export interface PublishRecapInput {
   caption?: string;
   dateRequestId: string;
+  mediaIds?: string[];
   reviewId?: string;
   storyHours?: number;
   thumbnailUrl?: string;
-  videoUrl: string;
+  videoUrl?: string;
 }
 
 export interface RecapResponse extends PublishRecapInput {
   authorUserId: string;
   createdAt: string;
   id: string;
+  media?: DateMediaResponse[];
   publishedAt: string | null;
   storyExpiresAt: string | null;
 }
@@ -1316,4 +1368,86 @@ export interface StripeConnectStatus {
   keyLast4: string | null;
   mode: "live" | "test" | null;
   webhookConfigured: boolean;
+}
+
+export interface StripeTipAllocationInput {
+  amountCents: number;
+  beneficiaryKind: "cook" | "house" | "server";
+  beneficiaryUserId?: string;
+}
+
+export interface StripeCheckoutSessionResponse {
+  checkoutSessionId: string;
+  checkoutUrl: string;
+  orderId: string;
+  paymentId: string;
+  recipientCount: number;
+  transferGroup: string;
+}
+
+export interface StripeConnectedAccountResponse {
+  accountId: string;
+  dashboard: string | null;
+  expiresAt?: string;
+  livemode: boolean;
+  requirements: Record<string, unknown>;
+  transferCapabilityStatus: string;
+  url?: string;
+}
+
+export interface StripeVenueConnectStatus {
+  accountId: string | null;
+  onboardingStatus: string;
+  requirements: Record<string, unknown>;
+  transferCapabilityStatus: string;
+}
+
+export interface StripePaymentResponse {
+  payment: {
+    amount_cents: number;
+    charge_id: string | null;
+    checkout_session_id: string | null;
+    currency: string;
+    id: string;
+    payment_intent_id: string | null;
+    platform_fee_cents: number;
+    status: string;
+    transfer_group: string;
+  };
+  transfers: {
+    amount_cents: number;
+    kind: string;
+    status: string;
+    stripe_transfer_id: string | null;
+  }[];
+}
+
+export interface StripeRefundResponse {
+  amountCents: number;
+  refundId: string;
+  status: string | null;
+}
+
+export interface StripeIntegrationHealth {
+  catalog: { failed: number; pending: number; synced: number };
+  connectedAccounts: { total: number; transferReady: number };
+  configured: boolean;
+  failedWebhookEvents: number;
+  mode: "live" | "test" | null;
+  webhooks: {
+    purpose: string;
+    secretConfigured: boolean;
+    status: string;
+    url: string;
+  }[];
+}
+
+export interface StripeWebhookSyncResponse {
+  endpoints: {
+    connect: boolean;
+    purpose: string;
+    status: string;
+    url: string;
+  }[];
+  mode: "live" | "test";
 }

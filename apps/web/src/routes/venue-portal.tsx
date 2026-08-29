@@ -33,6 +33,7 @@ import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
 import {
+  connectApi,
   venueApi,
   type DatePlace,
   type VenueIdentityVerificationSession,
@@ -62,6 +63,8 @@ function VenuePortalPage() {
   const [menuPlan, setMenuPlan] = useState<"chewbuu" | "website">("chewbuu");
   const [preview, setPreview] = useState<VenueMenuPreview | null>(null);
   const [referral, setReferral] = useState<VenueReferral | undefined>();
+  const [isStartingReferralOnboarding, setIsStartingReferralOnboarding] =
+    useState(false);
   const [form, setForm] = useState({
     address: "",
     description: "",
@@ -191,6 +194,23 @@ function VenuePortalPage() {
     } finally {
       setIsPreviewing(false);
       setIsSubmitting(false);
+    }
+  };
+
+  const startReferralOnboarding = async () => {
+    if (!location) return;
+    setIsStartingReferralOnboarding(true);
+    try {
+      const result = await connectApi.startReferrerOnboarding(location.id);
+      if (result.url) window.location.assign(result.url);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not start referral payout onboarding."
+      );
+    } finally {
+      setIsStartingReferralOnboarding(false);
     }
   };
 
@@ -488,11 +508,25 @@ function VenuePortalPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {referral ? (
-                <p className="text-sm text-muted-foreground">
-                  Referral reward tracked: $
-                  {(referral.rewardAmountCents / 100).toFixed(2)} ·{" "}
-                  {referral.status.replaceAll("_", " ")}
-                </p>
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Referral reward tracked: $
+                    {(referral.rewardAmountCents / 100).toFixed(2)} ·{" "}
+                    {referral.status.replaceAll("_", " ")}
+                  </p>
+                  {referral.status !== "paid" ? (
+                    <Button
+                      disabled={isStartingReferralOnboarding}
+                      onClick={() => void startReferralOnboarding()}
+                      type="button"
+                      variant="outline"
+                    >
+                      {isStartingReferralOnboarding
+                        ? "Opening Stripe…"
+                        : "Set up referral payout"}
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
               {menuPlan === "chewbuu" ? (
                 <div className="rounded-2xl bg-primary/5 p-4 text-sm">

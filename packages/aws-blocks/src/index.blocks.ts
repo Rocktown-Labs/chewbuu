@@ -16,16 +16,21 @@ import {
   Realtime,
   Scope,
 } from "@aws-blocks/blocks";
-import { RawRoute } from "@aws-blocks/core";
+import { RawRoute, type BlocksContext } from "@aws-blocks/core";
 import {
   ChimeSDKMeetingsClient,
   CreateAttendeeCommand,
   CreateMeetingCommand,
   GetMeetingCommand,
 } from "@aws-sdk/client-chime-sdk-meetings";
+import {
+  createStripeClient,
+  getStripeMode,
+  stripeIdempotencyKey,
+} from "@chewbuu/stripe";
 import { convertToModelMessages, generateText } from "ai";
 import type { Kysely, Transaction } from "kysely";
-import Stripe from "stripe";
+import type Stripe from "stripe";
 import webpush from "web-push";
 import { z } from "zod";
 
@@ -50,6 +55,19 @@ import {
   distanceBetweenMiles,
   hasLocation,
 } from "./matching";
+import {
+  createReferrerConnectOnboarding,
+  createVenueCheckoutSession,
+  createVenueConnectOnboarding,
+  createVenueRefund,
+  createWorkerConnectOnboarding,
+  getStripePayment,
+  getVenueConnectStatus,
+  getStripeIntegrationHealth,
+  ingestStripeWebhookEvent,
+  processStripeWebhookEvent,
+  syncStripeWebhookEndpoints,
+} from "./stripe-marketplace";
 import type {
   ApiChatMessage,
   ApiChatParticipant,
@@ -74,6 +92,8 @@ import type {
   PendingReviewResponse,
   PlacePhotoResponse,
   PlaceSuggestionInput,
+  SpotContributionInput,
+  SpotContributionResponse,
   MembershipPlan,
   PublishRecapInput,
   RecapResponse,
@@ -373,6 +393,194 @@ const stripeConnectWebhookSecret = AppSetting.fromExisting(
     secret: true,
   }
 );
+
+const readStripeSetting = async (setting: AppSetting<string>) => {
+  try {
+    return (await setting.get()) || null;
+  } catch {
+    return null;
+  }
+};
+
+const getStripeWebhookSecret = async (
+  kind: "billing" | "commerce" | "connect"
+) => {
+  if (kind === "billing") {
+    return (
+      process.env.STRIPE_BILLING_WEBHOOK_SECRET ??
+      process.env.STRIPE_WEBHOOK_SECRET ??
+      null
+    );
+  }
+  if (kind === "commerce") {
+    return process.env.STRIPE_COMMERCE_WEBHOOK_SECRET ?? null;
+  }
+  return (
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET ??
+    (await readStripeSetting(stripeConnectWebhookSecret))
+  );
+};
+
+const markStripeEvent = async (
+  eventId: string,
+  status: "failed" | "processed",
+  errorMessage?: string
+) => {
+  const db = await getDb();
+  await db
+    .updateTable("stripe_event")
+    .set({
+      ...(status === "processed" ? { processed_at: new Date() } : {}),
+      ...(errorMessage ? { error_message: errorMessage } : {}),
+      status,
+      updated_at: new Date(),
+    })
+    .where("id", "=", eventId)
+    .execute();
+};
+
+const stripeWebhookProcessingJob = new AsyncJob(
+  scope,
+  "stripe-webhook-processing",
+  {
+    handler: async (payload: { eventId: string }) => {
+      await processStripeWebhookEvent(payload.eventId);
+    },
+    schema: z.object({ eventId: z.string().min(1) }),
+  }
+);
+
+const handleStripeWebhook = async (
+  ctx: BlocksContext,
+  kind: "billing" | "commerce" | "connect"
+) => {
+  const secret = await getStripeWebhookSecret(kind);
+  const signature = ctx.request.headers.get("stripe-signature");
+  if (!secret || !signature) {
+    ctx.response.status = 400;
+    ctx.response.send({ message: "Stripe webhook is not configured." });
+    return;
+  }
+  const body = await ctx.request.text();
+  let result: Awaited<ReturnType<typeof ingestStripeWebhookEvent>>;
+  try {
+    result = await ingestStripeWebhookEvent({
+      body,
+      kind,
+      secret,
+      signature,
+    });
+  } catch (error) {
+    logger.warn("stripe webhook signature rejected", {
+      error: error instanceof Error ? error.message : "unknown error",
+      kind,
+    });
+    ctx.response.status = 400;
+    ctx.response.send({ message: "Invalid Stripe webhook signature." });
+    return;
+  }
+  if (result.duplicate && result.status === "processed") {
+    ctx.response.status = 200;
+    ctx.response.send({ received: true });
+    return;
+  }
+  if (
+    result.duplicate &&
+    result.eventId &&
+    (kind !== "billing" || result.status === "received")
+  ) {
+    try {
+      await stripeWebhookProcessingJob.submit({ eventId: result.eventId });
+      ctx.response.status = 200;
+      ctx.response.send({ received: true });
+    } catch (error) {
+      await markStripeEvent(
+        result.eventId,
+        "failed",
+        error instanceof Error ? error.message : "Stripe job submission failed."
+      );
+      ctx.response.status = 500;
+      ctx.response.send({
+        message: "Stripe webhook processing could not be queued.",
+      });
+    }
+    return;
+  }
+  if (!result.eventId) {
+    ctx.response.status = 500;
+    ctx.response.send({ message: "Stripe event could not be recorded." });
+    return;
+  }
+  if (kind === "billing") {
+    try {
+      await initializeAuthEnvironment();
+      const { auth } = await import("@chewbuu/auth");
+      const authRequest = new Request(
+        new URL("/api/auth/stripe/webhook", ctx.request.url),
+        {
+          body,
+          headers: {
+            "content-type": "application/json",
+            "stripe-signature": signature,
+          },
+          method: "POST",
+        }
+      );
+      const response = await auth.handler(authRequest);
+      if (!response.ok) {
+        throw new Error(`Better Auth webhook returned ${response.status}.`);
+      }
+      await stripeWebhookProcessingJob.submit({ eventId: result.eventId });
+    } catch (error) {
+      await markStripeEvent(
+        result.eventId,
+        "failed",
+        error instanceof Error ? error.message : "Billing webhook failed."
+      );
+      ctx.response.status = 500;
+      ctx.response.send({ message: "Billing webhook processing failed." });
+      return;
+    }
+  } else {
+    try {
+      await stripeWebhookProcessingJob.submit({ eventId: result.eventId });
+    } catch (error) {
+      await markStripeEvent(
+        result.eventId,
+        "failed",
+        error instanceof Error ? error.message : "Stripe job submission failed."
+      );
+      ctx.response.status = 500;
+      ctx.response.send({
+        message: "Stripe webhook processing could not be queued.",
+      });
+      return;
+    }
+  }
+  ctx.response.status = 200;
+  ctx.response.send({ received: true });
+};
+
+const stripeBillingWebhook = new RawRoute(scope, "stripe-billing-webhook", {
+  method: "POST",
+  path: "/webhooks/stripe/billing",
+  handler: async (ctx) => handleStripeWebhook(ctx, "billing"),
+});
+void stripeBillingWebhook;
+
+const stripeCommerceWebhook = new RawRoute(scope, "stripe-commerce-webhook", {
+  method: "POST",
+  path: "/webhooks/stripe/commerce",
+  handler: async (ctx) => handleStripeWebhook(ctx, "commerce"),
+});
+void stripeCommerceWebhook;
+
+const stripeConnectWebhook = new RawRoute(scope, "stripe-connect-webhook", {
+  method: "POST",
+  path: "/webhooks/stripe/connect",
+  handler: async (ctx) => handleStripeWebhook(ctx, "connect"),
+});
+void stripeConnectWebhook;
 
 const mediaBucket = new FileBucket(scope, "media", {
   corsRules: [
@@ -2588,14 +2796,26 @@ const uploadDateMediaSchema = z.object({
   url: z.string().url(),
 });
 
-const publishRecapSchema = z.object({
-  caption: z.string().trim().max(2000).optional(),
+const spotContributionSchema = z.object({
+  dateMediaId: z.string().min(1),
   dateRequestId: z.string().min(1),
-  reviewId: z.string().optional(),
-  storyHours: z.number().int().min(1).max(24).optional(),
-  thumbnailUrl: z.string().url().optional(),
-  videoUrl: z.string().url(),
+  googlePlaceId: z.string().trim().min(1),
+  kind: z.enum(["menu_photo", "spot_photo"]),
 });
+
+const publishRecapSchema = z
+  .object({
+    caption: z.string().trim().max(2000).optional(),
+    dateRequestId: z.string().min(1),
+    mediaIds: z.array(z.string().min(1)).max(20).optional(),
+    reviewId: z.string().optional(),
+    storyHours: z.number().int().min(1).max(24).optional(),
+    thumbnailUrl: z.string().url().optional(),
+    videoUrl: z.string().url().optional(),
+  })
+  .refine((value) => Boolean(value.videoUrl || value.mediaIds?.length), {
+    message: "A recap needs a video or at least one attached media item.",
+  });
 
 const placeSearchKeywords: Record<string, string> = {
   drink: "bar drinks wine beer coffee cocktail",
@@ -3277,18 +3497,6 @@ const requireAdmin = (sessionUser: SessionUser) => {
   }
 };
 
-const stripeSecretKeySchema = z
-  .string()
-  .trim()
-  .regex(
-    /^(?:sk|rk)_(?:test|live)_[A-Za-z0-9]+$/,
-    "Enter a valid Stripe secret or restricted key."
-  );
-const stripeWebhookSecretSchema = z
-  .string()
-  .trim()
-  .regex(/^whsec_[A-Za-z0-9]+$/, "Enter a valid Stripe webhook secret.");
-
 const readStripeConnectSecret = async (setting: AppSetting<string>) => {
   try {
     const value = await setting.get();
@@ -3373,37 +3581,15 @@ const loadVenueIdentityStatus = async (
   );
 };
 
-const configureStripeConnect = async (
-  sessionUser: SessionUser,
-  input: unknown
-): Promise<StripeConnectStatus> => {
-  requireAdmin(sessionUser);
-  const body = z
-    .object({
-      secretKey: stripeSecretKeySchema,
-      webhookSecret: stripeWebhookSecretSchema,
-    })
-    .parse(input);
-  const stripeClient = new Stripe(body.secretKey);
-  await stripeClient.balance.retrieve();
-  await stripeConnectSecretKey.put(body.secretKey);
-  await stripeConnectWebhookSecret.put(body.webhookSecret);
-  return {
-    accountId: null,
-    configured: true,
-    keyLast4: body.secretKey.slice(-4),
-    mode: body.secretKey.includes("_live_") ? "live" : "test",
-    webhookConfigured: true,
-  };
-};
-
 const getStripeConnectStatus = async (
   sessionUser: SessionUser
 ): Promise<StripeConnectStatus> => {
   requireAdmin(sessionUser);
   const [secretKey, webhookSecret] = await Promise.all([
-    readStripeConnectSecret(stripeConnectSecretKey),
-    readStripeConnectSecret(stripeConnectWebhookSecret),
+    process.env.STRIPE_SECRET_KEY ??
+      readStripeConnectSecret(stripeConnectSecretKey),
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET ??
+      readStripeConnectSecret(stripeConnectWebhookSecret),
   ]);
   if (!secretKey) {
     return {
@@ -3414,7 +3600,7 @@ const getStripeConnectStatus = async (
       webhookConfigured: Boolean(webhookSecret),
     };
   }
-  const stripeClient = new Stripe(secretKey);
+  const stripeClient = createStripeClient(secretKey);
   await stripeClient.balance.retrieve();
   return {
     accountId: null,
@@ -3429,7 +3615,7 @@ const getAccountEntitlements = async (
   sessionUser: SessionUser
 ): Promise<AccountEntitlementsResponse> => {
   const db = await getDb();
-  const [user, membership] = await Promise.all([
+  const [user, membership, organizations, legacySync] = await Promise.all([
     db
       .selectFrom("user")
       .select("membership_tier")
@@ -3442,14 +3628,33 @@ const getAccountEntitlements = async (
       .where("status", "in", ["active", "trialing"])
       .orderBy("created_at", "desc")
       .executeTakeFirst(),
+    db
+      .selectFrom("member")
+      .select("organization_id")
+      .where("user_id", "=", sessionUser.id)
+      .execute(),
+    db
+      .selectFrom("sync_subscription")
+      .select(["plan", "status"])
+      .where("user_id", "=", sessionUser.id)
+      .where("status", "in", ["active", "trialing"])
+      .orderBy("created_at", "desc")
+      .executeTakeFirst(),
   ]);
-  const sync = await db
-    .selectFrom("sync_subscription")
-    .select(["plan", "status"])
-    .where("user_id", "=", sessionUser.id)
-    .where("status", "in", ["active", "trialing"])
-    .orderBy("created_at", "desc")
-    .executeTakeFirst();
+  const organizationIds = organizations.map(
+    (organization) => organization.organization_id
+  );
+  const organizationSync = organizationIds.length
+    ? await db
+        .selectFrom("subscription")
+        .select(["plan", "status"])
+        .where("reference_id", "in", organizationIds)
+        .where("plan", "=", "sync")
+        .where("status", "in", ["active", "trialing"])
+        .orderBy("created_at", "desc")
+        .executeTakeFirst()
+    : undefined;
+  const sync = organizationSync ?? legacySync;
   return {
     isAdmin: isConfiguredAdmin(sessionUser),
     membership: {
@@ -3481,7 +3686,12 @@ const seedPricingPlans = async () => {
         name: plan.name,
         sort_order: plan.sortOrder,
         stats: jsonb([...plan.stats]),
+        stripe_currency: "usd",
+        stripe_mode: null,
         stripe_price_id: plan.stripePriceId || null,
+        stripe_product_id: null,
+        stripe_sync_status: "pending",
+        stripe_synced_at: null,
         tier: plan.tier,
         updated_at: new Date(),
       })
@@ -3532,7 +3742,12 @@ const updatePricingPlans = async (sessionUser: SessionUser, input: unknown) => {
         name: plan.name,
         sort_order: plan.sortOrder,
         stats: jsonb(plan.stats),
+        stripe_currency: "usd",
+        stripe_mode: null,
         stripe_price_id: plan.stripePriceId || null,
+        stripe_product_id: null,
+        stripe_sync_status: "pending",
+        stripe_synced_at: null,
         tier: plan.tier,
         updated_at: new Date(),
       })
@@ -3557,6 +3772,79 @@ const updatePricingPlans = async (sessionUser: SessionUser, input: unknown) => {
   return getPricingPlans();
 };
 
+const reconcileRecurringPrice = async (input: {
+  currency: string;
+  existingPrices: Stripe.Price[];
+  interval: "month" | "year";
+  lookupKey: string;
+  planId: string;
+  priceCents: number;
+  productId: string;
+  stripe: Stripe;
+  tier: string;
+}) => {
+  const matchingPrice = input.existingPrices.find(
+    (price) =>
+      price.recurring?.interval === input.interval &&
+      price.unit_amount === input.priceCents &&
+      price.currency.toLowerCase() === input.currency &&
+      (price.lookup_key === input.lookupKey ||
+        price.metadata?.plan_id === input.planId)
+  );
+  if (matchingPrice?.active) return matchingPrice;
+  if (matchingPrice) {
+    await input.stripe.prices.update(matchingPrice.id, { active: true });
+    return matchingPrice;
+  }
+  const previousLookupPrice = input.existingPrices.find(
+    (price) => price.lookup_key === input.lookupKey
+  );
+  const newPrice = await input.stripe.prices.create(
+    {
+      currency: input.currency,
+      lookup_key: input.lookupKey,
+      metadata: {
+        app: "chewbuu",
+        interval: input.interval,
+        plan_id: input.planId,
+        tier: input.tier,
+      },
+      product: input.productId,
+      recurring: { interval: input.interval },
+      transfer_lookup_key: Boolean(previousLookupPrice),
+      unit_amount: input.priceCents,
+    },
+    {
+      idempotencyKey: stripeIdempotencyKey(
+        "catalog-price",
+        input.planId,
+        input.interval,
+        input.currency,
+        String(input.priceCents)
+      ),
+    }
+  );
+  for (const price of input.existingPrices) {
+    if (
+      price.id !== newPrice.id &&
+      price.recurring?.interval === input.interval &&
+      price.active
+    ) {
+      await input.stripe.prices.update(price.id, { active: false });
+    }
+  }
+  return newPrice;
+};
+
+const retrieveStripeProduct = async (stripe: Stripe, productId: string) => {
+  try {
+    const product = await stripe.products.retrieve(productId);
+    return "deleted" in product && product.deleted ? null : product;
+  } catch {
+    return null;
+  }
+};
+
 const syncPricingPlans = async (
   sessionUser: SessionUser
 ): Promise<SyncPricingPlansResponse> => {
@@ -3571,7 +3859,7 @@ const syncPricingPlans = async (
     };
   }
 
-  const stripe = new Stripe(stripeKey);
+  const stripe = createStripeClient(stripeKey);
   const db = await getDb();
   let currentPlans = await db
     .selectFrom("membership_plan")
@@ -3590,90 +3878,131 @@ const syncPricingPlans = async (
       .execute();
   }
 
-  const stripeProducts = await stripe.products.list({
-    active: true,
-    limit: 100,
-  });
+  const stripeMode = getStripeMode(stripeKey);
+  const stripeProducts = await stripe.products.list({ limit: 100 });
 
   for (const plan of currentPlans) {
-    if (plan.tier === "social" || plan.monthly_price_cents === 0) {
-      continue;
-    }
-
-    let product = stripeProducts.data.find(
-      (p) =>
-        p.metadata?.tier === plan.tier ||
-        p.name.toLowerCase() === plan.name.toLowerCase() ||
-        p.name.toLowerCase() === `chewbuu ${plan.name.toLowerCase()}`
-    );
-
-    if (!product) {
-      product = await stripe.products.create({
-        description: plan.description,
-        metadata: {
-          app: "chewbuu",
-          tier: plan.tier,
+    if (plan.tier === "social" || plan.monthly_price_cents === 0) continue;
+    const product =
+      (plan.stripe_product_id
+        ? await retrieveStripeProduct(stripe, plan.stripe_product_id)
+        : undefined) ??
+      stripeProducts.data.find(
+        (candidate) =>
+          candidate.metadata?.plan_id === plan.id ||
+          candidate.metadata?.tier === plan.tier ||
+          candidate.name.toLowerCase() === plan.name.toLowerCase() ||
+          candidate.name.toLowerCase() === `chewbuu ${plan.name.toLowerCase()}`
+      ) ??
+      (await stripe.products.create(
+        {
+          description: plan.description,
+          metadata: {
+            app: "chewbuu",
+            plan_id: plan.id,
+            tier: plan.tier,
+          },
+          name: `Chewbuu ${plan.name}`,
         },
-        name: `Chewbuu ${plan.name}`,
-      });
-    }
-
-    const existingPrices = await stripe.prices.list({
-      active: true,
-      limit: 100,
-      product: product.id,
+        { idempotencyKey: stripeIdempotencyKey("catalog-product", plan.id) }
+      ));
+    const existingPrices = await stripe.prices
+      .list({ limit: 100, product: product.id })
+      .then((response) => response.data);
+    const monthlyPrice = await reconcileRecurringPrice({
+      currency: plan.stripe_currency,
+      existingPrices,
+      interval: "month",
+      lookupKey: `chewbuu_${plan.tier}_monthly_${stripeMode}`,
+      planId: plan.id,
+      priceCents: plan.monthly_price_cents,
+      productId: product.id,
+      stripe,
+      tier: plan.tier,
     });
-
-    let monthlyPrice = existingPrices.data.find(
-      (p) =>
-        p.recurring?.interval === "month" &&
-        p.unit_amount === plan.monthly_price_cents &&
-        p.currency.toLowerCase() === "usd"
-    );
-
-    if (!monthlyPrice) {
-      monthlyPrice = await stripe.prices.create({
-        currency: "usd",
-        metadata: {
-          app: "chewbuu",
-          interval: "month",
-          tier: plan.tier,
-        },
-        product: product.id,
-        recurring: { interval: "month" },
-        unit_amount: plan.monthly_price_cents,
-      });
-    }
-
-    let annualPrice = existingPrices.data.find(
-      (p) =>
-        p.recurring?.interval === "year" &&
-        p.unit_amount === plan.annual_price_cents &&
-        p.currency.toLowerCase() === "usd"
-    );
-
-    if (!annualPrice && plan.annual_price_cents > 0) {
-      annualPrice = await stripe.prices.create({
-        currency: "usd",
-        metadata: {
-          app: "chewbuu",
-          interval: "year",
-          tier: plan.tier,
-        },
-        product: product.id,
-        recurring: { interval: "year" },
-        unit_amount: plan.annual_price_cents,
-      });
-    }
+    const annualPrice =
+      plan.annual_price_cents > 0
+        ? await reconcileRecurringPrice({
+            currency: plan.stripe_currency,
+            existingPrices,
+            interval: "year",
+            lookupKey: `chewbuu_${plan.tier}_annual_${stripeMode}`,
+            planId: plan.id,
+            priceCents: plan.annual_price_cents,
+            productId: product.id,
+            stripe,
+            tier: plan.tier,
+          })
+        : null;
 
     await db
       .updateTable("membership_plan")
       .set({
         annual_stripe_price_id: annualPrice?.id ?? null,
+        stripe_mode: stripeMode,
         stripe_price_id: monthlyPrice.id,
+        stripe_product_id: product.id,
+        stripe_sync_status: "synced",
+        stripe_synced_at: new Date(),
         updated_at: new Date(),
       })
       .where("id", "=", plan.id)
+      .execute();
+  }
+
+  const syncPlan = await db
+    .selectFrom("sync_plan")
+    .selectAll()
+    .where("active", "=", true)
+    .where("code", "=", "sync_50")
+    .executeTakeFirst();
+  if (syncPlan) {
+    const product =
+      (syncPlan.stripe_product_id
+        ? await retrieveStripeProduct(stripe, syncPlan.stripe_product_id)
+        : undefined) ??
+      stripeProducts.data.find(
+        (candidate) =>
+          candidate.metadata?.plan_id === syncPlan.id ||
+          candidate.metadata?.plan_code === syncPlan.code
+      ) ??
+      (await stripe.products.create(
+        {
+          description: syncPlan.description,
+          metadata: {
+            app: "chewbuu",
+            plan_code: syncPlan.code,
+            plan_id: syncPlan.id,
+          },
+          name: syncPlan.name,
+        },
+        { idempotencyKey: stripeIdempotencyKey("catalog-product", syncPlan.id) }
+      ));
+    const existingPrices = await stripe.prices
+      .list({ limit: 100, product: product.id })
+      .then((response) => response.data);
+    const monthlyPrice = await reconcileRecurringPrice({
+      currency: syncPlan.stripe_currency,
+      existingPrices,
+      interval: "month",
+      lookupKey: `chewbuu_sync_50_monthly_${stripeMode}`,
+      planId: syncPlan.id,
+      priceCents: syncPlan.monthly_price_cents,
+      productId: product.id,
+      stripe,
+      tier: syncPlan.code,
+    });
+    await db
+      .updateTable("sync_plan")
+      .set({
+        monthly_stripe_price_id: monthlyPrice.id,
+        stripe_mode: stripeMode,
+        stripe_product_id: product.id,
+        stripe_sync_status: "synced",
+        stripe_synced_at: new Date(),
+        updated_at: new Date(),
+      })
+      .where("id", "=", syncPlan.id)
       .execute();
   }
 
@@ -3685,7 +4014,8 @@ const syncPricingPlans = async (
     .execute();
 
   return {
-    message: "Stripe catalog synchronized successfully.",
+    message:
+      "Stripe catalog synchronized successfully, including Chewbuu Sync.",
     plans: updatedPlans.map(mapPlan),
     stripeConfigured: true,
   };
@@ -3953,6 +4283,39 @@ const respondFriendship = async (
   };
 };
 
+type DateMediaRow = {
+  created_at: Date | number | string;
+  date_request_id: string;
+  id: string;
+  kind: string;
+  thumbnail_url: string | null;
+  uploaded_by_user_id: string;
+  url: string;
+};
+
+const toDateMediaResponse = async (
+  item: DateMediaRow
+): Promise<DateMediaResponse> => ({
+  createdAt: new Date(item.created_at).toISOString(),
+  dateRequestId: item.date_request_id,
+  id: item.id,
+  kind: item.kind,
+  thumbnailUrl: (await mintStoredMediaUrl(item.thumbnail_url)) ?? null,
+  uploadedByUserId: item.uploaded_by_user_id,
+  url: (await mintStoredMediaUrl(item.url)) ?? item.url,
+});
+
+const getRecapMedia = async (db: Kysely<BlocksDatabase>, recapId: string) => {
+  const media = await db
+    .selectFrom("recap_media")
+    .innerJoin("date_media", "date_media.id", "recap_media.date_media_id")
+    .selectAll("date_media")
+    .where("recap_media.recap_id", "=", recapId)
+    .orderBy("recap_media.created_at", "asc")
+    .execute();
+  return Promise.all(media.map(toDateMediaResponse));
+};
+
 const uploadDateMedia = async (sessionUser: SessionUser, input: unknown) => {
   const body = uploadDateMediaSchema.parse(input);
   await getOwnedRequest(body.dateRequestId, sessionUser.id);
@@ -3973,15 +4336,7 @@ const uploadDateMedia = async (sessionUser: SessionUser, input: unknown) => {
     .execute();
   if (!media) throw new Error("Could not save date media");
   return {
-    media: {
-      createdAt: new Date(media.created_at).toISOString(),
-      dateRequestId: media.date_request_id,
-      id: media.id,
-      kind: media.kind,
-      thumbnailUrl: media.thumbnail_url,
-      uploadedByUserId: media.uploaded_by_user_id,
-      url: media.url,
-    } satisfies DateMediaResponse,
+    media: await toDateMediaResponse(media),
   };
 };
 
@@ -3995,17 +4350,76 @@ const getDateMedia = async (sessionUser: SessionUser, requestId: string) => {
     .orderBy("created_at", "asc")
     .execute();
   return {
-    media: await Promise.all(
-      media.map(async (item) => ({
-        createdAt: new Date(item.created_at).toISOString(),
-        dateRequestId: item.date_request_id,
-        id: item.id,
-        kind: item.kind,
-        thumbnailUrl: await mintStoredMediaUrl(item.thumbnail_url),
-        uploadedByUserId: item.uploaded_by_user_id,
-        url: (await mintStoredMediaUrl(item.url)) ?? item.url,
-      }))
-    ),
+    media: await Promise.all(media.map(toDateMediaResponse)),
+  };
+};
+
+const submitSpotContribution = async (
+  sessionUser: SessionUser,
+  input: unknown
+) => {
+  const body = spotContributionSchema.parse(input);
+  await getOwnedRequest(body.dateRequestId, sessionUser.id);
+  const db = await getDb();
+  const media = await db
+    .selectFrom("date_media")
+    .select("id")
+    .where("id", "=", body.dateMediaId)
+    .where("date_request_id", "=", body.dateRequestId)
+    .where("uploaded_by_user_id", "=", sessionUser.id)
+    .executeTakeFirst();
+  if (!media) throw new Error("Spot contribution media not found");
+
+  const [created] = await db
+    .insertInto("spot_contribution")
+    .values({
+      created_at: new Date(),
+      date_media_id: body.dateMediaId,
+      date_request_id: body.dateRequestId,
+      google_place_id: body.googlePlaceId,
+      id: crypto.randomUUID(),
+      kind: body.kind,
+      reward_points: 0,
+      reward_status: "pending",
+      reviewed_at: null,
+      status: "pending",
+      submitted_by_user_id: sessionUser.id,
+    })
+    .onConflict((conflict) =>
+      conflict
+        .columns([
+          "submitted_by_user_id",
+          "google_place_id",
+          "kind",
+          "date_media_id",
+        ])
+        .doNothing()
+    )
+    .returningAll()
+    .execute();
+  const contribution =
+    created ??
+    (await db
+      .selectFrom("spot_contribution")
+      .selectAll()
+      .where("submitted_by_user_id", "=", sessionUser.id)
+      .where("google_place_id", "=", body.googlePlaceId)
+      .where("kind", "=", body.kind)
+      .where("date_media_id", "=", body.dateMediaId)
+      .executeTakeFirst());
+  if (!contribution) throw new Error("Could not save spot contribution");
+  return {
+    contribution: {
+      createdAt: new Date(contribution.created_at).toISOString(),
+      dateMediaId: contribution.date_media_id,
+      dateRequestId: contribution.date_request_id,
+      googlePlaceId: contribution.google_place_id,
+      id: contribution.id,
+      kind: contribution.kind as SpotContributionResponse["kind"],
+      rewardPoints: contribution.reward_points,
+      rewardStatus: contribution.reward_status === "paid" ? "paid" : "pending",
+      status: contribution.status as SpotContributionResponse["status"],
+    } satisfies SpotContributionResponse,
   };
 };
 
@@ -4023,37 +4437,74 @@ const publishRecap = async (sessionUser: SessionUser, input: unknown) => {
       .executeTakeFirst();
     if (!review) throw new Error("Review not found");
   }
+  if (body.mediaIds) {
+    const distinctMediaIds = new Set(body.mediaIds);
+    if (distinctMediaIds.size !== body.mediaIds.length) {
+      throw new Error("A recap cannot attach the same media twice.");
+    }
+    const media = await db
+      .selectFrom("date_media")
+      .select("id")
+      .where("date_request_id", "=", body.dateRequestId)
+      .where("id", "in", body.mediaIds)
+      .execute();
+    if (media.length !== distinctMediaIds.size) {
+      throw new Error("One or more recap media items are invalid.");
+    }
+  }
   const now = new Date();
   const storyExpiresAt = body.storyHours
     ? new Date(now.getTime() + body.storyHours * 60 * 60 * 1000)
     : null;
-  const [recap] = await db
-    .insertInto("recap")
-    .values({
-      author_user_id: sessionUser.id,
-      caption: body.caption ?? null,
-      created_at: now,
-      date_request_id: body.dateRequestId,
-      id: crypto.randomUUID(),
-      published_at: now,
-      review_id: body.reviewId ?? null,
-      story_expires_at: storyExpiresAt,
-      thumbnail_url: body.thumbnailUrl ?? null,
-      video_url: body.videoUrl,
-    })
-    .onConflict((conflict) =>
-      conflict.columns(["author_user_id", "date_request_id"]).doUpdateSet({
+  const recap = await db.transaction().execute(async (tx) => {
+    const [savedRecap] = await tx
+      .insertInto("recap")
+      .values({
+        author_user_id: sessionUser.id,
         caption: body.caption ?? null,
+        created_at: now,
+        date_request_id: body.dateRequestId,
+        id: crypto.randomUUID(),
         published_at: now,
         review_id: body.reviewId ?? null,
         story_expires_at: storyExpiresAt,
         thumbnail_url: body.thumbnailUrl ?? null,
-        video_url: body.videoUrl,
+        video_url: body.videoUrl ?? null,
       })
-    )
-    .returningAll()
-    .execute();
-  if (!recap) throw new Error("Could not publish recap");
+      .onConflict((conflict) =>
+        conflict.columns(["author_user_id", "date_request_id"]).doUpdateSet({
+          caption: body.caption ?? null,
+          published_at: now,
+          review_id: body.reviewId ?? null,
+          story_expires_at: storyExpiresAt,
+          thumbnail_url: body.thumbnailUrl ?? null,
+          video_url: body.videoUrl ?? null,
+        })
+      )
+      .returningAll()
+      .execute();
+    if (!savedRecap) throw new Error("Could not publish recap");
+
+    if (body.mediaIds) {
+      await tx
+        .deleteFrom("recap_media")
+        .where("recap_id", "=", savedRecap.id)
+        .execute();
+      if (body.mediaIds.length > 0) {
+        await tx
+          .insertInto("recap_media")
+          .values(
+            body.mediaIds.map((dateMediaId) => ({
+              created_at: now,
+              date_media_id: dateMediaId,
+              recap_id: savedRecap.id,
+            }))
+          )
+          .execute();
+      }
+    }
+    return savedRecap;
+  });
   return {
     recap: {
       authorUserId: recap.author_user_id,
@@ -4061,12 +4512,13 @@ const publishRecap = async (sessionUser: SessionUser, input: unknown) => {
       createdAt: new Date(recap.created_at).toISOString(),
       dateRequestId: recap.date_request_id,
       id: recap.id,
+      media: await getRecapMedia(db, recap.id),
       publishedAt: toIso(recap.published_at),
       reviewId: recap.review_id ?? undefined,
       storyExpiresAt: toIso(recap.story_expires_at),
       storyHours: body.storyHours,
       thumbnailUrl: recap.thumbnail_url ?? undefined,
-      videoUrl: recap.video_url,
+      videoUrl: recap.video_url ?? undefined,
     } satisfies RecapResponse,
   };
 };
@@ -4080,18 +4532,21 @@ const getRecaps = async () => {
     .orderBy("created_at", "desc")
     .execute();
   return {
-    recaps: recaps.map((recap) => ({
-      authorUserId: recap.author_user_id,
-      caption: recap.caption ?? undefined,
-      createdAt: new Date(recap.created_at).toISOString(),
-      dateRequestId: recap.date_request_id,
-      id: recap.id,
-      publishedAt: toIso(recap.published_at),
-      reviewId: recap.review_id ?? undefined,
-      storyExpiresAt: toIso(recap.story_expires_at),
-      thumbnailUrl: recap.thumbnail_url ?? undefined,
-      videoUrl: recap.video_url,
-    })),
+    recaps: await Promise.all(
+      recaps.map(async (recap) => ({
+        authorUserId: recap.author_user_id,
+        caption: recap.caption ?? undefined,
+        createdAt: new Date(recap.created_at).toISOString(),
+        dateRequestId: recap.date_request_id,
+        id: recap.id,
+        media: await getRecapMedia(db, recap.id),
+        publishedAt: toIso(recap.published_at),
+        reviewId: recap.review_id ?? undefined,
+        storyExpiresAt: toIso(recap.story_expires_at),
+        thumbnailUrl: recap.thumbnail_url ?? undefined,
+        videoUrl: recap.video_url ?? undefined,
+      }))
+    ),
   };
 };
 
@@ -5550,13 +6005,116 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     });
   },
 
-  async configureStripeConnect(input: {
-    secretKey: string;
-    webhookSecret: string;
-  }) {
-    return observeOperation("configureStripeConnect", async () => {
+  async getStripeIntegrationHealth() {
+    return observeOperation("getStripeIntegrationHealth", async () => {
       const sessionUser = await requireSession(context.request.headers);
-      return configureStripeConnect(sessionUser, input);
+      requireAdmin(sessionUser);
+      return getStripeIntegrationHealth();
+    });
+  },
+
+  async syncStripeWebhookEndpoints() {
+    return observeOperation("syncStripeWebhookEndpoints", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      requireAdmin(sessionUser);
+      return syncStripeWebhookEndpoints();
+    });
+  },
+
+  async createVenueCheckoutSession(input: {
+    cancelUrl: string;
+    experienceKind?: "date" | "dine_in" | "pickup";
+    orderId: string;
+    successUrl: string;
+    tipAllocations?: {
+      amountCents: number;
+      beneficiaryKind: "cook" | "house" | "server";
+      beneficiaryUserId?: string;
+    }[];
+  }) {
+    return observeOperation("createVenueCheckoutSession", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createVenueCheckoutSession({
+        ...input,
+        isAdmin: isConfiguredAdmin(sessionUser),
+        userId: sessionUser.id,
+      });
+    });
+  },
+
+  async createReferrerConnectOnboarding(input: { locationId: string }) {
+    return observeOperation("createReferrerConnectOnboarding", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createReferrerConnectOnboarding({
+        actorUserId: sessionUser.id,
+        isAdmin: isConfiguredAdmin(sessionUser),
+        locationId: input.locationId,
+      });
+    });
+  },
+
+  async createVenueConnectOnboarding(input: { locationId: string }) {
+    return observeOperation("createVenueConnectOnboarding", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createVenueConnectOnboarding({
+        email: sessionUser.email,
+        isAdmin: isConfiguredAdmin(sessionUser),
+        locationId: input.locationId,
+        name: sessionUser.name,
+        userId: sessionUser.id,
+      });
+    });
+  },
+
+  async createWorkerConnectOnboarding(input: {
+    locationId: string;
+    userId: string;
+  }) {
+    return observeOperation("createWorkerConnectOnboarding", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createWorkerConnectOnboarding({
+        actorUserId: sessionUser.id,
+        isAdmin: isConfiguredAdmin(sessionUser),
+        locationId: input.locationId,
+        workerUserId: input.userId,
+      });
+    });
+  },
+
+  async getVenueConnectStatus(locationId: string) {
+    return observeOperation("getVenueConnectStatus", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getVenueConnectStatus({
+        isAdmin: isConfiguredAdmin(sessionUser),
+        locationId,
+        userId: sessionUser.id,
+      });
+    });
+  },
+
+  async getStripePayment(orderId: string) {
+    return observeOperation("getStripePayment", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getStripePayment(
+        orderId,
+        sessionUser.id,
+        isConfiguredAdmin(sessionUser)
+      );
+    });
+  },
+
+  async createVenueRefund(input: {
+    amountCents?: number;
+    orderId: string;
+    reason?: string;
+  }) {
+    return observeOperation("createVenueRefund", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createVenueRefund({
+        ...input,
+        isAdmin: isConfiguredAdmin(sessionUser),
+        userId: sessionUser.id,
+      });
     });
   },
 
@@ -5676,6 +6234,13 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return observeOperation("uploadDateMedia", async () => {
       const sessionUser = await requireSession(context.request.headers);
       return uploadDateMedia(sessionUser, input);
+    });
+  },
+
+  async submitSpotContribution(input: SpotContributionInput) {
+    return observeOperation("submitSpotContribution", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return submitSpotContribution(sessionUser, input);
     });
   },
 
