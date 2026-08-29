@@ -41,7 +41,9 @@ import {
   Beer,
   Calendar as CalendarIcon,
   Check,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Gamepad2,
   MapPin,
   MessageCircle,
@@ -54,7 +56,7 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { NavigationBlocker } from "@/components/navigation-blocker";
@@ -219,10 +221,20 @@ const toLocalInputValue = (date: Date) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
-const defaultScheduledAt = () => {
-  const tomorrow = new Date(Date.now() + 86_400_000);
-  tomorrow.setMinutes(0);
-  return toLocalInputValue(tomorrow);
+const defaultScheduledAt = (selectedDate?: Date) => {
+  const scheduled = selectedDate
+    ? new Date(selectedDate)
+    : new Date(Date.now() + 86_400_000);
+  if (selectedDate) {
+    scheduled.setHours(19, 0, 0, 0);
+  } else {
+    scheduled.setMinutes(0, 0, 0);
+  }
+  if (scheduled <= new Date()) {
+    scheduled.setDate(scheduled.getDate() + 1);
+    scheduled.setHours(19, 0, 0, 0);
+  }
+  return toLocalInputValue(scheduled);
 };
 
 const formatDateLabel = (dateValue: string) => {
@@ -235,9 +247,15 @@ const formatDateLabel = (dateValue: string) => {
   }).format(date);
 };
 
+const formatWizardLabel = (value: string) =>
+  value
+    .replaceAll("_", " ")
+    .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
+
 const emailPattern = /^\S+@\S+\.\S+$/;
 
 interface DateWizardProps {
+  initialDate?: Date;
   membershipTier: string;
   onCancel?: () => void;
   onCreated?: (requestId: string) => void;
@@ -245,6 +263,7 @@ interface DateWizardProps {
 }
 
 export function DateWizard({
+  initialDate,
   membershipTier,
   onCancel,
   onCreated,
@@ -269,7 +288,7 @@ export function DateWizard({
       partyMembers: [],
       paymentMode: "dutch",
       places: presetPlace ? [presetPlace] : [],
-      scheduledAt: defaultScheduledAt(),
+      scheduledAt: defaultScheduledAt(initialDate),
       searchArea: "",
       distanceMiles: 25,
       what: ["eat"],
@@ -418,6 +437,7 @@ export function DateWizard({
             isSugar={isSugar}
             isUnder21={isUnder21}
             circleFriends={circleFriends}
+            onContinue={continueFromPlan}
           />
         )}
         {step === 1 && (
@@ -490,18 +510,46 @@ function PlanStep({
   isSugar,
   isUnder21,
   circleFriends,
+  onContinue,
 }: {
   canGroup: boolean;
   form: WizardForm;
   isSugar: boolean;
   isUnder21: boolean;
   circleFriends: any[];
+  onContinue: () => void;
 }) {
   const availableActivities = isUnder21
     ? activityOptions.filter((option) => option.value !== "drink")
     : activityOptions;
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [openSection, setOpenSection] = useState<PlanSection | null>(
+    "activities"
+  );
+
+  const openWhenSection = () => {
+    if (form.getFieldValue("what").length === 0) {
+      toast.error("Pick at least one thing to do first.");
+      return;
+    }
+    setOpenSection("when");
+  };
+
+  const openGuestsSection = () => {
+    const scheduled = new Date(form.getFieldValue("scheduledAt"));
+    if (Number.isNaN(scheduled.getTime()) || scheduled <= new Date()) {
+      toast.error("Choose a date and time in the future first.");
+      setOpenSection("when");
+      return;
+    }
+    if (!form.getFieldValue("searchArea")?.trim()) {
+      toast.error("Enter the area where you want to date first.");
+      setOpenSection("when");
+      return;
+    }
+    setOpenSection("guests");
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -516,13 +564,35 @@ function PlanStep({
         </CardHeader>
         <CardContent className="divide-y divide-border p-0">
           {/* Section 1: What are you up for */}
-          <div className="p-6">
-            <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
-              <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                1
-              </span>
-              What are you up for?
-            </h3>
+          <PlanAccordionSection
+            number="1"
+            onNext={openWhenSection}
+            onOpenChange={() =>
+              setOpenSection((current) =>
+                current === "activities" ? null : "activities"
+              )
+            }
+            open={openSection === "activities"}
+            status={
+              <form.Subscribe
+                selector={(state: any) => state.values.what.length > 0}
+              >
+                {(complete: boolean) => (
+                  <PlanSectionStatus complete={complete} />
+                )}
+              </form.Subscribe>
+            }
+            summary={
+              <form.Subscribe selector={(state: any) => state.values.what}>
+                {(what: WizardWhat[]) =>
+                  what.length > 0
+                    ? what.map(formatWizardLabel).join(" · ")
+                    : "Choose an activity"
+                }
+              </form.Subscribe>
+            }
+            title="What are you up for?"
+          >
             <form.Field name="what">
               {(field: any) => (
                 <div
@@ -570,16 +640,45 @@ function PlanStep({
                 Drink dates unlock when you turn 21.
               </p>
             )}
-          </div>
+          </PlanAccordionSection>
 
           {/* Section 2: When & Where */}
-          <div className="p-6">
-            <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
-              <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                2
-              </span>
-              When & where?
-            </h3>
+          <PlanAccordionSection
+            number="2"
+            onNext={openGuestsSection}
+            onOpenChange={() =>
+              setOpenSection((current) => (current === "when" ? null : "when"))
+            }
+            open={openSection === "when"}
+            status={
+              <form.Subscribe
+                selector={(state: any) => {
+                  const scheduled = new Date(state.values.scheduledAt);
+                  return (
+                    scheduled > new Date() &&
+                    Boolean(state.values.searchArea?.trim())
+                  );
+                }}
+              >
+                {(complete: boolean) => (
+                  <PlanSectionStatus complete={complete} />
+                )}
+              </form.Subscribe>
+            }
+            summary={
+              <form.Subscribe
+                selector={(state: any) => ({
+                  scheduledAt: state.values.scheduledAt,
+                  searchArea: state.values.searchArea,
+                })}
+              >
+                {({ scheduledAt, searchArea }: any) =>
+                  `${formatDateLabel(scheduledAt.slice(0, 10))} · ${searchArea || "Add an area"}`
+                }
+              </form.Subscribe>
+            }
+            title="When & where?"
+          >
             <div className="flex flex-col gap-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <form.Field name="scheduledAt">
@@ -669,17 +768,32 @@ function PlanStep({
                 )}
               </form.Field>
             </div>
-          </div>
+          </PlanAccordionSection>
 
           {/* Section 3: Guests */}
-          <div className="p-6">
-            <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
-              <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                3
-              </span>
-              Guests
-            </h3>
-
+          <PlanAccordionSection
+            number="3"
+            onNext={() => setOpenSection("payment")}
+            onOpenChange={() =>
+              setOpenSection((current) =>
+                current === "guests" ? null : "guests"
+              )
+            }
+            open={openSection === "guests"}
+            status={<PlanSectionStatus complete />}
+            summary={
+              <form.Subscribe
+                selector={(state: any) => state.values.partyMembers}
+              >
+                {(partyMembers: PartyMember[]) =>
+                  partyMembers.length > 0
+                    ? `${partyMembers.length} guest${partyMembers.length === 1 ? "" : "s"} invited`
+                    : "Solo date"
+                }
+              </form.Subscribe>
+            }
+            title="Guests"
+          >
             <form.Subscribe
               selector={(state: any) => state.values.partyMembers}
             >
@@ -933,16 +1047,34 @@ function PlanStep({
                 );
               }}
             </form.Subscribe>
-          </div>
+          </PlanAccordionSection>
 
           {/* Section 4: Payment */}
-          <div className="p-6 bg-muted/5">
-            <h3 className="mb-3 text-sm font-semibold text-foreground flex items-center gap-2">
-              <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                4
-              </span>
-              Payment options
-            </h3>
+          <PlanAccordionSection
+            className="bg-muted/5"
+            nextLabel="Review spots"
+            number="4"
+            onNext={onContinue}
+            onOpenChange={() =>
+              setOpenSection((current) =>
+                current === "payment" ? null : "payment"
+              )
+            }
+            open={openSection === "payment"}
+            status={<PlanSectionStatus complete />}
+            summary={
+              <form.Subscribe
+                selector={(state: any) => state.values.paymentMode}
+              >
+                {(paymentMode: string) =>
+                  paymentMode === "requester_covers"
+                    ? "You cover the date"
+                    : "Dutch split"
+                }
+              </form.Subscribe>
+            }
+            title="Payment options"
+          >
             <form.Field name="paymentMode">
               {(field: any) => (
                 <Field className="flex flex-col gap-2">
@@ -996,10 +1128,110 @@ function PlanStep({
                 </Field>
               )}
             </form.Field>
-          </div>
+          </PlanAccordionSection>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+type PlanSection = "activities" | "guests" | "payment" | "when";
+
+function PlanSectionStatus({ complete }: { complete: boolean }) {
+  return complete ? (
+    <Badge
+      className="rounded-full border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-600"
+      variant="outline"
+    >
+      <Check className="mr-1 size-3" /> Ready
+    </Badge>
+  ) : (
+    <Badge
+      className="rounded-full border-amber-500/20 bg-amber-500/10 text-[10px] text-amber-600"
+      variant="outline"
+    >
+      Needs setup
+    </Badge>
+  );
+}
+
+function PlanAccordionSection({
+  children,
+  className,
+  nextLabel = "Continue",
+  number,
+  onNext,
+  onOpenChange,
+  open,
+  status,
+  summary,
+  title,
+}: {
+  children: ReactNode;
+  className?: string;
+  nextLabel?: string;
+  number: string;
+  onNext: () => void;
+  onOpenChange: () => void;
+  open: boolean;
+  status: ReactNode;
+  summary: ReactNode;
+  title: string;
+}) {
+  const contentId = `date-plan-section-${number}`;
+
+  return (
+    <section
+      className={`p-6 ${className ?? ""}`}
+      data-state={open ? "open" : "closed"}
+    >
+      <button
+        aria-controls={contentId}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 text-left"
+        onClick={onOpenChange}
+        type="button"
+      >
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+          {number}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-foreground">
+            {title}
+          </span>
+          {!open ? (
+            <span className="mt-1 block truncate text-xs text-muted-foreground">
+              {summary}
+            </span>
+          ) : null}
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          {status}
+          {open ? (
+            <ChevronUp
+              aria-hidden="true"
+              className="size-4 text-muted-foreground"
+            />
+          ) : (
+            <ChevronDown
+              aria-hidden="true"
+              className="size-4 text-muted-foreground"
+            />
+          )}
+        </span>
+      </button>
+      {open ? (
+        <div className="mt-4" id={contentId}>
+          {children}
+          <div className="mt-5 flex justify-end border-t border-border/60 pt-4">
+            <Button onClick={onNext} size="sm" type="button" variant="outline">
+              {nextLabel}
+              <ChevronRight data-icon="inline-end" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 

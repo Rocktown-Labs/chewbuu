@@ -1,3 +1,8 @@
+import { api as blocksApi } from "@chewbuu/aws-blocks";
+import type {
+  SpotCaptureOffer,
+  SpotContributionKind,
+} from "@chewbuu/aws-blocks";
 import { Avatar, AvatarFallback } from "@chewbuu/ui/components/avatar";
 import { Badge } from "@chewbuu/ui/components/badge";
 import { Button } from "@chewbuu/ui/components/button";
@@ -30,7 +35,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { toast } from "sonner";
 
 import { NavigationBlocker } from "@/components/navigation-blocker";
-import { reviewsApi } from "@/lib/dating-api";
+import { dateMediaApi, reviewsApi, spotCaptureApi } from "@/lib/dating-api";
 import type { DateReviewPayload, ReviewPrompt } from "@/lib/dating-api";
 
 export const Route = createFileRoute("/_auth/reviews/$requestid")({
@@ -56,6 +61,11 @@ const defaultPlaceCriteria = [
 ];
 
 type ReviewStep = "people" | "spots";
+type UploadedSpotMedia = {
+  id: string;
+  kind: SpotContributionKind;
+  url: string;
+};
 
 const criteriaAverage = (criteria: Record<string, number>) => {
   const values = Object.values(criteria);
@@ -64,6 +74,12 @@ const criteriaAverage = (criteria: Record<string, number>) => {
     values.reduce((total, value) => total + value, 0) / values.length
   );
 };
+
+const formatCredit = (cents: number) =>
+  new Intl.NumberFormat(undefined, {
+    currency: "USD",
+    style: "currency",
+  }).format(cents / 100);
 
 export function RouteComponent() {
   const { requestid } = Route.useParams();
@@ -89,6 +105,13 @@ export function RouteComponent() {
   >({});
   const [spotComments, setSpotComments] = useState<Record<string, string>>({});
   const [spotMedia, setSpotMedia] = useState<Record<string, string[]>>({});
+  const [spotUploads, setSpotUploads] = useState<
+    Record<string, UploadedSpotMedia[]>
+  >({});
+  const [spotOffers, setSpotOffers] = useState<
+    Record<string, SpotCaptureOffer>
+  >({});
+  const [uploadingSpot, setUploadingSpot] = useState<string | null>(null);
   const [expandedSpotId, setExpandedSpotId] = useState<string>("");
 
   useEffect(() => {
@@ -105,12 +128,32 @@ export function RouteComponent() {
             [personId]: nextPrompt.existingReview.personComment ?? "",
           });
           const spotId = nextPrompt.places[0]?.placeId;
-          if (!spotId) return;
-          setSpotRatings({ [spotId]: nextPrompt.existingReview.placeCriteria });
-          setSpotComments({
-            [spotId]: nextPrompt.existingReview.placeComment ?? "",
-          });
+          if (spotId) {
+            setSpotRatings({
+              [spotId]: nextPrompt.existingReview.placeCriteria,
+            });
+            setSpotComments({
+              [spotId]: nextPrompt.existingReview.placeComment ?? "",
+            });
+          }
         }
+        const offerResults = await Promise.allSettled(
+          nextPrompt.places.map(async (spot) => ({
+            offer: await spotCaptureApi.getOffer({
+              dateRequestId: requestid,
+              googlePlaceId: spot.placeId,
+            }),
+            placeId: spot.placeId,
+          }))
+        );
+        const offers = Object.fromEntries(
+          offerResults.flatMap((result) =>
+            result.status === "fulfilled"
+              ? [[result.value.placeId, result.value.offer.offer] as const]
+              : []
+          )
+        );
+        setSpotOffers(offers);
       } catch (error) {
         toast.error(
           error instanceof Error
@@ -187,6 +230,78 @@ export function RouteComponent() {
     }));
   };
 
+  const handleSpotCaptureUpload = async (
+    googlePlaceId: string,
+    kind: SpotContributionKind,
+    file: File | undefined
+  ) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Spot capture currently accepts images only.");
+      return;
+    }
+
+    const uploadKey = `${googlePlaceId}:${kind}`;
+    setUploadingSpot(uploadKey);
+    try {
+      const upload = await blocksApi.createMediaUpload({
+        contentType: file.type,
+        fileName: file.name,
+        slot: "photo",
+      });
+      const response = await fetch(upload.uploadUrl, {
+        body: file,
+        headers: { "content-type": file.type },
+        method: "PUT",
+      });
+      if (!response.ok) throw new Error("Media upload failed.");
+
+      const media = await dateMediaApi.upload({
+        dateRequestId: requestid,
+        kind,
+        url: upload.mediaUrl,
+      });
+      const result = await spotCaptureApi.submit({
+        dateMediaId: media.media.id,
+        dateRequestId: requestid,
+        googlePlaceId,
+        kind,
+      });
+      setSpotUploads((current) => ({
+        ...current,
+        [googlePlaceId]: [
+          ...(current[googlePlaceId] ?? []),
+          { id: media.media.id, kind, url: media.media.url },
+        ],
+      }));
+      setSpotOffers((current) => {
+        const offer = current[googlePlaceId];
+        if (!offer) return current;
+        const pending = Array.from(new Set([...offer.pending, kind]));
+        const available = offer.missing.filter(
+          (missingKind) => !pending.includes(missingKind)
+        );
+        return {
+          ...current,
+          [googlePlaceId]: {
+            ...offer,
+            pending,
+            status: available.length === 0 ? "pending_review" : "available",
+          },
+        };
+      });
+      toast.success(
+        `${kind === "menu_photo" ? "Menu" : "Spot"} capture submitted for review. ${formatCredit(result.contribution.rewardCents)} credit is pending approval.`
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not submit capture."
+      );
+    } finally {
+      setUploadingSpot(null);
+    }
+  };
+
   const submitReview = async () => {
     if (!allPeopleComplete) {
       toast.error(
@@ -209,6 +324,9 @@ export function RouteComponent() {
     const firstSpotRatings = spotRatings[spotsList[0]?.placeId ?? ""] ?? {};
 
     const body: DateReviewPayload = {
+      mediaIds: Object.values(spotUploads)
+        .flat()
+        .map((media) => media.id),
       personComment:
         personComments[peopleList[0]?.id ?? "person-1"]?.trim() || undefined,
       personCriteria: firstPersonRatings,
@@ -685,6 +803,21 @@ export function RouteComponent() {
                             </p>
                           )}
                         </div>
+                        {spotOffers[spot.placeId] ? (
+                          <SpotCaptureCard
+                            offer={spotOffers[spot.placeId]}
+                            onUpload={(kind, file) =>
+                              void handleSpotCaptureUpload(
+                                spot.placeId,
+                                kind,
+                                file
+                              )
+                            }
+                            spot={spot}
+                            uploadingSpot={uploadingSpot}
+                            uploads={spotUploads[spot.placeId] ?? []}
+                          />
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -728,6 +861,118 @@ export function RouteComponent() {
         )}
       </footer>
     </main>
+  );
+}
+
+function SpotCaptureCard({
+  offer,
+  onUpload,
+  spot,
+  uploadingSpot,
+  uploads,
+}: {
+  offer: SpotCaptureOffer;
+  onUpload: (kind: SpotContributionKind, file: File | undefined) => void;
+  spot: ReviewPrompt["places"][number];
+  uploadingSpot: string | null;
+  uploads: UploadedSpotMedia[];
+}) {
+  if (offer.status === "complete") return null;
+
+  const availableKinds = offer.missing.filter(
+    (kind) => !offer.pending.includes(kind)
+  );
+  const isUploading = (kind: SpotContributionKind) =>
+    uploadingSpot === `${spot.placeId}:${kind}`;
+  const kindLabel = (kind: SpotContributionKind) =>
+    kind === "menu_photo" ? "Menu photo" : "Spot photo";
+
+  return (
+    <Card className="rounded-2xl border-emerald-500/25 bg-emerald-500/5 shadow-none">
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Camera className="size-4 text-emerald-600" />
+              Help fill in {spot.name}
+            </CardTitle>
+            <CardDescription className="mt-1 text-xs">
+              Capture what the next dater needs. Each approved photo earns a
+              pending {formatCredit(offer.rewardCents)} Chewbuu credit.
+            </CardDescription>
+          </div>
+          <Badge
+            className="rounded-full border-emerald-500/20 bg-emerald-500/10 text-emerald-700"
+            variant="outline"
+          >
+            {formatCredit(offer.rewardCents)} / capture
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {offer.status === "pending_review" ? (
+          <p className="rounded-xl bg-background/60 p-3 text-xs text-muted-foreground">
+            Thanks — your captures are pending review. Credit is added after
+            approval.
+          </p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {availableKinds.map((kind) => (
+              <label
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-emerald-500/20 bg-background/50 px-3 py-3 text-xs font-semibold text-foreground transition hover:border-emerald-500/50 hover:bg-background"
+                key={kind}
+              >
+                {isUploading(kind) ? "Uploading…" : kindLabel(kind)}
+                <input
+                  accept="image/*"
+                  capture="environment"
+                  className="sr-only"
+                  disabled={uploadingSpot !== null}
+                  onChange={(event) => {
+                    onUpload(kind, event.target.files?.[0]);
+                    event.currentTarget.value = "";
+                  }}
+                  type="file"
+                />
+              </label>
+            ))}
+          </div>
+        )}
+        {offer.pending.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {offer.pending.map((kind) => (
+              <Badge className="rounded-full" key={kind} variant="secondary">
+                {kindLabel(kind)} under review
+              </Badge>
+            ))}
+          </div>
+        ) : null}
+        {uploads.length > 0 ? (
+          <div
+            aria-label="Submitted spot captures"
+            className="flex flex-wrap gap-2"
+          >
+            {uploads.map((upload) => (
+              <div
+                className="relative size-16 overflow-hidden rounded-xl border border-emerald-500/20"
+                key={upload.id}
+              >
+                <img
+                  alt={kindLabel(upload.kind)}
+                  className="size-full object-cover"
+                  src={upload.url}
+                />
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <p className="text-[11px] text-muted-foreground">
+          Only upload photos you took or have permission to share. Captures are
+          reviewed before appearing in Spot results; online menu previews stay
+          marked as unverified.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

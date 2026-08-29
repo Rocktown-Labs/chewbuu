@@ -55,11 +55,14 @@ describe("DateWizard", () => {
   });
 
   it("keeps social members on solo dates with locked dutch payment", async () => {
+    const user = userEvent.setup();
     render(<DateWizard membershipTier="social" />);
 
+    await user.click(screen.getByRole("button", { name: /guests/i }));
     expect(screen.getByText(/social members date solo/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add guest/i })).toBeDisabled();
 
+    await user.click(screen.getByRole("button", { name: /payment options/i }));
     const dutch = screen.getByRole("checkbox", {
       name: /split the bill/i,
     });
@@ -75,6 +78,7 @@ describe("DateWizard", () => {
 
     render(<DateWizard membershipTier="sugar" />);
 
+    await user.click(screen.getByRole("button", { name: /payment options/i }));
     const dutch = await screen.findByRole("checkbox", {
       name: /split the bill/i,
     });
@@ -119,6 +123,16 @@ describe("DateWizard", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^drink/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^play/i })).toBeInTheDocument();
+  });
+
+  it("uses the selected calendar date as the request date", async () => {
+    const selectedDate = new Date(2026, 8, 15);
+    const user = userEvent.setup();
+
+    render(<DateWizard initialDate={selectedDate} membershipTier="social" />);
+
+    await user.click(screen.getByRole("button", { name: /when & where/i }));
+    expect(screen.getByRole("button", { name: /sep 15/i })).toBeInTheDocument();
   });
 
   it("moves to the places step once the plan is valid", async () => {

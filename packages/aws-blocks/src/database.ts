@@ -386,6 +386,7 @@ export interface SpotContributionTable {
   google_place_id: string;
   id: string;
   kind: string;
+  reward_cents: number;
   reward_points: number;
   reward_status: string;
   reviewed_at: Timestamp | null;

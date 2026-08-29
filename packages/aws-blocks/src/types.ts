@@ -564,9 +564,24 @@ export interface AwsBlocksApi {
     profile: DatingProfileResponse;
     readiness: DatingReadiness;
   }>;
+  getSpotCaptureOffer: (input: {
+    dateRequestId: string;
+    googlePlaceId: string;
+  }) => Promise<{ offer: SpotCaptureOffer }>;
   submitSpotContribution: (input: SpotContributionInput) => Promise<{
     contribution: SpotContributionResponse;
   }>;
+  getSpotCaptureRewardConfig: () => Promise<SpotCaptureRewardConfig>;
+  listSpotContributions: () => Promise<{
+    contributions: SpotContributionModerationItem[];
+  }>;
+  reviewSpotContribution: (input: {
+    contributionId: string;
+    status: "approved" | "rejected";
+  }) => Promise<{ contribution: SpotContributionResponse }>;
+  updateSpotCaptureRewardConfig: (input: {
+    rewardCents: number;
+  }) => Promise<SpotCaptureRewardConfig>;
   createDateRequest: (input: DateRequestInput) => Promise<{
     matches: DatingMatchResponse[];
     request: DatingRequestResponse;
@@ -1035,10 +1050,12 @@ export interface PlaceSuggestionInput {
 
 export interface PlaceSuggestion {
   address?: string;
+  communityPhotoUrl?: string;
   attributions?: string[];
   googleMapsUri?: string;
   latitude?: number;
   longitude?: number;
+  menuPhotoUrl?: string;
   name: string;
   openNow?: boolean;
   photoUrl?: string;
@@ -1185,6 +1202,27 @@ export interface AccountEntitlementsResponse {
 
 export type SpotContributionKind = "menu_photo" | "spot_photo";
 export type SpotContributionStatus = "approved" | "pending" | "rejected";
+export type SpotCaptureOfferStatus =
+  | "available"
+  | "complete"
+  | "pending_review";
+
+export interface SpotCaptureOffer {
+  googlePlaceId: string;
+  missing: SpotContributionKind[];
+  pending: SpotContributionKind[];
+  rewardCents: number;
+  status: SpotCaptureOfferStatus;
+}
+
+export interface SpotCaptureRewardConfig {
+  rewardCents: number;
+}
+
+export interface SpotContributionModerationItem extends SpotContributionResponse {
+  mediaUrl: string;
+  submitterName: string;
+}
 
 export interface SpotContributionInput {
   dateMediaId: string;
@@ -1196,6 +1234,7 @@ export interface SpotContributionInput {
 export interface SpotContributionResponse extends SpotContributionInput {
   createdAt: string;
   id: string;
+  rewardCents: number;
   rewardPoints: number;
   rewardStatus: "pending" | "paid";
   status: SpotContributionStatus;

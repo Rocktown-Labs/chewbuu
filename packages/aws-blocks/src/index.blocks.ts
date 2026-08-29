@@ -91,7 +91,10 @@ import type {
   InviteVenueMembersInput,
   PendingReviewResponse,
   PlacePhotoResponse,
+  PlaceSuggestion,
   PlaceSuggestionInput,
+  SpotCaptureOffer,
+  SpotCaptureRewardConfig,
   SpotContributionInput,
   SpotContributionResponse,
   MembershipPlan,
@@ -381,6 +384,17 @@ const stripeConnectSecretKey = AppSetting.fromExisting(
       process.env.BLOCKS_STRIPE_CONNECT_SECRET_PARAMETER ??
       "/chewbuu-prod-stripe-connect-secret-key",
     secret: true,
+  }
+);
+const spotCaptureRewardSetting = new AppSetting(
+  scope,
+  "spot-capture-reward-cents",
+  {
+    name:
+      process.env.SPOT_CAPTURE_REWARD_PARAMETER ??
+      "/chewbuu-prod-spot-capture-reward-cents",
+    schema: z.number().int().min(0).max(100_000),
+    value: 500,
   }
 );
 const stripeConnectWebhookSecret = AppSetting.fromExisting(
@@ -2789,6 +2803,20 @@ const checkInSchema = z.object({
   partnerId: z.string().optional(),
 });
 
+const spotCaptureOfferSchema = z.object({
+  dateRequestId: z.string().min(1),
+  googlePlaceId: z.string().trim().min(1),
+});
+
+const spotCaptureRewardConfigSchema = z.object({
+  rewardCents: z.number().int().min(0).max(100_000),
+});
+
+const spotContributionReviewSchema = z.object({
+  contributionId: z.string().min(1),
+  status: z.enum(["approved", "rejected"]),
+});
+
 const uploadDateMediaSchema = z.object({
   dateRequestId: z.string().min(1),
   kind: z.string().trim().min(1),
@@ -2962,7 +2990,11 @@ const suggestPlaces = async (userId: string, input: unknown) => {
     what: [...body.what].toSorted(),
   });
   const cached = await placeSearchCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return { places: cached.places };
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      places: await enrichPlacesWithApprovedSpotMedia(db, cached.places),
+    };
+  }
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
   if (!apiKey) {
@@ -3084,12 +3116,16 @@ const suggestPlaces = async (userId: string, input: unknown) => {
       places.length > 0 || body.searchKind === "venue"
         ? places
         : generateFallbackPlaces(area, body.what, body.filters);
+    const enrichedPlaces = await enrichPlacesWithApprovedSpotMedia(
+      db,
+      resultPlaces
+    );
 
     await placeSearchCache.put(cacheKey, {
       expiresAt: Date.now() + 1000 * 60 * 60,
-      places: resultPlaces,
+      places: enrichedPlaces,
     });
-    return { places: resultPlaces };
+    return { places: enrichedPlaces };
   } catch {
     if (body.searchKind === "venue") {
       return { places: [], reason: "unavailable" as const };
@@ -3118,6 +3154,49 @@ const getPlacePhoto = async (
   };
 };
 
+const enrichPlacesWithApprovedSpotMedia = async (
+  db: Kysely<BlocksDatabase>,
+  places: PlaceSuggestion[]
+): Promise<PlaceSuggestion[]> => {
+  const placeIds = places.map((place) => place.placeId);
+  if (placeIds.length === 0) return places;
+
+  const mediaRows = await db
+    .selectFrom("spot_contribution")
+    .innerJoin("date_media", "date_media.id", "spot_contribution.date_media_id")
+    .select([
+      "date_media.url",
+      "spot_contribution.google_place_id as googlePlaceId",
+      "spot_contribution.kind",
+    ])
+    .where("spot_contribution.google_place_id", "in", placeIds)
+    .where("spot_contribution.status", "=", "approved")
+    .where("spot_contribution.kind", "in", ["menu_photo", "spot_photo"])
+    .orderBy("date_media.created_at", "asc")
+    .execute();
+
+  const mediaByPlace = new Map<
+    string,
+    { communityPhotoUrl?: string; menuPhotoUrl?: string }
+  >();
+  for (const row of mediaRows) {
+    const current = mediaByPlace.get(row.googlePlaceId) ?? {};
+    const url = (await mintStoredMediaUrl(row.url)) ?? row.url;
+    if (row.kind === "spot_photo" && !current.communityPhotoUrl) {
+      current.communityPhotoUrl = url;
+    }
+    if (row.kind === "menu_photo" && !current.menuPhotoUrl) {
+      current.menuPhotoUrl = url;
+    }
+    mediaByPlace.set(row.googlePlaceId, current);
+  }
+
+  return places.map((place) => {
+    const media = mediaByPlace.get(place.placeId);
+    return media ? { ...place, ...media } : place;
+  });
+};
+
 const getOwnedRequest = async (requestId: string, userId: string) => {
   const db = await getDb();
   const request = await db
@@ -3128,6 +3207,202 @@ const getOwnedRequest = async (requestId: string, userId: string) => {
     .executeTakeFirst();
   if (!request) throw new Error("Date request not found");
   return request;
+};
+
+const getSpotCaptureRewardCents = async () => {
+  try {
+    return await spotCaptureRewardSetting.get();
+  } catch {
+    return 500;
+  }
+};
+
+const getSpotCaptureOffer = async (
+  sessionUser: SessionUser,
+  input: unknown
+): Promise<{ offer: SpotCaptureOffer }> => {
+  const body = spotCaptureOfferSchema.parse(input);
+  await getOwnedRequest(body.dateRequestId, sessionUser.id);
+  const db = await getDb();
+  const requestedPlace = await db
+    .selectFrom("date_request_place")
+    .select("place_id")
+    .where("request_id", "=", body.dateRequestId)
+    .where("place_id", "=", body.googlePlaceId)
+    .executeTakeFirst();
+  if (!requestedPlace) throw new Error("Spot is not part of this date request");
+
+  const location = await db
+    .selectFrom("venue_location")
+    .select("id")
+    .where("discovery_place_id", "=", body.googlePlaceId)
+    .executeTakeFirst();
+  const [
+    venuePhoto,
+    venueMenu,
+    publishedMenuItem,
+    approvedContributions,
+    pendingContributions,
+  ] = await Promise.all([
+    location
+      ? db
+          .selectFrom("venue_media")
+          .select("id")
+          .where("location_id", "=", location.id)
+          .where("kind", "in", ["venue_photo", "venue_profile_photo"])
+          .where("status", "=", "approved")
+          .executeTakeFirst()
+      : undefined,
+    location
+      ? db
+          .selectFrom("venue_menu")
+          .select("id")
+          .where("location_id", "=", location.id)
+          .where("status", "in", ["published", "approved"])
+          .executeTakeFirst()
+      : undefined,
+    location
+      ? db
+          .selectFrom("venue_menu_item")
+          .select("id")
+          .where("location_id", "=", location.id)
+          .where("status", "=", "published")
+          .executeTakeFirst()
+      : undefined,
+    db
+      .selectFrom("spot_contribution")
+      .select("kind")
+      .where("google_place_id", "=", body.googlePlaceId)
+      .where("status", "=", "approved")
+      .execute(),
+    db
+      .selectFrom("spot_contribution")
+      .select("kind")
+      .where("date_request_id", "=", body.dateRequestId)
+      .where("google_place_id", "=", body.googlePlaceId)
+      .where("submitted_by_user_id", "=", sessionUser.id)
+      .where("status", "=", "pending")
+      .execute(),
+  ]);
+
+  const hasApprovedContribution = (kind: SpotCaptureOffer["missing"][number]) =>
+    approvedContributions.some((contribution) => contribution.kind === kind);
+  const missing: SpotCaptureOffer["missing"] = [];
+  if (!venuePhoto && !hasApprovedContribution("spot_photo")) {
+    missing.push("spot_photo");
+  }
+  if (
+    !venueMenu &&
+    !publishedMenuItem &&
+    !hasApprovedContribution("menu_photo")
+  ) {
+    missing.push("menu_photo");
+  }
+  const pending = pendingContributions
+    .map((contribution) => contribution.kind)
+    .filter((kind): kind is SpotCaptureOffer["missing"][number] =>
+      missing.includes(kind as SpotCaptureOffer["missing"][number])
+    );
+  const availableMissing = missing.filter((kind) => !pending.includes(kind));
+
+  return {
+    offer: {
+      googlePlaceId: body.googlePlaceId,
+      missing,
+      pending,
+      rewardCents: await getSpotCaptureRewardCents(),
+      status:
+        missing.length === 0
+          ? "complete"
+          : availableMissing.length === 0
+            ? "pending_review"
+            : "available",
+    },
+  };
+};
+
+const toSpotContribution = (contribution: {
+  created_at: Date | string;
+  date_media_id: string;
+  date_request_id: string;
+  google_place_id: string;
+  id: string;
+  kind: string;
+  reward_cents: number;
+  reward_points: number;
+  reward_status: string;
+  status: string;
+}): SpotContributionResponse => ({
+  createdAt: new Date(contribution.created_at).toISOString(),
+  dateMediaId: contribution.date_media_id,
+  dateRequestId: contribution.date_request_id,
+  googlePlaceId: contribution.google_place_id,
+  id: contribution.id,
+  kind: contribution.kind as SpotContributionResponse["kind"],
+  rewardCents: contribution.reward_cents,
+  rewardPoints: contribution.reward_points,
+  rewardStatus: contribution.reward_status === "paid" ? "paid" : "pending",
+  status: contribution.status as SpotContributionResponse["status"],
+});
+
+const listSpotContributions = async (sessionUser: SessionUser) => {
+  requireAdmin(sessionUser);
+  const db = await getDb();
+  const contributions = await db
+    .selectFrom("spot_contribution")
+    .innerJoin("date_media", "date_media.id", "spot_contribution.date_media_id")
+    .innerJoin("user", "user.id", "spot_contribution.submitted_by_user_id")
+    .select([
+      "date_media.url as mediaUrl",
+      "spot_contribution.created_at",
+      "spot_contribution.date_media_id",
+      "spot_contribution.date_request_id",
+      "spot_contribution.google_place_id",
+      "spot_contribution.id",
+      "spot_contribution.kind",
+      "spot_contribution.reward_cents",
+      "spot_contribution.reward_points",
+      "spot_contribution.reward_status",
+      "spot_contribution.status",
+      "user.name as submitterName",
+    ])
+    .where("spot_contribution.status", "=", "pending")
+    .orderBy("spot_contribution.created_at", "asc")
+    .limit(100)
+    .execute();
+
+  return {
+    contributions: await Promise.all(
+      contributions.map(async (contribution) => ({
+        ...toSpotContribution(contribution),
+        mediaUrl:
+          (await mintStoredMediaUrl(contribution.mediaUrl)) ??
+          contribution.mediaUrl,
+        submitterName: contribution.submitterName,
+      }))
+    ),
+  };
+};
+
+const reviewSpotContribution = async (
+  sessionUser: SessionUser,
+  input: unknown
+) => {
+  requireAdmin(sessionUser);
+  const body = spotContributionReviewSchema.parse(input);
+  const db = await getDb();
+  const contribution = await db
+    .updateTable("spot_contribution")
+    .set({
+      reviewed_at: new Date(),
+      status: body.status,
+    })
+    .where("id", "=", body.contributionId)
+    .where("status", "=", "pending")
+    .returningAll()
+    .executeTakeFirst();
+  if (!contribution) throw new Error("Pending spot contribution not found");
+  return { contribution: toSpotContribution(contribution) };
 };
 
 const getParticipantRequest = async (requestId: string, userId: string) => {
@@ -3495,6 +3770,21 @@ const requireAdmin = (sessionUser: SessionUser) => {
   if (!isConfiguredAdmin(sessionUser)) {
     throw new Error("Administrator access required");
   }
+};
+
+const getSpotCaptureRewardConfig =
+  async (): Promise<SpotCaptureRewardConfig> => ({
+    rewardCents: await getSpotCaptureRewardCents(),
+  });
+
+const updateSpotCaptureRewardConfig = async (
+  sessionUser: SessionUser,
+  input: unknown
+) => {
+  requireAdmin(sessionUser);
+  const body = spotCaptureRewardConfigSchema.parse(input);
+  await spotCaptureRewardSetting.put(body.rewardCents);
+  return getSpotCaptureRewardConfig();
 };
 
 const readStripeConnectSecret = async (setting: AppSetting<string>) => {
@@ -4379,6 +4669,7 @@ const submitSpotContribution = async (
       google_place_id: body.googlePlaceId,
       id: crypto.randomUUID(),
       kind: body.kind,
+      reward_cents: await getSpotCaptureRewardCents(),
       reward_points: 0,
       reward_status: "pending",
       reviewed_at: null,
@@ -4408,19 +4699,7 @@ const submitSpotContribution = async (
       .where("date_media_id", "=", body.dateMediaId)
       .executeTakeFirst());
   if (!contribution) throw new Error("Could not save spot contribution");
-  return {
-    contribution: {
-      createdAt: new Date(contribution.created_at).toISOString(),
-      dateMediaId: contribution.date_media_id,
-      dateRequestId: contribution.date_request_id,
-      googlePlaceId: contribution.google_place_id,
-      id: contribution.id,
-      kind: contribution.kind as SpotContributionResponse["kind"],
-      rewardPoints: contribution.reward_points,
-      rewardStatus: contribution.reward_status === "paid" ? "paid" : "pending",
-      status: contribution.status as SpotContributionResponse["status"],
-    } satisfies SpotContributionResponse,
-  };
+  return { contribution: toSpotContribution(contribution) };
 };
 
 const publishRecap = async (sessionUser: SessionUser, input: unknown) => {
@@ -6237,10 +6516,54 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     });
   },
 
+  async getSpotCaptureOffer(input: {
+    dateRequestId: string;
+    googlePlaceId: string;
+  }) {
+    return observeOperation("getSpotCaptureOffer", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getSpotCaptureOffer(sessionUser, input);
+    });
+  },
+
   async submitSpotContribution(input: SpotContributionInput) {
     return observeOperation("submitSpotContribution", async () => {
       const sessionUser = await requireSession(context.request.headers);
       return submitSpotContribution(sessionUser, input);
+    });
+  },
+
+  async getSpotCaptureRewardConfig() {
+    return observeOperation("getSpotCaptureRewardConfig", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      if (!isConfiguredAdmin(sessionUser)) {
+        throw new Error("Administrator access required");
+      }
+      return getSpotCaptureRewardConfig();
+    });
+  },
+
+  async listSpotContributions() {
+    return observeOperation("listSpotContributions", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return listSpotContributions(sessionUser);
+    });
+  },
+
+  async reviewSpotContribution(input: {
+    contributionId: string;
+    status: "approved" | "rejected";
+  }) {
+    return observeOperation("reviewSpotContribution", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return reviewSpotContribution(sessionUser, input);
+    });
+  },
+
+  async updateSpotCaptureRewardConfig(input: { rewardCents: number }) {
+    return observeOperation("updateSpotCaptureRewardConfig", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return updateSpotCaptureRewardConfig(sessionUser, input);
     });
   },
 
