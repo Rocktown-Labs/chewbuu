@@ -27,13 +27,13 @@ Install dependencies from the repository root:
 bun install
 ```
 
-Start the AWS Blocks local server:
+Start the AWS Blocks local server and database:
 
 ```bash
 bun run dev:blocks
 ```
 
-The Blocks front door listens on `http://localhost:3000` and proxies the TanStack Start application on port `3001`. Local Blocks mocks persist under `.bb-data/`.
+The command starts or reuses the `chewbuu-postgres` PostgreSQL container through Podman, waits for PostgreSQL to be ready, and then starts the Blocks front door. The front door listens on `http://localhost:3000` and proxies the TanStack Start application on port `3001`. Local Blocks mocks persist under `.bb-data/`.
 
 For the complete application development environment, use:
 
@@ -41,7 +41,7 @@ For the complete application development environment, use:
 bun run dev
 ```
 
-A local PostgreSQL URL must be available as `DATABASE_URL` when loading the auth or database packages. The URL may point to a local PostgreSQL instance or a disposable PlanetScale development branch. Never put credentials in committed `.env.example` files or source code.
+Podman must be installed for the managed local database (`podman machine init` is only needed for a first-time setup). If `DATABASE_URL` is not configured, the dev server defaults to `postgres://postgres:postgres@localhost:5432/chewbuu`; an explicit local or disposable PlanetScale development URL is preserved. Never put credentials in committed `.env.example` files or source code.
 
 ## Database migrations
 
