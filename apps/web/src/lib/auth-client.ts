@@ -37,6 +37,10 @@ const getServerUrl = (url: string) => {
     return `${origin}${normalized}`;
   }
 
+  if (processEnv?.PORTLESS_URL) {
+    return `${processEnv.PORTLESS_URL}${normalized}`;
+  }
+
   return `http://localhost:3000${normalized}`;
 };
 export const authClient = createAuthClient({

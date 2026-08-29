@@ -128,7 +128,8 @@ const apiUrl =
     import.meta as ImportMeta & {
       env?: { EXPO_PUBLIC_BLOCKS_API_URL?: string };
     }
-  ).env?.EXPO_PUBLIC_BLOCKS_API_URL;
+  ).env?.EXPO_PUBLIC_BLOCKS_API_URL ??
+  ("window" in globalThis ? "/aws-blocks/api" : undefined);
 
 export const api = ApiNamespaceClient<AwsBlocksApi>("api", {
   url: apiUrl,

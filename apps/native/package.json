@@ -8,6 +8,7 @@
     "check-types": "tsc --noEmit",
     "test": "vitest run",
     "dev": "expo start --clear",
+    "dev:portless": "portless",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
@@ -83,5 +84,9 @@
     "@types/react": "~19.2.17",
     "typescript": "~6.0.3",
     "vitest": "^4.1.10"
+  },
+  "portless": {
+    "name": "dating",
+    "script": "dev"
   }
 }

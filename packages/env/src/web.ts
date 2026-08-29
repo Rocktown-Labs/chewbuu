@@ -1,17 +1,16 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 
-const serverUrlSchema = z.union([
-  z.url(),
-  z
-    .string()
-    .regex(/^\/(?!\/)/, "Use an absolute URL or a same-origin path like /api"),
-]);
+const sameOriginUrlSchema = z
+  .string()
+  .regex(/^\/(?!\/)/, "Use an absolute URL or a same-origin path");
+const serverUrlSchema = z.union([z.url(), sameOriginUrlSchema]);
+const apiUrlSchema = z.union([z.url(), sameOriginUrlSchema]);
 
 export const env = createEnv({
   client: {
-    VITE_BLOCKS_API_URL: z.url().optional(),
-    VITE_SERVER_URL: serverUrlSchema,
+    VITE_BLOCKS_API_URL: apiUrlSchema.optional(),
+    VITE_SERVER_URL: serverUrlSchema.default("/"),
     VITE_VAPID_PUBLIC_KEY: z.string().optional(),
   },
   clientPrefix: "VITE_",

@@ -542,6 +542,15 @@ export const getServerUrl = (url: string) => {
     return `${window.location.origin}${normalized}`;
   }
 
+  const processEnv = (
+    globalThis as {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env;
+  if (processEnv?.PORTLESS_URL) {
+    return `${processEnv.PORTLESS_URL}${normalized}`;
+  }
+
   return `http://localhost:3000${normalized}`;
 };
 
