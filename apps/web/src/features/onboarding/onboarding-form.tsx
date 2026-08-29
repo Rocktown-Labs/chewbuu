@@ -655,7 +655,7 @@ export function OnboardingForm() {
         media,
       });
       clearPersistedOnboarding();
-      toast.success("Profile ready. Go find a real date.");
+      toast.success("Profile ready. Choose when you want to start dating.");
       await leaveOnboarding("/me");
     },
   });

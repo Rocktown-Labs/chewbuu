@@ -231,6 +231,7 @@ describe("OnboardingForm", () => {
       profile: null,
       readiness: {
         canDate: false,
+        datingEnabled: false,
         identityVerified: false,
         onboarded: false,
         pendingReviews: 0,

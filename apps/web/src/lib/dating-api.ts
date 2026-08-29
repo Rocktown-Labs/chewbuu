@@ -425,13 +425,21 @@ export interface DatingSummary {
   membershipTier: MembershipTier;
   readiness: {
     canDate: boolean;
+    datingEnabled: boolean;
     identityVerified: boolean;
     onboarded: boolean;
     pendingReviews: number;
   };
   requests: (DateRequestPayload & {
+    createdAt: string;
     id: string;
+    isRequester: boolean;
     partySize: number;
+    requester: {
+      avatar: string | null;
+      bio: string;
+      name: string;
+    };
     status: string;
     matches?: DateMatch[];
   })[];
@@ -995,6 +1003,10 @@ export const datingApi = {
       request: UsernameChangeRequest;
     }>,
   getSummary: async () => (await blocksApi.getDatingSummary()) as DatingSummary,
+  setDatingAvailability: (enabled: boolean) =>
+    blocksApi.setDatingAvailability({ enabled }) as Promise<{
+      readiness: DatingSummary["readiness"];
+    }>,
   saveProfile: (body: DatingProfilePayload) =>
     blocksApi.saveProfile(body) as unknown as Promise<{
       profile: DatingProfilePayload;

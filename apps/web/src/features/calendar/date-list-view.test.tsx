@@ -7,12 +7,19 @@ import type { DatingSummary } from "@/lib/dating-api";
 import { DateListView } from "./date-list-view";
 
 const request: DatingSummary["requests"][number] = {
+  createdAt: "2099-08-28T18:00:00.000Z",
   filters: [],
   id: "request-1",
+  isRequester: true,
   matches: [],
   partyMembers: [],
   partySize: 1,
   paymentMode: "dutch",
+  requester: {
+    avatar: null,
+    bio: "Your date request",
+    name: "You",
+  },
   places: [
     {
       name: "Good Company",

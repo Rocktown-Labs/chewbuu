@@ -45,10 +45,15 @@ export default function NewDateScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [searchError, setSearchError] = useState<string>();
+  const [readiness, setReadiness] =
+    useState<Awaited<ReturnType<typeof datingApi.getSummary>>["readiness"]>();
+  const [readinessError, setReadinessError] = useState<string>();
+  const [isLoadingReadiness, setIsLoadingReadiness] = useState(true);
+  const [isStartingDating, setIsStartingDating] = useState(false);
   const [debouncedQuery] = useDebouncedValue(query.trim(), { wait: 350 });
 
   useEffect(() => {
-    if (debouncedQuery.length < MINIMUM_QUERY_LENGTH) {
+    if (!readiness?.canDate || debouncedQuery.length < MINIMUM_QUERY_LENGTH) {
       setSpots([]);
       setSearchError(undefined);
       return;
@@ -81,7 +86,31 @@ export default function NewDateScreen() {
     return () => {
       isCurrent = false;
     };
-  }, [area, debouncedQuery]);
+  }, [area, debouncedQuery, readiness?.canDate]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    const loadReadiness = async () => {
+      try {
+        const summary = await datingApi.getSummary();
+        if (isCurrent) setReadiness(summary.readiness);
+      } catch (error) {
+        if (isCurrent) {
+          setReadinessError(
+            error instanceof Error
+              ? error.message
+              : "Could not check dating readiness."
+          );
+        }
+      } finally {
+        if (isCurrent) setIsLoadingReadiness(false);
+      }
+    };
+    void loadReadiness();
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   const selectedIds = useMemo(
     () => new Set(selectedSpots.map((spot) => spot.placeId)),
@@ -101,6 +130,20 @@ export default function NewDateScreen() {
         ? current.filter((item) => item.placeId !== spot.placeId)
         : [...current, spot]
     );
+  };
+
+  const startDating = async () => {
+    setIsStartingDating(true);
+    try {
+      const result = await datingApi.setDatingAvailability(true);
+      setReadiness(result.readiness);
+    } catch (error) {
+      setReadinessError(
+        error instanceof Error ? error.message : "Could not start dating."
+      );
+    } finally {
+      setIsStartingDating(false);
+    }
   };
 
   const createDate = async () => {
@@ -143,6 +186,46 @@ export default function NewDateScreen() {
       setIsCreating(false);
     }
   };
+
+  if (isLoadingReadiness) {
+    return <AccessMessage description="Checking your dating readiness…" />;
+  }
+
+  if (readinessError) {
+    return <AccessMessage description={readinessError} />;
+  }
+
+  if (!readiness?.onboarded) {
+    return (
+      <AccessMessage
+        description="Complete your dating profile before opening a new date request."
+        onPress={() => router.replace("/onboarding")}
+        title="Finish onboarding first"
+      />
+    );
+  }
+
+  if (readiness.pendingReviews > 0) {
+    return (
+      <AccessMessage
+        description="Complete your pending date review before planning another date."
+        onPress={() => router.back()}
+        title="Review needed first"
+      />
+    );
+  }
+
+  if (!readiness.canDate) {
+    return (
+      <AccessMessage
+        actionLabel={isStartingDating ? "Starting…" : "Start dating"}
+        description="Your profile is ready. Turn dating on when you want to receive date requests and plan a date."
+        disabled={isStartingDating}
+        onPress={() => void startDating()}
+        title="Ready when you are"
+      />
+    );
+  }
 
   return (
     <View className="flex-1 bg-background">
@@ -324,6 +407,44 @@ export default function NewDateScreen() {
         }}
         showsVerticalScrollIndicator={false}
       />
+    </View>
+  );
+}
+
+function AccessMessage({
+  actionLabel,
+  description,
+  disabled = false,
+  onPress,
+  title = "Date planning unavailable",
+}: {
+  actionLabel?: string;
+  description: string;
+  disabled?: boolean;
+  onPress?: () => void;
+  title?: string;
+}) {
+  return (
+    <View className="flex-1 items-center justify-center bg-background px-6">
+      <Card className="w-full p-5">
+        <Text className="text-base font-bold text-foreground">{title}</Text>
+        <Text className="mt-2 text-sm leading-relaxed text-muted-foreground">
+          {description}
+        </Text>
+        {onPress ? (
+          <Button
+            className="mt-4 self-start"
+            disabled={disabled}
+            onPress={onPress}
+            size="sm"
+            variant="sugar"
+          >
+            <Text className="text-xs font-bold text-black">
+              {actionLabel ?? "Continue"}
+            </Text>
+          </Button>
+        ) : null}
+      </Card>
     </View>
   );
 }

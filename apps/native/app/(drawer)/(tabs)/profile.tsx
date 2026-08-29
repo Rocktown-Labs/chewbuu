@@ -8,7 +8,7 @@ import {
   Sun,
   UserPlus,
 } from "lucide-react-native";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAppTheme } from "@/contexts/app-theme-context";
 import { authClient } from "@/lib/auth-client";
+import { datingApi } from "@/lib/dating-api";
 import { profileCollection, refreshDatingData } from "@/lib/db/collections";
 
 const readString = (value: unknown) =>
@@ -40,6 +41,10 @@ export default function ProfileScreen() {
     authClient.useSession();
   const { isDark, toggleTheme } = useAppTheme();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [datingReadiness, setDatingReadiness] =
+    useState<Awaited<ReturnType<typeof datingApi.getSummary>>["readiness"]>();
+  const [isUpdatingDatingAvailability, setIsUpdatingDatingAvailability] =
+    useState(false);
   const {
     data: profiles,
     isError,
@@ -49,6 +54,23 @@ export default function ProfileScreen() {
       session?.user ? q.from({ profile: profileCollection }) : undefined,
   });
   const profile = profiles?.[0];
+  useEffect(() => {
+    if (!session?.user) return;
+    let isCurrent = true;
+    const loadReadiness = async () => {
+      try {
+        const summary = await datingApi.getSummary();
+        if (isCurrent) setDatingReadiness(summary.readiness);
+      } catch {
+        if (isCurrent) setDatingReadiness(undefined);
+      }
+    };
+    void loadReadiness();
+    return () => {
+      isCurrent = false;
+    };
+  }, [session?.user]);
+
   const displayName =
     readString(profile?.name) ??
     readString(profile?.username) ??
@@ -76,10 +98,28 @@ export default function ProfileScreen() {
     setIsRefreshing(true);
     try {
       await refreshDatingData();
+      const summary = await datingApi.getSummary();
+      setDatingReadiness(summary.readiness);
     } finally {
       setIsRefreshing(false);
     }
   }, []);
+
+  const toggleDatingAvailability = async () => {
+    if (!datingReadiness?.onboarded) {
+      router.push("/onboarding");
+      return;
+    }
+    setIsUpdatingDatingAvailability(true);
+    try {
+      const result = await datingApi.setDatingAvailability(
+        !datingReadiness.datingEnabled
+      );
+      setDatingReadiness(result.readiness);
+    } finally {
+      setIsUpdatingDatingAvailability(false);
+    }
+  };
 
   return (
     <View className="flex-1 bg-background">
@@ -194,6 +234,42 @@ export default function ProfileScreen() {
                   Edit profile in onboarding
                 </Text>
               </Button>
+            </Card>
+            <Card className="mt-3 p-4">
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text className="text-sm font-bold text-foreground">
+                    Ready to date
+                  </Text>
+                  <Text className="mt-1 text-xs text-muted-foreground">
+                    Keep this off until you want two-minute incoming request
+                    windows.
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Toggle ready to date"
+                  accessibilityRole="switch"
+                  accessibilityState={{
+                    checked: datingReadiness?.datingEnabled ?? false,
+                    disabled:
+                      isUpdatingDatingAvailability ||
+                      !datingReadiness?.onboarded,
+                  }}
+                  className={`h-8 w-14 justify-center rounded-full p-1 ${
+                    datingReadiness?.datingEnabled ? "bg-amber-500" : "bg-muted"
+                  }`}
+                  disabled={
+                    isUpdatingDatingAvailability || !datingReadiness?.onboarded
+                  }
+                  onPress={() => void toggleDatingAvailability()}
+                >
+                  <View
+                    className={`h-6 w-6 rounded-full bg-white ${
+                      datingReadiness?.datingEnabled ? "self-end" : "self-start"
+                    }`}
+                  />
+                </Pressable>
+              </View>
             </Card>
             <Card className="mt-3 p-4">
               <View className="flex-row items-center gap-2">

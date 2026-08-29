@@ -106,6 +106,10 @@ import {
 import { DateListView } from "@/features/calendar/date-list-view";
 import type { ChatPerson } from "@/features/chat/chat-types";
 import { DateConfirmScreen } from "@/features/chat/date-confirm";
+import {
+  getDateRequestWindowRemaining,
+  isDateRequestActionable,
+} from "@/features/date-requests/date-request-window";
 import { DateWizard } from "@/features/date-wizard/date-wizard";
 import { RecapsPage } from "@/features/recaps/recaps-page";
 import { getMatchAgeBounds } from "@/lib/age-rules";
@@ -172,6 +176,7 @@ interface DateHistoryMatch {
 
 interface DateHistoryItem {
   acceptedMatchId: string;
+  createdAt: string;
   chatSummary: string[];
   content: {
     label: string;
@@ -499,6 +504,7 @@ const requestToHistory = (
   request: DatingSummary["requests"][number]
 ): DateHistoryItem => ({
   acceptedMatchId: getAcceptedMatchForRequest(request)?.id ?? "",
+  createdAt: request.createdAt,
   chatSummary: [
     "Open the date room to exchange verified video replies.",
     "Choose a match or continue the conversation from the live request.",
@@ -518,10 +524,14 @@ const requestToHistory = (
     tags: [],
   })),
   places: request.places,
-  requesterView: true,
+  requesterView: request.isRequester,
   requester: {
-    bio: "Your date request",
-    name: "You",
+    avatar: request.requester.avatar ?? undefined,
+    bio: request.isRequester ? "Your date request" : request.requester.bio,
+    compatibility: request.isRequester
+      ? undefined
+      : request.matches?.[0]?.compatibility,
+    name: request.isRequester ? "You" : request.requester.name,
     tags: [],
   },
   scheduledAt: request.scheduledAt,
@@ -569,7 +579,11 @@ function HomeDashboardView({
   canDate,
   confirmedDates,
   dateStreak,
+  hasPendingReviews,
+  isDatingAvailabilityPending,
+  isOnboarded,
   monthlyBookings,
+  onEnableDating,
   onOpenPlanDateDrawer,
   onOpenAnalytics,
   onNavigateTab,
@@ -581,7 +595,11 @@ function HomeDashboardView({
   canDate: boolean;
   confirmedDates: DatingSummary["requests"];
   dateStreak: number;
+  hasPendingReviews: boolean;
+  isDatingAvailabilityPending: boolean;
+  isOnboarded: boolean;
   monthlyBookings: number;
+  onEnableDating: () => void;
   onOpenPlanDateDrawer: (date?: Date) => void;
   onOpenAnalytics: () => void;
   onNavigateTab: (tab: DashboardTab) => void;
@@ -854,7 +872,7 @@ function HomeDashboardView({
       <div className="flex flex-col gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-bold shadow-xs">
-            {canDate ? (
+            {canDate || isOnboarded ? (
               <Compass className="size-5" />
             ) : (
               <ShieldCheck className="size-5" />
@@ -862,31 +880,48 @@ function HomeDashboardView({
           </div>
           <div>
             <Badge className="mb-1 rounded-full border-0 bg-primary/20 text-primary font-bold text-[9px]">
-              {canDate ? "Next date" : "Finish readiness"}
+              {canDate
+                ? "Next date"
+                : isOnboarded
+                  ? "Ready when you are"
+                  : "Finish readiness"}
             </Badge>
             <h4 className="font-extrabold text-base">
               {canDate
                 ? "Plan a date when you’re ready"
-                : "Complete your dating profile"}
+                : isOnboarded
+                  ? "Start dating when it feels right"
+                  : "Complete your dating profile"}
             </h4>
             <p className="max-w-md text-xs text-muted-foreground">
               {canDate
                 ? "Choose a real place and send a request when the timing feels right."
-                : "Identity, media, location, and a safety contact unlock real dating."}
+                : isOnboarded && !hasPendingReviews
+                  ? "Your profile is ready. Turn dating on when you want to receive requests."
+                  : "Identity, media, location, and a safety contact unlock real dating."}
             </p>
           </div>
         </div>
 
         <Button
           className="shrink-0 self-start rounded-full font-bold text-xs sm:self-center"
+          disabled={isDatingAvailabilityPending}
           onClick={
             canDate
               ? () => onOpenPlanDateDrawer()
-              : () => onNavigateTab("profile")
+              : isOnboarded && !hasPendingReviews
+                ? onEnableDating
+                : () => onNavigateTab("profile")
           }
           type="button"
         >
-          {canDate ? "Plan a date" : "Open profile"}
+          {canDate
+            ? "Plan a date"
+            : isOnboarded && !hasPendingReviews
+              ? isDatingAvailabilityPending
+                ? "Starting…"
+                : "Start dating"
+              : "Open profile"}
           <ChevronRight className="ml-1 size-4" />
         </Button>
       </div>
@@ -1100,7 +1135,13 @@ export function MePage({
   const [isLoadingSpots, setIsLoadingSpots] = useState(false);
   const [publicSpecials, setPublicSpecials] = useState<VenueSpecial[]>([]);
   const [readRequestIds, setReadRequestIds] = useState<string[]>([]);
-  const [receivingDateRequests, setReceivingDateRequests] = useState(true);
+  const [receivingDateRequests, setReceivingDateRequests] = useState(false);
+  const [isUpdatingDatingAvailability, setIsUpdatingDatingAvailability] =
+    useState(false);
+  const [requestWindowNow, setRequestWindowNow] = useState(() => Date.now());
+  const [handledReceivedRequestIds, setHandledReceivedRequestIds] = useState<
+    string[]
+  >([]);
   const [selectedDateHistoryId, setSelectedDateHistoryId] = useState<
     null | string
   >(initialDateId ?? null);
@@ -1173,6 +1214,7 @@ export function MePage({
             recapsApi.get(),
           ]);
         setSummary(nextSummary);
+        setReceivingDateRequests(nextSummary.readiness.datingEnabled);
         syncDatingSummaryToDb(nextSummary);
         setProfile(nextProfile.profile);
         setPendingReviews(nextPendingReviews.reviews);
@@ -1198,6 +1240,19 @@ export function MePage({
         setReadRequestIds(JSON.parse(savedReadRequests) as string[]);
       } catch (error) {
         console.error("Failed to parse read date requests:", error);
+      }
+    }
+
+    const savedHandledRequests = localStorage.getItem(
+      "chewbuu_handled_date_requests"
+    );
+    if (savedHandledRequests) {
+      try {
+        setHandledReceivedRequestIds(
+          JSON.parse(savedHandledRequests) as string[]
+        );
+      } catch (error) {
+        console.error("Failed to parse handled date requests:", error);
       }
     }
   }, [session.data?.user.id]);
@@ -1336,15 +1391,52 @@ export function MePage({
     () => pendingRequests.map(requestToHistory),
     [pendingRequests]
   );
+  useEffect(() => {
+    if (activeTab !== "matches") return;
+    const [nextRemaining] = dateHistories
+      .filter(
+        (date) =>
+          !date.requesterView &&
+          !handledReceivedRequestIds.includes(date.id) &&
+          isDateRequestActionable(date.createdAt, requestWindowNow)
+      )
+      .map((date) =>
+        getDateRequestWindowRemaining(date.createdAt, requestWindowNow)
+      )
+      .toSorted((first, second) => first - second);
+    if (nextRemaining === undefined) return;
+
+    const timeout = window.setTimeout(
+      () => setRequestWindowNow(Date.now()),
+      Math.max(50, nextRemaining + 1)
+    );
+    return () => window.clearTimeout(timeout);
+  }, [activeTab, dateHistories, handledReceivedRequestIds, requestWindowNow]);
   const selectedDateHistory = selectedDateHistoryId
     ? (dateHistories.find((date) => date.id === selectedDateHistoryId) ?? null)
     : null;
-  const receivedDateHistories: DateHistoryItem[] = [];
-  const sentDateHistories = dateHistories;
-  const unreadRequestCount = pendingRequests.filter(
+  const receivedDateHistories = useMemo(
+    () =>
+      dateHistories.filter(
+        (date) =>
+          !date.requesterView &&
+          !handledReceivedRequestIds.includes(date.id) &&
+          isDateRequestActionable(date.createdAt, requestWindowNow)
+      ),
+    [dateHistories, handledReceivedRequestIds, requestWindowNow]
+  );
+  const sentDateHistories = useMemo(
+    () => dateHistories.filter((date) => date.requesterView),
+    [dateHistories]
+  );
+  const visibleDateHistories = useMemo(
+    () => [...receivedDateHistories, ...sentDateHistories],
+    [receivedDateHistories, sentDateHistories]
+  );
+  const unreadRequestCount = visibleDateHistories.filter(
     (request) => !readRequestIds.includes(request.id)
   ).length;
-  const chatBadgeCount = pendingRequests.length;
+  const chatBadgeCount = visibleDateHistories.length;
   const notificationBadgeCount =
     unreadRequestCount + (summary?.readiness.pendingReviews ?? 0);
   const profileReviewSignals = allRecaps.filter(
@@ -1471,6 +1563,65 @@ export function MePage({
     }
   };
 
+  const updateDatingAvailability = async (enabled: boolean) => {
+    setIsUpdatingDatingAvailability(true);
+    try {
+      const result = await datingApi.setDatingAvailability(enabled);
+      setReceivingDateRequests(result.readiness.datingEnabled);
+      setSummary((current) =>
+        current
+          ? {
+              ...current,
+              readiness: result.readiness,
+            }
+          : current
+      );
+      toast.success(
+        enabled ? "You are ready to receive date requests." : "Dating paused."
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not update dating availability."
+      );
+    } finally {
+      setIsUpdatingDatingAvailability(false);
+    }
+  };
+
+  const handleReceivedRequest = (requestId: string) => {
+    setHandledReceivedRequestIds((current) => {
+      const next = current.includes(requestId)
+        ? current
+        : [...current, requestId];
+      localStorage.setItem(
+        "chewbuu_handled_date_requests",
+        JSON.stringify(next)
+      );
+      return next;
+    });
+  };
+
+  const openPlanDateDrawer = (date?: Date) => {
+    if (!canDate) {
+      if (summary?.readiness.onboarded) {
+        if (summary.readiness.pendingReviews > 0) {
+          toast.info("Complete your pending review before planning a date.");
+        } else if (!summary.readiness.datingEnabled) {
+          void updateDatingAvailability(true);
+        }
+      } else {
+        navigate({ to: "/onboarding" });
+      }
+      return;
+    }
+
+    setPresetDateForWizard(date);
+    setPresetPlaceForWizard(undefined);
+    setIsPlanDateDrawerOpen(true);
+  };
+
   const setDashboardTab = (tab: DashboardTab) => {
     setActiveTab(tab);
     navigate({
@@ -1482,9 +1633,12 @@ export function MePage({
       setProfileStatTarget(null);
     }
 
-    if (tab === "matches" && pendingRequests.length > 0) {
+    if (tab === "matches" && visibleDateHistories.length > 0) {
       const nextReadIds = Array.from(
-        new Set([...readRequestIds, ...pendingRequests.map((item) => item.id)])
+        new Set([
+          ...readRequestIds,
+          ...visibleDateHistories.map((item) => item.id),
+        ])
       );
       setReadRequestIds(nextReadIds);
       localStorage.setItem(
@@ -1830,20 +1984,14 @@ export function MePage({
                   ? "bg-primary text-primary-foreground shadow-primary/15"
                   : "bg-secondary text-secondary-foreground"
               )}
-              onClick={() => {
-                if (canDate) {
-                  setPresetDateForWizard(undefined);
-                  setPresetPlaceForWizard(undefined);
-                  setIsPlanDateDrawerOpen(true);
-                } else {
-                  navigate({ to: "/onboarding" });
-                }
-              }}
-              title="Plan a Date"
+              onClick={() => openPlanDateDrawer()}
+              title={canDate ? "Plan a Date" : "Start dating"}
               type="button"
             >
               <CalendarHeart className="size-5 shrink-0" />
-              {!isSidebarCollapsed && <span>Plan a Date</span>}
+              {!isSidebarCollapsed && (
+                <span>{canDate ? "Plan a Date" : "Start dating"}</span>
+              )}
             </button>
           </div>
 
@@ -1898,14 +2046,14 @@ export function MePage({
               canDate={canDate}
               confirmedDates={confirmedDates}
               dateStreak={dateStreak}
+              hasPendingReviews={(summary?.readiness.pendingReviews ?? 0) > 0}
+              isDatingAvailabilityPending={isUpdatingDatingAvailability}
+              isOnboarded={summary?.readiness.onboarded ?? false}
               monthlyBookings={monthlyBookings}
+              onEnableDating={() => void updateDatingAvailability(true)}
               onNavigateTab={(tab) => setDashboardTab(tab)}
               onOpenAnalytics={() => setIsAnalyticsOpen(true)}
-              onOpenPlanDateDrawer={(date) => {
-                setPresetDateForWizard(date);
-                setPresetPlaceForWizard(undefined);
-                setIsPlanDateDrawerOpen(true);
-              }}
+              onOpenPlanDateDrawer={openPlanDateDrawer}
               profileArea={userCity || profile?.area}
               publishedRecaps={publishedRecapCount}
               savedSpots={savedSpots}
@@ -1956,14 +2104,43 @@ export function MePage({
                   />
                 ) : (
                   <>
+                    {summary?.readiness.onboarded &&
+                    !receivingDateRequests &&
+                    summary.readiness.pendingReviews === 0 ? (
+                      <Card className="rounded-2xl border-primary/30 bg-primary/8">
+                        <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <CardTitle className="text-base">
+                              Ready to date?
+                            </CardTitle>
+                            <CardDescription className="mt-1">
+                              Turn this on when you want to receive a two-minute
+                              request window for incoming dates.
+                            </CardDescription>
+                          </div>
+                          <Button
+                            className="shrink-0 rounded-full"
+                            disabled={isUpdatingDatingAvailability}
+                            onClick={() => void updateDatingAvailability(true)}
+                            size="sm"
+                            type="button"
+                          >
+                            {isUpdatingDatingAvailability
+                              ? "Starting…"
+                              : "Start dating"}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ) : null}
+
                     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/35 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
                       <div>
                         <h3 className="font-bold text-sm">
                           Receive date requests
                         </h3>
                         <p className="mt-0.5 text-muted-foreground text-xs">
-                          Keep this on when you want incoming Eat, Drink, or
-                          Play requests to show here.
+                          Incoming requests stay actionable for two minutes,
+                          then leave this queue without deleting the record.
                         </p>
                       </div>
                       <div className="flex items-center justify-between gap-3 sm:justify-end">
@@ -1973,7 +2150,14 @@ export function MePage({
                         <Switch
                           aria-label="Toggle receiving date requests"
                           checked={receivingDateRequests}
-                          onCheckedChange={setReceivingDateRequests}
+                          disabled={
+                            isUpdatingDatingAvailability ||
+                            !summary?.readiness.onboarded ||
+                            (summary?.readiness.pendingReviews ?? 0) > 0
+                          }
+                          onCheckedChange={(checked) =>
+                            void updateDatingAvailability(checked)
+                          }
                         />
                       </div>
                     </div>
@@ -1981,10 +2165,7 @@ export function MePage({
                     <div className="flex flex-wrap items-center gap-2 border-border/60 border-b pb-2">
                       {[
                         {
-                          count:
-                            receivedDateHistories.length +
-                            sentDateHistories.length +
-                            pendingRequests.length,
+                          count: visibleDateHistories.length,
                           key: "all" as const,
                           label: "All",
                         },
@@ -1999,7 +2180,7 @@ export function MePage({
                           label: "Sent",
                         },
                         {
-                          count: pendingRequests.length,
+                          count: visibleDateHistories.length,
                           key: "active" as const,
                           label: "Active",
                         },
@@ -2035,13 +2216,14 @@ export function MePage({
                     receivedDateHistories.length > 0 ? (
                       <DateRequestSection
                         count={receivedDateHistories.length}
-                        description="People who sent you a date request. Open one to review candidate rooms, profile context, and the plan."
+                        description="People who sent you a date request. You have two minutes to respond before it leaves this queue."
                         title="Received"
                       >
                         {receivedDateHistories.map((date) => (
                           <DateHistoryNotification
                             date={date}
                             key={date.id}
+                            onHandle={() => handleReceivedRequest(date.id)}
                             onOpen={() => openDateHistory(date.id, "request")}
                             onOpenStep={(step) =>
                               openDateHistory(date.id, step)
@@ -2105,7 +2287,7 @@ export function MePage({
                       </DateRequestSection>
                     ) : null}
 
-                    {pendingRequests.length === 0 ? (
+                    {visibleDateHistories.length === 0 ? (
                       <Card className="rounded-2xl border-border bg-card/45">
                         <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
                           <Heart className="size-8 text-primary" />
@@ -2118,27 +2300,54 @@ export function MePage({
                             request forward once you choose, friend, or decline
                             them.
                           </CardDescription>
-                          <Link
-                            to={canDate ? "/date/new" : "/onboarding"}
-                            className={buttonVariants({
-                              className:
-                                "mt-2 rounded-full text-xs font-semibold",
-                              size: "sm",
-                            })}
-                          >
-                            {canDate ? "Request a Date" : "Finish Profile"}
-                          </Link>
+                          {canDate ? (
+                            <Link
+                              className={buttonVariants({
+                                className:
+                                  "mt-2 rounded-full text-xs font-semibold",
+                                size: "sm",
+                              })}
+                              to="/date/new"
+                            >
+                              Request a Date
+                            </Link>
+                          ) : summary?.readiness.onboarded ? (
+                            <Button
+                              className="mt-2 rounded-full text-xs font-semibold"
+                              disabled={isUpdatingDatingAvailability}
+                              onClick={() =>
+                                void updateDatingAvailability(true)
+                              }
+                              size="sm"
+                              type="button"
+                            >
+                              {isUpdatingDatingAvailability
+                                ? "Starting…"
+                                : "Start dating"}
+                            </Button>
+                          ) : (
+                            <Link
+                              className={buttonVariants({
+                                className:
+                                  "mt-2 rounded-full text-xs font-semibold",
+                                size: "sm",
+                              })}
+                              to="/onboarding"
+                            >
+                              Finish Profile
+                            </Link>
+                          )}
                         </CardContent>
                       </Card>
                     ) : null}
 
-                    {pendingRequests.length > 0 ? (
+                    {visibleDateHistories.length > 0 ? (
                       <DateRequestSection
-                        count={pendingRequests.length}
+                        count={visibleDateHistories.length}
                         description="Live requests from your account data."
                         title="Active"
                       >
-                        {pendingRequests.map((request) => (
+                        {visibleDateHistories.map((request) => (
                           <Card
                             className="rounded-2xl border-border bg-card/45"
                             key={request.id}
@@ -2396,32 +2605,38 @@ export function MePage({
                 </p>
               </div>
               <div className="grid gap-3 p-5">
-                {pendingRequests.map((request) => (
-                  <button
-                    className="flex items-start gap-3 rounded-2xl border border-border bg-card/45 p-4 text-left transition hover:border-primary/40"
-                    key={request.id}
-                    onClick={() => {
-                      openDateHistory(request.id);
-                    }}
-                    type="button"
-                  >
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <CalendarHeart className="size-4" />
-                    </span>
-                    <span className="flex flex-col gap-1">
-                      <span className="font-bold text-sm">
-                        Date request is matching
+                {visibleDateHistories.map((date) => {
+                  const request = pendingRequests.find(
+                    (candidate) => candidate.id === date.id
+                  );
+                  if (!request) return null;
+                  return (
+                    <button
+                      className="flex items-start gap-3 rounded-2xl border border-border bg-card/45 p-4 text-left transition hover:border-primary/40"
+                      key={request.id}
+                      onClick={() => {
+                        openDateHistory(request.id);
+                      }}
+                      type="button"
+                    >
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <CalendarHeart className="size-4" />
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {request.what.map(formatLabel).join(", ")} around{" "}
-                        {request.searchArea}
+                      <span className="flex flex-col gap-1">
+                        <span className="font-bold text-sm">
+                          Date request is matching
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {request.what.map(formatLabel).join(", ")} around{" "}
+                          {request.searchArea}
+                        </span>
                       </span>
-                    </span>
-                    {!readRequestIds.includes(request.id) && (
-                      <span className="ml-auto mt-1 size-2 rounded-full bg-primary" />
-                    )}
-                  </button>
-                ))}
+                      {!readRequestIds.includes(request.id) && (
+                        <span className="ml-auto mt-1 size-2 rounded-full bg-primary" />
+                      )}
+                    </button>
+                  );
+                })}
                 {(summary?.readiness.pendingReviews ?? 0) > 0 && (
                   <Card className="rounded-2xl border-primary/30 bg-primary/10">
                     <CardContent className="flex items-start gap-3 p-4">
@@ -3231,11 +3446,9 @@ export function MePage({
             }}
           >
             <SheetContent>
-              <SheetHeader>
-                <SheetTitle className="font-bold text-xl">
-                  Plan a New Date
-                </SheetTitle>
-                <SheetDescription className="text-muted-foreground text-xs">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Plan a New Date</SheetTitle>
+                <SheetDescription>
                   Select date activities, scheduled time, and candidate spots.
                 </SheetDescription>
               </SheetHeader>
@@ -5337,6 +5550,7 @@ function DateRequestSection({
 
 function DateHistoryNotification({
   date,
+  onHandle,
   onOpen,
   onOpenStep,
   onPlayVideo,
@@ -5345,6 +5559,7 @@ function DateHistoryNotification({
   userName = "You",
 }: {
   date: DateHistoryItem;
+  onHandle?: () => void;
   onOpen: () => void;
   onOpenStep?: (step: "request" | "matcher" | "choice" | "date") => void;
   onPlayVideo?: () => void;
@@ -5357,6 +5572,9 @@ function DateHistoryNotification({
   );
   const visibleTags = date.requester.tags.slice(0, 3);
   const isConfirmed = date.status === "Confirmed";
+  const actionSecondsRemaining = date.requesterView
+    ? null
+    : Math.ceil(getDateRequestWindowRemaining(date.createdAt) / 1000);
 
   return (
     <div
@@ -5431,14 +5649,22 @@ function DateHistoryNotification({
                 </Badge>
               ) : null}
             </div>
-            <span className="font-semibold text-muted-foreground text-xs">
-              {new Date(date.scheduledAt).toLocaleDateString([], {
-                day: "numeric",
-                hour: "numeric",
-                minute: "2-digit",
-                month: "short",
-              })}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-muted-foreground text-xs">
+                {new Date(date.scheduledAt).toLocaleDateString([], {
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                  month: "short",
+                })}
+              </span>
+              {actionSecondsRemaining !== null ? (
+                <Badge className="rounded-full border-0 bg-amber-500/15 font-bold text-[10px] text-amber-700">
+                  Respond in {Math.floor(actionSecondsRemaining / 60)}:
+                  {String(actionSecondsRemaining % 60).padStart(2, "0")}
+                </Badge>
+              ) : null}
+            </div>
           </div>
 
           {/* Large Title */}
@@ -5511,6 +5737,7 @@ function DateHistoryNotification({
                     className="h-8 rounded-full font-bold text-xs"
                     onClick={(e) => {
                       e.stopPropagation();
+                      onHandle?.();
                       if (onOpenStep) {
                         onOpenStep("matcher");
                       } else {

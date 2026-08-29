@@ -278,6 +278,9 @@ export function DateWizard({
     longitude?: string;
   }>({});
   const [circleFriends, setCircleFriends] = useState<any[]>([]);
+  const [selectedPlaces, setSelectedPlaces] = useState<DatePlace[]>(
+    presetPlace ? [presetPlace] : []
+  );
   const [placesByCategory, setPlacesByCategory] = useState<
     Partial<Record<WizardWhat, DatePlace[]>>
   >({});
@@ -287,18 +290,28 @@ export function DateWizard({
       filters: [],
       partyMembers: [],
       paymentMode: "dutch",
-      places: presetPlace ? [presetPlace] : [],
+      places: selectedPlaces,
       scheduledAt: defaultScheduledAt(initialDate),
       searchArea: "",
       distanceMiles: 25,
       what: ["eat"],
     } as any,
     onSubmit: async ({ value }) => {
+      const places = (value.places as DatePlace[]).filter((place) =>
+        Boolean(place?.placeId && place.name?.trim())
+      );
+      if (places.length === 0) {
+        toast.error("Choose at least one spot before finding matches.");
+        setStep(1);
+        return;
+      }
+
       const response = await datingApi.createRequest({
         ...value,
         partyMembers: value.partyMembers.filter((member: PartyMember) =>
           Boolean(member.email?.trim() || member.phone?.trim())
         ),
+        places,
         scheduledAt: new Date(value.scheduledAt).toISOString(),
       });
       setMatches(
@@ -443,8 +456,13 @@ export function DateWizard({
         {step === 1 && (
           <PlacesStep
             form={form}
+            onSelectedPlacesChange={(nextPlaces) => {
+              setSelectedPlaces(nextPlaces);
+              form.setFieldValue("places", nextPlaces);
+            }}
             profileCoords={profileCoords}
             placesByCategory={placesByCategory}
+            selectedPlaces={selectedPlaces}
             setPlacesByCategory={setPlacesByCategory}
           />
         )}
@@ -1237,13 +1255,17 @@ function PlanAccordionSection({
 
 function PlacesStep({
   form,
+  onSelectedPlacesChange,
   profileCoords,
   placesByCategory,
+  selectedPlaces,
   setPlacesByCategory,
 }: {
   form: WizardForm;
+  onSelectedPlacesChange: (places: DatePlace[]) => void;
   profileCoords: { latitude?: string; longitude?: string };
   placesByCategory: Partial<Record<WizardWhat, DatePlace[]>>;
+  selectedPlaces: DatePlace[];
   setPlacesByCategory: React.Dispatch<
     React.SetStateAction<Partial<Record<WizardWhat, DatePlace[]>>>
   >;
@@ -1326,13 +1348,13 @@ function PlacesStep({
   };
 
   const togglePlace = (place: DatePlace) => {
-    const selected: DatePlace[] = form.getFieldValue("places");
-    const exists = selected.some((item) => item.placeId === place.placeId);
+    const exists = selectedPlaces.some(
+      (item) => item.placeId === place.placeId
+    );
 
     if (exists) {
-      form.setFieldValue(
-        "places",
-        selected.filter((item) => item.placeId !== place.placeId)
+      onSelectedPlacesChange(
+        selectedPlaces.filter((item) => item.placeId !== place.placeId)
       );
       if (anchor?.placeId === place.placeId) {
         setAnchor(null);
@@ -1340,12 +1362,12 @@ function PlacesStep({
       return;
     }
 
-    if (selected.length >= REQUIRED_SPOTS) {
+    if (selectedPlaces.length >= REQUIRED_SPOTS) {
       toast.error(`You can pick ${REQUIRED_SPOTS} spots. Remove one first.`);
       return;
     }
 
-    form.setFieldValue("places", [...selected, place]);
+    onSelectedPlacesChange([...selectedPlaces, place]);
 
     // Proximity chaining: the first chosen spot anchors every other
     // category so "play" stays close to dinner.
@@ -1353,7 +1375,7 @@ function PlacesStep({
       setAnchor(place);
       for (const category of categories) {
         if (
-          !selected.some((item: any) =>
+          !selectedPlaces.some((item: any) =>
             placesByCategory[category]?.some((p) => p.placeId === item.placeId)
           )
         ) {
@@ -1397,218 +1419,209 @@ function PlacesStep({
   }, [activeFilters, form]);
 
   return (
-    <form.Subscribe selector={(state: any) => state.values.places}>
-      {(selectedPlaces: any) => (
-        <div className="flex flex-col gap-6">
-          <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
-            <CardHeader>
-              <CardTitle>Your spots</CardTitle>
-              <CardDescription>
-                Pick exactly {REQUIRED_SPOTS}. The first spot anchors the rest
-                so the night stays walkable.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {selectedPlaces.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Nothing picked yet — choose from the suggestions below.
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {selectedPlaces.map((place: any) => (
-                    <Badge
-                      className="flex items-center gap-1 rounded-full px-3 py-1.5"
-                      key={place.placeId}
-                      variant="secondary"
-                    >
-                      <MapPin className="size-3" />
-                      {place.name}
-                      <button
-                        aria-label={`Remove ${place.name}`}
-                        className="ml-1 rounded-full hover:text-destructive"
-                        onClick={() => togglePlace(place)}
-                        type="button"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-              {selectedPlaces.some((place: any) => place.websiteUri) ? (
-                <div className="mt-4 space-y-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Make the date feel real
-                  </p>
-                  {selectedPlaces
-                    .filter((place: any) => place.websiteUri)
-                    .map((place: DatePlace) => (
-                      <div
-                        className="rounded-xl border p-3"
-                        key={place.placeId}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium">{place.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Preview what is on the menu before you commit.
-                            </p>
-                          </div>
-                          <Button
-                            disabled={loadingMenuPlaceId === place.placeId}
-                            onClick={() => void previewMenu(place)}
-                            size="sm"
-                            type="button"
-                            variant="outline"
-                          >
-                            {loadingMenuPlaceId === place.placeId
-                              ? "Finding…"
-                              : "Peek at menu"}
-                          </Button>
-                        </div>
-                        {menuPreviews[place.placeId] ? (
-                          <MenuPreviewCard
-                            preview={menuPreviews[place.placeId]}
-                          />
-                        ) : null}
+    <div className="flex flex-col gap-6">
+      <Card className="rounded-2xl border-border bg-card/45 shadow-sm">
+        <CardHeader>
+          <CardTitle>Your spots</CardTitle>
+          <CardDescription>
+            Pick exactly {REQUIRED_SPOTS}. The first spot anchors the rest so
+            the night stays walkable.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {selectedPlaces.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nothing picked yet — choose from the suggestions below.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {selectedPlaces.map((place: any) => (
+                <Badge
+                  className="flex items-center gap-1 rounded-full px-3 py-1.5"
+                  key={place.placeId}
+                  variant="secondary"
+                >
+                  <MapPin className="size-3" />
+                  {place.name}
+                  <button
+                    aria-label={`Remove ${place.name}`}
+                    className="ml-1 rounded-full hover:text-destructive"
+                    onClick={() => togglePlace(place)}
+                    type="button"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+          {selectedPlaces.some((place: any) => place.websiteUri) ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Make the date feel real
+              </p>
+              {selectedPlaces
+                .filter((place: any) => place.websiteUri)
+                .map((place: DatePlace) => (
+                  <div className="rounded-xl border p-3" key={place.placeId}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium">{place.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Preview what is on the menu before you commit.
+                        </p>
                       </div>
-                    ))}
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          {categories.map((category: WizardWhat) => (
-            <Card
-              className="rounded-2xl border-border bg-card/45 shadow-sm"
-              key={category}
-            >
-              <CardHeader>
-                <CardTitle className="capitalize">{category} spots</CardTitle>
-                <CardDescription>
-                  {anchor &&
-                  !selectedPlaces.some(
-                    (item: any) => item.placeId === anchor.placeId
-                  )
-                    ? `Near ${anchor.name}`
-                    : anchor
-                      ? "Pick your anchor spot or keep browsing"
-                      : "Filter by vibe, then tap to select"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                  {CATEGORY_FILTERS[category].map((filter) => {
-                    const isActive = activeFilters[category] === filter;
-                    return (
-                      <button
-                        aria-pressed={isActive}
-                        className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
-                          isActive
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-card text-muted-foreground hover:text-foreground"
-                        }`}
-                        key={filter}
-                        onClick={() => selectFilter(category, filter)}
+                      <Button
+                        disabled={loadingMenuPlaceId === place.placeId}
+                        onClick={() => void previewMenu(place)}
+                        size="sm"
                         type="button"
+                        variant="outline"
                       >
-                        {filter}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {loadingCategory === category ? (
-                  <p className="py-6 text-sm text-muted-foreground">
-                    Finding {category} spots...
-                  </p>
-                ) : (
-                  <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 scrollbar-thin">
-                    {(placesByCategory[category] ?? []).map((place: any) => {
-                      const selected = selectedPlaces.some(
-                        (item: any) => item.placeId === place.placeId
-                      );
-                      const isHighRating =
-                        place.rating && Number(place.rating) >= 4.7;
-                      const combo = isComboPlace(place.types);
-                      return (
-                        <button
-                          aria-pressed={selected}
-                          className={`flex w-64 md:w-72 shrink-0 snap-start flex-col gap-2 rounded-2xl border p-4 text-left transition ${
-                            selected
-                              ? "border-primary bg-primary/5"
-                              : "border-border bg-card hover:border-primary/40"
-                          }`}
-                          key={place.placeId}
-                          onClick={() => togglePlace(place)}
-                          type="button"
-                        >
-                          <div className="flex items-center gap-2">
-                            {isHighRating && (
-                              <Badge className="bg-amber-500 text-white border-none flex items-center gap-0.5 text-[9px] font-semibold px-2 py-0.5">
-                                <Star className="size-2.5 fill-white text-white" />{" "}
-                                Featured
-                              </Badge>
-                            )}
-                            {combo && (
-                              <Badge
-                                variant="outline"
-                                className="bg-primary/5 text-primary border-primary/20 flex items-center gap-0.5 text-[9px] font-semibold px-2 py-0.5"
-                              >
-                                <Sparkles className="size-2.5" /> Combo
-                              </Badge>
-                            )}
-                          </div>
-                          <span className="flex items-start justify-between gap-2">
-                            <span className="text-sm font-semibold leading-snug">
-                              {place.name}
-                            </span>
-                            {selected ? (
-                              <Check className="size-4 shrink-0 text-primary" />
-                            ) : (
-                              place.rating &&
-                              !isHighRating && (
-                                <span className="flex shrink-0 items-center gap-0.5 text-xs font-semibold">
-                                  <Star className="size-3 fill-yellow-500 text-yellow-500" />
-                                  {place.rating}
-                                </span>
-                              )
-                            )}
-                          </span>
-                          {place.address && (
-                            <span className="text-xs text-muted-foreground line-clamp-2">
-                              {place.address}
-                            </span>
-                          )}
-                          <span className="mt-auto flex flex-wrap gap-1">
-                            {place.types.slice(0, 3).map((type: any) => (
-                              <Badge
-                                className="text-[9px] font-semibold"
-                                key={type}
-                                variant="secondary"
-                              >
-                                {type}
-                              </Badge>
-                            ))}
-                          </span>
-                        </button>
-                      );
-                    })}
+                        {loadingMenuPlaceId === place.placeId
+                          ? "Finding…"
+                          : "Peek at menu"}
+                      </Button>
+                    </div>
+                    {menuPreviews[place.placeId] ? (
+                      <MenuPreviewCard preview={menuPreviews[place.placeId]} />
+                    ) : null}
                   </div>
-                )}
+                ))}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
-                {!loadingCategory &&
-                  (placesByCategory[category] ?? []).length === 0 && (
-                    <p className="py-4 text-sm text-muted-foreground">
-                      No spots found for that filter — try another vibe.
-                    </p>
-                  )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </form.Subscribe>
+      {categories.map((category: WizardWhat) => (
+        <Card
+          className="rounded-2xl border-border bg-card/45 shadow-sm"
+          key={category}
+        >
+          <CardHeader>
+            <CardTitle className="capitalize">{category} spots</CardTitle>
+            <CardDescription>
+              {anchor &&
+              !selectedPlaces.some(
+                (item: any) => item.placeId === anchor.placeId
+              )
+                ? `Near ${anchor.name}`
+                : anchor
+                  ? "Pick your anchor spot or keep browsing"
+                  : "Filter by vibe, then tap to select"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {CATEGORY_FILTERS[category].map((filter) => {
+                const isActive = activeFilters[category] === filter;
+                return (
+                  <button
+                    aria-pressed={isActive}
+                    className={`shrink-0 rounded-full border px-4 py-1.5 text-xs font-semibold transition ${
+                      isActive
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground"
+                    }`}
+                    key={filter}
+                    onClick={() => selectFilter(category, filter)}
+                    type="button"
+                  >
+                    {filter}
+                  </button>
+                );
+              })}
+            </div>
+
+            {loadingCategory === category ? (
+              <p className="py-6 text-sm text-muted-foreground">
+                Finding {category} spots...
+              </p>
+            ) : (
+              <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 scrollbar-thin">
+                {(placesByCategory[category] ?? []).map((place: any) => {
+                  const selected = selectedPlaces.some(
+                    (item: any) => item.placeId === place.placeId
+                  );
+                  const isHighRating =
+                    place.rating && Number(place.rating) >= 4.7;
+                  const combo = isComboPlace(place.types);
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={`flex w-64 md:w-72 shrink-0 snap-start flex-col gap-2 rounded-2xl border p-4 text-left transition ${
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : "border-border bg-card hover:border-primary/40"
+                      }`}
+                      key={place.placeId}
+                      onClick={() => togglePlace(place)}
+                      type="button"
+                    >
+                      <div className="flex items-center gap-2">
+                        {isHighRating && (
+                          <Badge className="bg-amber-500 text-white border-none flex items-center gap-0.5 text-[9px] font-semibold px-2 py-0.5">
+                            <Star className="size-2.5 fill-white text-white" />{" "}
+                            Featured
+                          </Badge>
+                        )}
+                        {combo && (
+                          <Badge
+                            variant="outline"
+                            className="bg-primary/5 text-primary border-primary/20 flex items-center gap-0.5 text-[9px] font-semibold px-2 py-0.5"
+                          >
+                            <Sparkles className="size-2.5" /> Combo
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-semibold leading-snug">
+                          {place.name}
+                        </span>
+                        {selected ? (
+                          <Check className="size-4 shrink-0 text-primary" />
+                        ) : (
+                          place.rating &&
+                          !isHighRating && (
+                            <span className="flex shrink-0 items-center gap-0.5 text-xs font-semibold">
+                              <Star className="size-3 fill-yellow-500 text-yellow-500" />
+                              {place.rating}
+                            </span>
+                          )
+                        )}
+                      </span>
+                      {place.address && (
+                        <span className="text-xs text-muted-foreground line-clamp-2">
+                          {place.address}
+                        </span>
+                      )}
+                      <span className="mt-auto flex flex-wrap gap-1">
+                        {place.types.slice(0, 3).map((type: any) => (
+                          <Badge
+                            className="text-[9px] font-semibold"
+                            key={type}
+                            variant="secondary"
+                          >
+                            {type}
+                          </Badge>
+                        ))}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {!loadingCategory &&
+              (placesByCategory[category] ?? []).length === 0 && (
+                <p className="py-4 text-sm text-muted-foreground">
+                  No spots found for that filter — try another vibe.
+                </p>
+              )}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }
 

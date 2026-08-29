@@ -156,4 +156,42 @@ describe("DateWizard", () => {
       expect.objectContaining({ area: "Nashville, TN", what: ["eat"] })
     );
   });
+
+  it("submits the place selected in the places step", async () => {
+    const user = userEvent.setup();
+    const selectedPlace = {
+      address: "100 Main Street",
+      name: "The Local Table",
+      placeId: "place-local-table",
+      types: ["restaurant"],
+    };
+    mocks.getProfile.mockResolvedValue({
+      profile: {
+        area: "Nashville, TN",
+        birthday: birthdayForAge(28),
+      },
+    });
+    mocks.suggestPlaces.mockResolvedValue({ places: [selectedPlace] });
+    mocks.createRequest.mockResolvedValue({
+      matches: [],
+      request: { id: "request-1" },
+    });
+
+    render(<DateWizard membershipTier="mingle" />);
+
+    await screen.findByRole("button", { name: /^eat/i });
+    await user.click(
+      screen.getByRole("button", { name: /continue to spots/i })
+    );
+    await user.click(
+      await screen.findByRole("button", { name: /the local table/i })
+    );
+    await user.click(screen.getByRole("button", { name: /find matches/i }));
+
+    await waitFor(() => {
+      expect(mocks.createRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ places: [selectedPlace] })
+      );
+    });
+  });
 });

@@ -5,8 +5,21 @@ const TERMINAL_DATE_STATUSES = new Set([
   "expired",
 ]);
 
+export const DATE_REQUEST_ACTION_WINDOW_MS = 2 * 60 * 1000;
+
+export const isDateRequestActionable = (
+  createdAt: string,
+  now = Date.now()
+) => {
+  const createdTimestamp = new Date(createdAt).getTime();
+  if (!Number.isFinite(createdTimestamp)) return true;
+  return now - createdTimestamp < DATE_REQUEST_ACTION_WINDOW_MS;
+};
+
 export interface DateRequestSummary {
+  createdAt?: string;
   id: string;
+  isRequester?: boolean;
   scheduledAt: string;
   status: string;
 }
