@@ -1,11 +1,6 @@
+import { Image, type ImageProps } from "expo-image";
 import React, { useState } from "react";
-import {
-  Image,
-  type ImageProps,
-  Text,
-  View,
-  type ViewProps,
-} from "react-native";
+import { Text, View, type ViewProps } from "react-native";
 
 import { cn } from "@/lib/utils";
 

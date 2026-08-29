@@ -1,260 +1,255 @@
-import * as Haptics from "expo-haptics";
+import { useLiveQuery } from "@tanstack/react-db";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import {
-  Crown,
-  Edit3,
   Moon,
-  Plus,
-  Radio,
-  Settings,
+  RefreshCw,
   ShieldCheck,
-  Sparkles,
   Sun,
   UserPlus,
-  Users,
-  Video,
 } from "lucide-react-native";
-import React from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { GlassView } from "@/components/ui/glass-view";
 import { useAppTheme } from "@/contexts/app-theme-context";
+import { authClient } from "@/lib/auth-client";
+import { profileCollection, refreshDatingData } from "@/lib/db/collections";
+
+const readString = (value: unknown) =>
+  typeof value === "string" && value.trim() ? value : undefined;
+
+const readStringArray = (value: unknown) =>
+  Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { data: session, isPending: isSessionPending } =
+    authClient.useSession();
   const { isDark, toggleTheme } = useAppTheme();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const {
+    data: profiles,
+    isError,
+    isLoading,
+  } = useLiveQuery({
+    query: (q) =>
+      session?.user ? q.from({ profile: profileCollection }) : undefined,
+  });
+  const profile = profiles?.[0];
+  const displayName =
+    readString(profile?.name) ??
+    readString(profile?.username) ??
+    "Your profile";
+  const bio = readString(profile?.bio);
+  const interests = readStringArray(profile?.interests);
+  const trustedContacts = Array.isArray(profile?.trustedContacts)
+    ? profile.trustedContacts
+    : [];
+  const media = profile?.media ?? [];
+  const identityStatus = readString(profile?.identityStatus) ?? "not_started";
+
+  const initials = useMemo(
+    () =>
+      displayName
+        .split(" ")
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+    [displayName]
+  );
+
+  const refresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshDatingData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
   return (
     <View className="flex-1 bg-background">
-      {/* Header */}
       <View
-        className="px-5 pb-3 pt-2 flex-row items-center justify-between"
+        className="flex-row items-center justify-between px-5 pb-3 pt-2"
         style={{ paddingTop: insets.top + 4 }}
       >
         <View className="flex-row items-center gap-2">
-          <View className="h-8 w-8 rounded-full bg-amber-500/20 border border-amber-400/40 items-center justify-center">
-            <ShieldCheck size={16} color="#f59e0b" />
+          <View className="h-8 w-8 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
+            <ShieldCheck color="#f59e0b" size={16} />
           </View>
-          <Text className="text-xl font-extrabold text-foreground tracking-tight">
-            My Profile & Safety
+          <Text className="text-xl font-extrabold tracking-tight text-foreground">
+            Profile
           </Text>
         </View>
-
-        {/* Theme Toggle Button */}
-        <Pressable
-          onPress={() => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            toggleTheme();
-          }}
-          className="size-9 rounded-full border border-border/80 bg-card items-center justify-center"
-        >
-          {isDark ? (
-            <Sun size={16} color="#fbbf24" />
-          ) : (
-            <Moon size={16} color="#3b82f6" />
-          )}
-        </Pressable>
+        <View className="flex-row items-center gap-2">
+          <Pressable
+            accessibilityLabel="Toggle theme"
+            className="rounded-full border border-border/80 bg-card p-2"
+            onPress={toggleTheme}
+          >
+            {isDark ? (
+              <Sun color="#fbbf24" size={16} />
+            ) : (
+              <Moon color="#3b82f6" size={16} />
+            )}
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Refresh profile"
+            className="rounded-full p-2 active:bg-muted"
+            disabled={isRefreshing}
+            onPress={() => void refresh()}
+          >
+            <RefreshCw color="#f59e0b" size={18} />
+          </Pressable>
+        </View>
       </View>
 
-      <ScrollView
+      {!isSessionPending && !session?.user ? (
+        <Card className="mx-4 p-4">
+          <Text className="text-sm font-semibold text-foreground">
+            Sign in to view your profile.
+          </Text>
+          <Button
+            className="mt-3 h-9 self-start px-3"
+            onPress={() => router.push("/auth/login")}
+            size="sm"
+            variant="sugar"
+          >
+            <Text className="text-xs font-bold text-black">Sign in</Text>
+          </Button>
+        </Card>
+      ) : null}
+      <FlatList
         contentContainerStyle={{
-          paddingHorizontal: 16,
+          gap: 12,
           paddingBottom: 110,
-          paddingTop: 8,
-          gap: 16,
+          paddingHorizontal: 16,
         }}
+        data={media}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={
+          <Card className="p-4">
+            <Text className="text-xs text-muted-foreground">
+              {isLoading
+                ? "Loading your profile…"
+                : isError
+                  ? "Profile data is unavailable. Refresh to try again."
+                  : "No profile media yet."}
+            </Text>
+          </Card>
+        }
+        ListHeaderComponent={
+          <View>
+            <Card className="items-center p-5">
+              {media[0]?.url ? (
+                <Image
+                  contentFit="cover"
+                  source={{ uri: media[0].url }}
+                  style={{ borderRadius: 44, height: 88, width: 88 }}
+                />
+              ) : (
+                <View className="h-[88px] w-[88px] items-center justify-center rounded-full bg-amber-500/20">
+                  <Text className="text-xl font-bold text-amber-400">
+                    {initials}
+                  </Text>
+                </View>
+              )}
+              <Text className="mt-3 text-lg font-bold text-foreground">
+                {displayName}
+              </Text>
+              <Badge
+                className="mt-2"
+                variant={identityStatus === "verified" ? "success" : "outline"}
+              >
+                <Text className="text-[10px] font-semibold text-foreground">
+                  Identity: {identityStatus.replaceAll("_", " ")}
+                </Text>
+              </Badge>
+              {bio ? (
+                <Text className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
+                  {bio}
+                </Text>
+              ) : null}
+              <Button
+                className="mt-4 h-9 px-4"
+                onPress={() => router.push("/onboarding")}
+                size="sm"
+                variant="outline"
+              >
+                <Text className="text-xs font-semibold text-foreground">
+                  Edit profile in onboarding
+                </Text>
+              </Button>
+            </Card>
+            <Card className="mt-3 p-4">
+              <View className="flex-row items-center gap-2">
+                <UserPlus color="#34d399" size={16} />
+                <Text className="text-sm font-bold text-foreground">
+                  Safety circle
+                </Text>
+                <Badge className="ml-auto" variant="success">
+                  <Text className="text-[10px] font-bold text-emerald-400">
+                    {trustedContacts.length} contacts
+                  </Text>
+                </Badge>
+              </View>
+              <Text className="mt-2 text-xs text-muted-foreground">
+                Trusted contacts receive safety updates for active dates.
+              </Text>
+              {trustedContacts.length === 0 ? (
+                <Text className="mt-3 text-xs text-muted-foreground">
+                  Add trusted contacts during onboarding.
+                </Text>
+              ) : null}
+            </Card>
+            {interests.length > 0 ? (
+              <Card className="mt-3 p-4">
+                <Text className="text-sm font-bold text-foreground">
+                  Interests
+                </Text>
+                <View className="mt-3 flex-row flex-wrap gap-2">
+                  {interests.map((interest) => (
+                    <Badge key={interest} variant="glass">
+                      <Text className="text-[10px] text-foreground">
+                        {interest}
+                      </Text>
+                    </Badge>
+                  ))}
+                </View>
+              </Card>
+            ) : null}
+            {media.length > 0 ? (
+              <Text className="mb-1 mt-5 px-1 text-sm font-bold text-muted-foreground">
+                Profile media
+              </Text>
+            ) : null}
+          </View>
+        }
+        renderItem={({ item }) => (
+          <Image
+            contentFit="cover"
+            source={{ uri: item.url }}
+            style={{ borderRadius: 14, height: 120, width: "31%" }}
+          />
+        )}
+        numColumns={3}
+        columnWrapperStyle={{ gap: 8 }}
         showsVerticalScrollIndicator={false}
-      >
-        {/* User Card */}
-        <Card className="p-5 border-border/80 flex-col items-center text-center relative overflow-hidden">
-          <View className="relative">
-            <Avatar size="xl" className="border-2 border-amber-500/50">
-              <AvatarImage
-                source={{
-                  uri: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80",
-                }}
-              />
-              <AvatarFallback>CB</AvatarFallback>
-            </Avatar>
-            <View className="absolute bottom-0 right-0 size-6 rounded-full bg-emerald-500 border-2 border-background items-center justify-center">
-              <ShieldCheck size={13} color="#ffffff" />
-            </View>
-          </View>
-
-          <Text className="text-lg font-bold text-foreground mt-3">
-            Elena Rostova, 26
-          </Text>
-          <Text className="text-xs font-semibold text-amber-500">
-            @elena.r • Live Capture Verified
-          </Text>
-          <Text className="text-xs text-muted-foreground mt-1 text-center max-w-xs leading-relaxed">
-            "Video first, real dinner dates second. Speakeasies & late-night
-            ramen."
-          </Text>
-
-          <View className="flex-row items-center gap-2 mt-4">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9 px-4 gap-1.5"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            >
-              <Edit3 size={13} color="#a1a1aa" />
-              <Text className="text-xs font-semibold text-foreground">
-                Edit Profile
-              </Text>
-            </Button>
-
-            <Button
-              size="sm"
-              variant="glass"
-              className="h-9 px-4 gap-1.5"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            >
-              <Video size={13} color="#f59e0b" />
-              <Text className="text-xs font-bold text-amber-400">
-                Update Intro
-              </Text>
-            </Button>
-          </View>
-        </Card>
-
-        {/* Sugar VIP & Crews Event Hosting Card */}
-        <GlassView
-          className="p-5 border-amber-500/40 bg-amber-950/40 flex-col gap-3 shadow-xl"
-          borderRadius={28}
-        >
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-2">
-              <Crown size={18} color="#fbbf24" fill="#fbbf24" />
-              <Text className="text-base font-extrabold text-amber-300">
-                Sugar VIP • Crews & Ads
-              </Text>
-            </View>
-            <Badge variant="sugar" className="px-2.5 py-0.5">
-              <Text className="text-[10px] font-bold text-amber-300">
-                VIP Tier
-              </Text>
-            </Badge>
-          </View>
-
-          <Text className="text-xs text-zinc-200 leading-relaxed">
-            Host local social events, parties, and mixers under your own{" "}
-            <Text className="font-bold text-amber-300">Crew</Text>, with
-            built-in ad promotion tools in the Chewbuu feed.
-          </Text>
-
-          <View className="flex-row items-center gap-2 mt-1">
-            <Button
-              size="sm"
-              variant="sugar"
-              className="flex-1 gap-1.5"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }}
-            >
-              <Plus size={14} color="#000000" />
-              <Text className="text-xs font-bold text-black">
-                Create a Crew Event
-              </Text>
-            </Button>
-
-            <Button
-              size="sm"
-              variant="glass"
-              className="gap-1.5 px-3"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            >
-              <Radio size={14} color="#f59e0b" />
-              <Text className="text-xs font-bold text-amber-400">Run Ad</Text>
-            </Button>
-          </View>
-        </GlassView>
-
-        {/* Friend Safety Circle ("Friends who should know you're going out") */}
-        <Card className="p-4 border-border/80 flex-col gap-3">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-2">
-              <Users size={16} color="#10b981" />
-              <Text className="text-sm font-bold text-foreground">
-                Safety Circle Contacts
-              </Text>
-            </View>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 px-2"
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            >
-              <UserPlus size={13} color="#10b981" />
-              <Text className="text-[11px] font-bold text-emerald-400">
-                + Add Friend
-              </Text>
-            </Button>
-          </View>
-
-          <Text className="text-xs text-muted-foreground leading-relaxed">
-            These friends receive automated Safety Beacon check-in pings during
-            active dates.
-          </Text>
-
-          <View className="flex-col gap-2 mt-1">
-            <View className="flex-row items-center justify-between p-2.5 rounded-2xl bg-muted/40 border border-border/40">
-              <View className="flex-row items-center gap-2.5">
-                <Avatar size="sm">
-                  <AvatarFallback>SK</AvatarFallback>
-                </Avatar>
-                <View className="flex-col">
-                  <Text className="text-xs font-bold text-foreground">
-                    Sarah Kim
-                  </Text>
-                  <Text className="text-[10px] text-muted-foreground">
-                    +1 (202) 555-0182 • Automated Ping: On
-                  </Text>
-                </View>
-              </View>
-              <Badge variant="success" className="px-2 py-0.5">
-                <Text className="text-[9px] font-bold text-emerald-400">
-                  Active
-                </Text>
-              </Badge>
-            </View>
-
-            <View className="flex-row items-center justify-between p-2.5 rounded-2xl bg-muted/40 border border-border/40">
-              <View className="flex-row items-center gap-2.5">
-                <Avatar size="sm">
-                  <AvatarFallback>DL</AvatarFallback>
-                </Avatar>
-                <View className="flex-col">
-                  <Text className="text-xs font-bold text-foreground">
-                    David Lee
-                  </Text>
-                  <Text className="text-[10px] text-muted-foreground">
-                    +1 (202) 555-0144 • Automated Ping: On
-                  </Text>
-                </View>
-              </View>
-              <Badge variant="success" className="px-2 py-0.5">
-                <Text className="text-[9px] font-bold text-emerald-400">
-                  Active
-                </Text>
-              </Badge>
-            </View>
-          </View>
-        </Card>
-      </ScrollView>
+      />
     </View>
   );
 }

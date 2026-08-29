@@ -370,7 +370,27 @@ export interface RecapTable {
   review_id: string | null;
   story_expires_at: Timestamp | null;
   thumbnail_url: string | null;
-  video_url: string;
+  video_url: string | null;
+}
+
+export interface RecapMediaTable {
+  created_at: Timestamp;
+  date_media_id: string;
+  recap_id: string;
+}
+
+export interface SpotContributionTable {
+  created_at: Timestamp;
+  date_media_id: string;
+  date_request_id: string;
+  google_place_id: string;
+  id: string;
+  kind: string;
+  reward_points: number;
+  reward_status: string;
+  reviewed_at: Timestamp | null;
+  status: string;
+  submitted_by_user_id: string;
 }
 
 export interface NotificationTable {
@@ -959,11 +979,13 @@ export interface BlocksDatabase {
   invitation: InvitationTable;
   notification: NotificationTable;
   subscription: SubscriptionTable;
+  spot_contribution: SpotContributionTable;
   sync_plan: SyncPlanTable;
   sync_subscription: SyncSubscriptionTable;
   profile: ProfileTable;
   profile_media: ProfileMediaTable;
   recap: RecapTable;
+  recap_media: RecapMediaTable;
   referral: ReferralTable;
   trusted_contact: TrustedContactTable;
   user: UserTable;

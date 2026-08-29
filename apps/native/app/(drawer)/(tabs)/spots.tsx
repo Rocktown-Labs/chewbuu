@@ -1,338 +1,233 @@
-import { api as blocksApi, type VenueSpecial } from "@chewbuu/aws-blocks";
-import * as Haptics from "expo-haptics";
+import { useDebouncedValue } from "@tanstack/react-pacer";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
+import { ExternalLink, MapPin, Search, Sparkles, X } from "lucide-react-native";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  Camera,
-  Compass,
-  FileText,
-  MapPin,
-  Search,
-  Sparkles,
-  Star,
-  UtensilsCrossed,
-} from "lucide-react-native";
-import React, { useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+  ActivityIndicator,
+  FlatList,
+  Linking,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { GlassView } from "@/components/ui/glass-view";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { datingApi, type NativeSpot } from "@/lib/dating-api";
 
-const CATEGORIES = ["Eat", "Drink", "Play", "Move", "Watch", "Talk"] as const;
-
-const MOCK_SPOTS = [
-  {
-    id: "s1",
-    name: "Daikaya Izakaya & Ramen",
-    category: "Eat",
-    cuisine: "Japanese • Craft Cocktails",
-    address: "705 6th St NW, Washington, DC",
-    rating: 4.8,
-    reviews: 320,
-    price: "$$",
-    distance: "0.4 mi",
-    image:
-      "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=600&auto=format&fit=crop&q=80",
-    menuScraped: true,
-    topItems: ["Spicy Miso Ramen", "Wagyu Skewers", "Yuzu Highball"],
-    verifiedVenue: true,
-  },
-  {
-    id: "s2",
-    name: "Silver Lyan Speakeasy",
-    category: "Drink",
-    cuisine: "Cocktail Lounge • Intimate",
-    address: "900 F St NW, Washington, DC",
-    rating: 4.9,
-    reviews: 190,
-    price: "$$$",
-    distance: "0.7 mi",
-    image:
-      "https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=600&auto=format&fit=crop&q=80",
-    menuScraped: true,
-    topItems: ["Project Sazerac", "Truffle Fries", "Oysters"],
-    verifiedVenue: true,
-  },
-  {
-    id: "s3",
-    name: "Swingers Crazy Golf",
-    category: "Play",
-    cuisine: "Mini Golf • Street Food • DJ",
-    address: "1330 19th St NW, Washington, DC",
-    rating: 4.7,
-    reviews: 410,
-    price: "$$",
-    distance: "1.2 mi",
-    image:
-      "https://images.unsplash.com/photo-1587280501635-68a0e82cd5ff?w=600&auto=format&fit=crop&q=80",
-    menuScraped: false,
-    topItems: ["9-Hole Round", "Patty & Bun Sliders", "Frozen Margarita"],
-    verifiedVenue: false,
-  },
-];
+const CATEGORIES = ["eat", "drink", "play"] as const;
+type Category = (typeof CATEGORIES)[number];
 
 export default function SpotsScreen() {
   const insets = useSafeAreaInsets();
-  const [activeCategory, setActiveCategory] = useState<string>("Eat");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [specials, setSpecials] = useState<VenueSpecial[]>([]);
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [area, setArea] = useState("Washington, DC");
+  const [category, setCategory] = useState<Category>("eat");
+  const [spots, setSpots] = useState<NativeSpot[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [debouncedQuery] = useDebouncedValue(query.trim(), { wait: 350 });
 
   useEffect(() => {
-    const loadSpecials = async () => {
+    let isCurrent = true;
+    const loadSpots = async () => {
+      setIsLoading(true);
+      setError(undefined);
       try {
-        const result = await blocksApi.listPublicVenueSpecials();
-        setSpecials(result.specials);
-      } catch {
-        setSpecials([]);
+        const result = await datingApi.searchPlaces({
+          area,
+          filters: [],
+          query: debouncedQuery || category,
+          searchKind: "place",
+          what: [category],
+        });
+        if (isCurrent) setSpots(result.places);
+      } catch (loadError) {
+        if (isCurrent) {
+          setSpots([]);
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "Could not load spots."
+          );
+        }
+      } finally {
+        if (isCurrent) setIsLoading(false);
       }
     };
-    void loadSpecials();
-  }, []);
+    void loadSpots();
+    return () => {
+      isCurrent = false;
+    };
+  }, [area, category, debouncedQuery]);
 
-  const filteredSpots = MOCK_SPOTS.filter((spot) => {
-    const matchesCategory = spot.category === activeCategory;
-    const matchesSearch =
-      spot.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      spot.cuisine.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const title = useMemo(
+    () => `${category[0].toUpperCase()}${category.slice(1)} spots near you`,
+    [category]
+  );
 
   return (
     <View className="flex-1 bg-background">
-      {/* Header */}
-      <View
-        className="px-5 pb-3 pt-2 flex-col gap-3"
-        style={{ paddingTop: insets.top + 4 }}
-      >
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center gap-2">
-            <View className="h-8 w-8 rounded-full bg-amber-500/20 border border-amber-400/40 items-center justify-center">
-              <Compass size={16} color="#f59e0b" />
-            </View>
-            <Text className="text-xl font-extrabold text-foreground tracking-tight">
-              Date Spots
-            </Text>
+      <View className="px-5 pb-3 pt-2" style={{ paddingTop: insets.top + 4 }}>
+        <View className="flex-row items-center gap-2">
+          <View className="h-8 w-8 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
+            <MapPin color="#f59e0b" size={16} />
           </View>
-
-          <Badge variant="glass" className="px-3 py-1">
-            <Text className="text-xs font-semibold text-muted-foreground">
-              GPS Verified
-            </Text>
-          </Badge>
+          <Text className="text-xl font-extrabold tracking-tight text-foreground">
+            Spots
+          </Text>
         </View>
-
-        {/* Search Bar */}
-        <Input
-          placeholder="Search restaurants, cocktail lounges, activities..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          startIcon={<Search size={16} color="#888888" />}
-          className="h-11"
-        />
-
-        {/* Category Pills */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8 }}
-          className="py-1"
-        >
-          {CATEGORIES.map((cat) => {
-            const isSelected = activeCategory === cat;
-            return (
-              <Pressable
-                key={cat}
-                onPress={() => {
-                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setActiveCategory(cat);
-                }}
-                className={cn(
-                  "px-4 py-1.5 rounded-full border transition-all",
-                  isSelected
-                    ? "bg-amber-500 border-amber-400 shadow-xs"
-                    : "bg-card/60 border-border/80"
-                )}
-              >
-                <Text
-                  className={cn(
-                    "text-xs font-bold",
-                    isSelected ? "text-black" : "text-muted-foreground"
-                  )}
-                >
-                  {cat}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <Text className="mt-1 text-xs text-muted-foreground">
+          Live Google Maps places for planning a real date.
+        </Text>
       </View>
 
-      {/* Spot Listings */}
-      <ScrollView
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingBottom: 110,
-          paddingTop: 8,
-          gap: 16,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        {specials.length > 0 && (
-          <View className="gap-3">
-            <Text className="text-lg font-extrabold text-foreground">
-              Live specials
-            </Text>
-            {specials.slice(0, 4).map((special) => (
-              <Card
-                key={special.id}
-                className="border-amber-400/30 bg-amber-500/10"
-              >
-                <View className="flex-row items-start justify-between gap-3 p-4">
-                  <View className="flex-1 gap-1">
-                    <Text className="text-[10px] font-bold uppercase text-amber-500">
-                      {special.category}
-                    </Text>
-                    <Text className="text-base font-bold text-foreground">
-                      {special.title}
-                    </Text>
-                    {special.description ? (
-                      <Text className="text-xs text-muted-foreground">
-                        {special.description}
-                      </Text>
-                    ) : null}
-                  </View>
-                  {special.priceText ? (
-                    <Badge variant="outline" className="px-2">
-                      <Text className="text-xs text-foreground">
-                        {special.priceText}
-                      </Text>
-                    </Badge>
-                  ) : null}
-                </View>
-              </Card>
-            ))}
-          </View>
-        )}
-        {filteredSpots.map((spot) => (
-          <Card key={spot.id} className="p-0 overflow-hidden border-border/70">
-            {/* Spot Image Header */}
-            <View className="relative h-44 w-full bg-muted">
-              <Image
-                source={{ uri: spot.image }}
-                className="w-full h-full object-cover"
-              />
-
-              {/* Price & Rating Badges */}
-              <View className="absolute top-3 left-3 flex-row gap-2">
-                <GlassView
-                  className="px-2.5 py-1 border-white/20"
-                  borderRadius={14}
-                >
-                  <Text className="text-[11px] font-bold text-white">
-                    {spot.price} • {spot.distance}
-                  </Text>
-                </GlassView>
-
-                {spot.menuScraped && (
-                  <GlassView
-                    className="flex-row items-center gap-1 px-2.5 py-1 border-amber-400/30 bg-amber-950/50"
-                    borderRadius={14}
-                  >
-                    <FileText size={11} color="#f59e0b" />
-                    <Text className="text-[10px] font-bold text-amber-300">
-                      Menu Ready
-                    </Text>
-                  </GlassView>
-                )}
-              </View>
-
-              <View className="absolute top-3 right-3">
-                <GlassView
-                  className="flex-row items-center gap-1 px-2 py-1 border-white/20"
-                  borderRadius={14}
-                >
-                  <Star size={12} color="#fbbf24" fill="#fbbf24" />
-                  <Text className="text-[11px] font-bold text-white">
-                    {spot.rating}
-                  </Text>
-                </GlassView>
-              </View>
-            </View>
-
-            {/* Spot Content */}
-            <View className="p-4 flex-col gap-2">
-              <View className="flex-row items-baseline justify-between">
-                <Text className="text-base font-bold text-foreground">
-                  {spot.name}
-                </Text>
-              </View>
-
-              <Text className="text-xs font-semibold text-amber-500">
-                {spot.cuisine}
-              </Text>
-
-              <View className="flex-row items-center gap-1">
-                <MapPin size={12} color="#71717a" />
+      <FlatList
+        contentContainerStyle={{ paddingBottom: 110, paddingHorizontal: 16 }}
+        data={spots}
+        keyExtractor={(item) => item.placeId}
+        ListEmptyComponent={
+          <Card className="mt-3 p-4">
+            {isLoading ? (
+              <View className="flex-row items-center gap-2">
+                <ActivityIndicator color="#f59e0b" />
                 <Text className="text-xs text-muted-foreground">
-                  {spot.address}
+                  Loading Google Maps places…
                 </Text>
               </View>
-
-              {/* Firecrawl Menu Highlights */}
-              <View className="mt-2 rounded-2xl bg-muted/40 border border-border/40 p-3 flex-col gap-1.5">
-                <Text className="text-[11px] font-bold text-foreground flex-row items-center">
-                  🔥 Popular Date Dishes & Drinks
+            ) : (
+              <Text className="text-xs text-muted-foreground">
+                {error ?? "No matching spots found."}
+              </Text>
+            )}
+          </Card>
+        }
+        ListHeaderComponent={
+          <View>
+            <Card className="p-4">
+              <View className="flex-row items-center rounded-xl border border-border/60 bg-muted/20 px-3">
+                <Search color="#a1a1aa" size={16} />
+                <TextInput
+                  className="flex-1 px-2 py-3 text-sm text-foreground"
+                  onChangeText={setQuery}
+                  placeholder="Search restaurants, coffee, activities…"
+                  placeholderTextColor="#a1a1aa"
+                  value={query}
+                />
+                {query ? (
+                  <Pressable
+                    accessibilityLabel="Clear spot search"
+                    onPress={() => setQuery("")}
+                  >
+                    <X color="#a1a1aa" size={16} />
+                  </Pressable>
+                ) : null}
+              </View>
+              <TextInput
+                className="mt-2 rounded-xl border border-border/60 bg-muted/20 px-3 py-3 text-sm text-foreground"
+                onChangeText={setArea}
+                placeholder="Search area"
+                placeholderTextColor="#a1a1aa"
+                value={area}
+              />
+              <View className="mt-3 flex-row gap-2">
+                {CATEGORIES.map((option) => (
+                  <Pressable
+                    className={`flex-1 rounded-xl border px-3 py-2 ${
+                      category === option
+                        ? "border-amber-500 bg-amber-500/15"
+                        : "border-border/60"
+                    }`}
+                    key={option}
+                    onPress={() => setCategory(option)}
+                  >
+                    <Text
+                      className={`text-center text-xs font-bold capitalize ${
+                        category === option
+                          ? "text-amber-400"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Card>
+            <View className="mb-2 mt-5 flex-row items-center justify-between px-1">
+              <Text className="text-sm font-bold text-muted-foreground">
+                {title}
+              </Text>
+              <Badge variant="glass">
+                <Text className="text-[10px] text-foreground">
+                  {spots.length} results
                 </Text>
-                <View className="flex-row flex-wrap gap-1.5">
-                  {spot.topItems.map((item) => (
-                    <Badge key={item} variant="outline" className="px-2 py-0.5">
-                      <Text className="text-[10px] text-foreground font-medium">
-                        {item}
-                      </Text>
-                    </Badge>
-                  ))}
+              </Badge>
+            </View>
+          </View>
+        }
+        renderItem={({ item }) => (
+          <Card className="mb-2 p-4">
+            <View className="flex-row items-start gap-3">
+              {item.photoUrl ? (
+                <Image
+                  contentFit="cover"
+                  source={{ uri: item.photoUrl }}
+                  style={{ borderRadius: 12, height: 68, width: 68 }}
+                />
+              ) : (
+                <View className="h-[68px] w-[68px] items-center justify-center rounded-xl bg-amber-500/15">
+                  <Sparkles color="#f59e0b" size={20} />
                 </View>
-              </View>
-
-              {/* Action Buttons */}
-              <View className="flex-row items-center gap-2 mt-2 pt-2 border-t border-border/30">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-1.5"
-                  onPress={() => {
-                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  }}
-                >
-                  <Camera size={13} color="#a1a1aa" />
-                  <Text className="text-xs font-semibold text-foreground">
-                    Upload Menu
-                  </Text>
-                </Button>
-
-                <Button
-                  variant="sugar"
-                  size="sm"
-                  className="flex-1 gap-1.5"
-                  onPress={() => {
-                    void Haptics.impactAsync(
-                      Haptics.ImpactFeedbackStyle.Medium
-                    );
-                  }}
-                >
-                  <UtensilsCrossed size={13} color="#000000" />
-                  <Text className="text-xs font-bold text-black">
-                    Propose Date
-                  </Text>
-                </Button>
+              )}
+              <View className="flex-1">
+                <Text className="text-sm font-bold text-foreground">
+                  {item.name}
+                </Text>
+                <Text className="mt-1 text-xs text-muted-foreground">
+                  {item.address ?? "Address unavailable"}
+                  {item.rating ? ` · ${item.rating}★` : ""}
+                </Text>
+                <View className="mt-2 flex-row items-center gap-3">
+                  <Pressable
+                    className="flex-row items-center gap-1"
+                    disabled={!item.googleMapsUri}
+                    onPress={async () => {
+                      if (!item.googleMapsUri) return;
+                      try {
+                        await Linking.openURL(item.googleMapsUri);
+                      } catch {
+                        // The system may not have a maps handler installed.
+                      }
+                    }}
+                  >
+                    <ExternalLink color="#f59e0b" size={13} />
+                    <Text className="text-[11px] font-semibold text-amber-400">
+                      Open Maps
+                    </Text>
+                  </Pressable>
+                  <Button
+                    className="h-8 px-3"
+                    onPress={() => router.push("/date/new")}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <Text className="text-[11px] font-bold text-foreground">
+                      Plan here
+                    </Text>
+                  </Button>
+                </View>
               </View>
             </View>
           </Card>
-        ))}
-      </ScrollView>
+        )}
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
 }

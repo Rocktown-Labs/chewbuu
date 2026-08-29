@@ -1,6 +1,11 @@
+import { useDebouncedCallback } from "@tanstack/react-pacer";
+import * as ExpoCamera from "expo-camera";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Location from "expo-location";
+import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,8 +30,8 @@ import {
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Dimensions,
-  Image,
   Pressable,
   ScrollView,
   Text,
@@ -41,12 +46,20 @@ import { Card } from "@/components/ui/card";
 import { GlassView } from "@/components/ui/glass-view";
 import { Input } from "@/components/ui/input";
 import { useAppTheme } from "@/contexts/app-theme-context";
+import { datingApi } from "@/lib/dating-api";
+import {
+  captureImage,
+  captureVideo,
+  uploadIntroVideo,
+  uploadProfileImage,
+} from "@/lib/media";
 import {
   calculateCompletionPercentage,
   DEFAULT_ONBOARDING_DATA,
   loadOnboardingDraft,
-  type OnboardingData,
   saveOnboardingDraft,
+  toProfilePayload,
+  type OnboardingData,
 } from "@/lib/onboarding-storage";
 import { cn } from "@/lib/utils";
 
@@ -82,25 +95,136 @@ export default function OnboardingScreen() {
     void init();
   }, []);
 
+  const saveRemoteDraft = useDebouncedCallback(
+    async (next: OnboardingData) => {
+      try {
+        await datingApi.saveProfileDraft(toProfilePayload(next));
+      } catch {
+        // SecureStore keeps the draft available until the API is reachable.
+      }
+    },
+    { wait: 750 }
+  );
+
   const handleUpdate = (updater: (prev: OnboardingData) => OnboardingData) => {
     setData((prev) => {
       const next = updater(prev);
       void saveOnboardingDraft(next);
+      saveRemoteDraft(next);
       return next;
     });
+  };
+
+  const requestCameraPermission = async () => {
+    const [camera, microphone] = await Promise.all([
+      ExpoCamera.Camera.requestCameraPermissionsAsync(),
+      ExpoCamera.Camera.requestMicrophonePermissionsAsync(),
+    ]);
+    handleUpdate((prev) => ({
+      ...prev,
+      permissions: {
+        ...prev.permissions,
+        camera: camera.granted,
+        microphone: microphone.granted,
+      },
+    }));
+  };
+
+  const requestLocationPermission = async () => {
+    const permission = await Location.requestForegroundPermissionsAsync();
+    handleUpdate((prev) => ({
+      ...prev,
+      permissions: { ...prev.permissions, location: permission.granted },
+    }));
+  };
+
+  const requestPushPermission = async () => {
+    const permission = await Notifications.requestPermissionsAsync();
+    handleUpdate((prev) => ({
+      ...prev,
+      permissions: { ...prev.permissions, push: permission.granted },
+    }));
+  };
+
+  const handleCaptureSelfie = async () => {
+    setSaving(true);
+    try {
+      const image = await captureImage();
+      if (!image) return;
+      const upload = await uploadProfileImage(image);
+      handleUpdate((prev) => ({
+        ...prev,
+        media: {
+          ...prev.media,
+          profilePhotoUrl: upload.mediaUrl,
+          selfieVerified: false,
+        },
+      }));
+      const verification = await datingApi.createIdentityVerificationSession();
+      await WebBrowser.openBrowserAsync(verification.url);
+      const status = await datingApi.getIdentityVerificationStatus();
+      handleUpdate((prev) => ({
+        ...prev,
+        media: {
+          ...prev.media,
+          selfieVerified: status.status === "verified",
+        },
+      }));
+    } catch (error) {
+      Alert.alert(
+        "Verification unavailable",
+        error instanceof Error ? error.message : "Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCaptureVideo = async () => {
+    setSaving(true);
+    try {
+      const video = await captureVideo();
+      if (!video) return;
+      const upload = await uploadIntroVideo(video);
+      handleUpdate((prev) => ({
+        ...prev,
+        media: {
+          ...prev.media,
+          videoIntroDurationSeconds: Math.round((video.duration ?? 0) / 1000),
+          videoIntroUrl: upload.mediaUrl,
+        },
+      }));
+    } catch (error) {
+      Alert.alert(
+        "Video upload failed",
+        error instanceof Error ? error.message : "Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSaveForLater = async () => {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
-    await saveOnboardingDraft({
-      ...data,
-      step: currentStep,
-      isComplete: false,
-    });
-    setSaving(false);
-    // Skip to main tabs
-    router.replace("/(drawer)/(tabs)");
+    try {
+      await datingApi.saveProfileDraft(toProfilePayload(data));
+      await saveOnboardingDraft({
+        ...data,
+        step: currentStep,
+        isComplete: false,
+      });
+      router.replace("/(drawer)/(tabs)");
+    } catch (error) {
+      Alert.alert(
+        "Draft saved locally",
+        error instanceof Error
+          ? `${error.message} Your changes will sync when you reconnect.`
+          : "Your changes will sync when you reconnect."
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleNextStep = async () => {
@@ -110,12 +234,25 @@ export default function OnboardingScreen() {
       setCurrentStep(nextStep);
       await saveOnboardingDraft({ ...data, step: nextStep });
     } else {
-      // Final submit
       setSaving(true);
-      await saveOnboardingDraft({ ...data, isComplete: true });
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setSaving(false);
-      router.replace("/(drawer)/(tabs)");
+      try {
+        const result = await datingApi.saveProfile(toProfilePayload(data));
+        await saveOnboardingDraft({
+          ...data,
+          isComplete: result.readiness.onboarded,
+        });
+        void Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success
+        );
+        router.replace("/(drawer)/(tabs)");
+      } catch (error) {
+        Alert.alert(
+          "Profile needs attention",
+          error instanceof Error ? error.message : "Please review your profile."
+        );
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
@@ -280,9 +417,9 @@ export default function OnboardingScreen() {
                   <Input
                     keyboardType="number-pad"
                     placeholder="26"
-                    value={data.basics.age.toString()}
+                    value={data.basics.age ? data.basics.age.toString() : ""}
                     onChangeText={(text) => {
-                      const age = Math.trunc(Number(text)) || 18;
+                      const age = Math.max(0, Math.trunc(Number(text)) || 0);
                       handleUpdate((prev) => ({
                         ...prev,
                         basics: { ...prev.basics, age },
@@ -302,6 +439,39 @@ export default function OnboardingScreen() {
                       handleUpdate((prev) => ({
                         ...prev,
                         basics: { ...prev.basics, gender },
+                      }))
+                    }
+                  />
+                </View>
+              </View>
+
+              <View className="flex-row gap-3">
+                <View className="flex-1 flex-col gap-1.5">
+                  <Text className="text-xs font-bold text-foreground">
+                    Birthday
+                  </Text>
+                  <Input
+                    placeholder="YYYY-MM-DD"
+                    value={data.basics.birthday}
+                    onChangeText={(birthday) =>
+                      handleUpdate((prev) => ({
+                        ...prev,
+                        basics: { ...prev.basics, birthday },
+                      }))
+                    }
+                  />
+                </View>
+                <View className="flex-1 flex-col gap-1.5">
+                  <Text className="text-xs font-bold text-foreground">
+                    Sexuality
+                  </Text>
+                  <Input
+                    placeholder="e.g. bisexual"
+                    value={data.basics.sexuality}
+                    onChangeText={(sexuality) =>
+                      handleUpdate((prev) => ({
+                        ...prev,
+                        basics: { ...prev.basics, sexuality },
                       }))
                     }
                   />
@@ -382,14 +552,7 @@ export default function OnboardingScreen() {
                   className="h-8 px-3"
                   onPress={() => {
                     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    handleUpdate((prev) => ({
-                      ...prev,
-                      permissions: {
-                        ...prev.permissions,
-                        camera: !prev.permissions.camera,
-                        microphone: !prev.permissions.camera,
-                      },
-                    }));
+                    void requestCameraPermission();
                   }}
                 >
                   <Text className="text-xs font-bold">
@@ -420,13 +583,7 @@ export default function OnboardingScreen() {
                   className="h-8 px-3"
                   onPress={() => {
                     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    handleUpdate((prev) => ({
-                      ...prev,
-                      permissions: {
-                        ...prev.permissions,
-                        location: !prev.permissions.location,
-                      },
-                    }));
+                    void requestLocationPermission();
                   }}
                 >
                   <Text className="text-xs font-bold">
@@ -458,13 +615,7 @@ export default function OnboardingScreen() {
                   className="h-8 px-3"
                   onPress={() => {
                     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    handleUpdate((prev) => ({
-                      ...prev,
-                      permissions: {
-                        ...prev.permissions,
-                        push: !prev.permissions.push,
-                      },
-                    }));
+                    void requestPushPermission();
                   }}
                 >
                   <Text className="text-xs font-bold">
@@ -472,6 +623,28 @@ export default function OnboardingScreen() {
                   </Text>
                 </Button>
               </Card>
+              <Pressable
+                className={`rounded-2xl border p-4 ${
+                  data.safetyOptIn
+                    ? "border-emerald-500/40 bg-emerald-500/10"
+                    : "border-border/80 bg-card"
+                }`}
+                onPress={() =>
+                  handleUpdate((prev) => ({
+                    ...prev,
+                    safetyOptIn: !prev.safetyOptIn,
+                  }))
+                }
+              >
+                <Text className="text-xs font-bold text-foreground">
+                  Safety Beacon consent:{" "}
+                  {data.safetyOptIn ? "Enabled" : "Not enabled"}
+                </Text>
+                <Text className="mt-1 text-[11px] text-muted-foreground">
+                  Allow Chewbuu to share active-date safety updates with your
+                  configured trusted circle.
+                </Text>
+              </Pressable>
             </View>
           </View>
         )}
@@ -523,13 +696,8 @@ export default function OnboardingScreen() {
                 size="sm"
                 className="gap-1.5"
                 onPress={() => {
-                  void Haptics.notificationAsync(
-                    Haptics.NotificationFeedbackType.Success
-                  );
-                  handleUpdate((prev) => ({
-                    ...prev,
-                    media: { ...prev.media, selfieVerified: true },
-                  }));
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  void handleCaptureSelfie();
                 }}
               >
                 <Camera
@@ -576,14 +744,7 @@ export default function OnboardingScreen() {
                 className="gap-1.5"
                 onPress={() => {
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  handleUpdate((prev) => ({
-                    ...prev,
-                    media: {
-                      ...prev.media,
-                      videoIntroDurationSeconds: 45,
-                      videoIntroUrl: "mock://intro.mp4",
-                    },
-                  }));
+                  void handleCaptureVideo();
                 }}
               >
                 <Video size={14} color="#f59e0b" />

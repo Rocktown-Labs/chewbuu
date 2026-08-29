@@ -8,7 +8,30 @@
     },
     "name": "chewbuu",
     "slug": "chewbuu",
-    "plugins": ["expo-font"],
+    "plugins": [
+      "expo-font",
+      "expo-image",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Chewbuu to capture date memories and spot photos.",
+          "microphonePermission": "Allow Chewbuu to record video introductions and date memories."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Chewbuu to find date spots near you."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#f59e0b"
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

@@ -92,6 +92,8 @@ import type {
   PendingReviewResponse,
   PlacePhotoResponse,
   PlaceSuggestionInput,
+  SpotContributionInput,
+  SpotContributionResponse,
   MembershipPlan,
   PublishRecapInput,
   RecapResponse,
@@ -2794,14 +2796,26 @@ const uploadDateMediaSchema = z.object({
   url: z.string().url(),
 });
 
-const publishRecapSchema = z.object({
-  caption: z.string().trim().max(2000).optional(),
+const spotContributionSchema = z.object({
+  dateMediaId: z.string().min(1),
   dateRequestId: z.string().min(1),
-  reviewId: z.string().optional(),
-  storyHours: z.number().int().min(1).max(24).optional(),
-  thumbnailUrl: z.string().url().optional(),
-  videoUrl: z.string().url(),
+  googlePlaceId: z.string().trim().min(1),
+  kind: z.enum(["menu_photo", "spot_photo"]),
 });
+
+const publishRecapSchema = z
+  .object({
+    caption: z.string().trim().max(2000).optional(),
+    dateRequestId: z.string().min(1),
+    mediaIds: z.array(z.string().min(1)).max(20).optional(),
+    reviewId: z.string().optional(),
+    storyHours: z.number().int().min(1).max(24).optional(),
+    thumbnailUrl: z.string().url().optional(),
+    videoUrl: z.string().url().optional(),
+  })
+  .refine((value) => Boolean(value.videoUrl || value.mediaIds?.length), {
+    message: "A recap needs a video or at least one attached media item.",
+  });
 
 const placeSearchKeywords: Record<string, string> = {
   drink: "bar drinks wine beer coffee cocktail",
@@ -4269,6 +4283,39 @@ const respondFriendship = async (
   };
 };
 
+type DateMediaRow = {
+  created_at: Date | number | string;
+  date_request_id: string;
+  id: string;
+  kind: string;
+  thumbnail_url: string | null;
+  uploaded_by_user_id: string;
+  url: string;
+};
+
+const toDateMediaResponse = async (
+  item: DateMediaRow
+): Promise<DateMediaResponse> => ({
+  createdAt: new Date(item.created_at).toISOString(),
+  dateRequestId: item.date_request_id,
+  id: item.id,
+  kind: item.kind,
+  thumbnailUrl: (await mintStoredMediaUrl(item.thumbnail_url)) ?? null,
+  uploadedByUserId: item.uploaded_by_user_id,
+  url: (await mintStoredMediaUrl(item.url)) ?? item.url,
+});
+
+const getRecapMedia = async (db: Kysely<BlocksDatabase>, recapId: string) => {
+  const media = await db
+    .selectFrom("recap_media")
+    .innerJoin("date_media", "date_media.id", "recap_media.date_media_id")
+    .selectAll("date_media")
+    .where("recap_media.recap_id", "=", recapId)
+    .orderBy("recap_media.created_at", "asc")
+    .execute();
+  return Promise.all(media.map(toDateMediaResponse));
+};
+
 const uploadDateMedia = async (sessionUser: SessionUser, input: unknown) => {
   const body = uploadDateMediaSchema.parse(input);
   await getOwnedRequest(body.dateRequestId, sessionUser.id);
@@ -4289,15 +4336,7 @@ const uploadDateMedia = async (sessionUser: SessionUser, input: unknown) => {
     .execute();
   if (!media) throw new Error("Could not save date media");
   return {
-    media: {
-      createdAt: new Date(media.created_at).toISOString(),
-      dateRequestId: media.date_request_id,
-      id: media.id,
-      kind: media.kind,
-      thumbnailUrl: media.thumbnail_url,
-      uploadedByUserId: media.uploaded_by_user_id,
-      url: media.url,
-    } satisfies DateMediaResponse,
+    media: await toDateMediaResponse(media),
   };
 };
 
@@ -4311,17 +4350,76 @@ const getDateMedia = async (sessionUser: SessionUser, requestId: string) => {
     .orderBy("created_at", "asc")
     .execute();
   return {
-    media: await Promise.all(
-      media.map(async (item) => ({
-        createdAt: new Date(item.created_at).toISOString(),
-        dateRequestId: item.date_request_id,
-        id: item.id,
-        kind: item.kind,
-        thumbnailUrl: await mintStoredMediaUrl(item.thumbnail_url),
-        uploadedByUserId: item.uploaded_by_user_id,
-        url: (await mintStoredMediaUrl(item.url)) ?? item.url,
-      }))
-    ),
+    media: await Promise.all(media.map(toDateMediaResponse)),
+  };
+};
+
+const submitSpotContribution = async (
+  sessionUser: SessionUser,
+  input: unknown
+) => {
+  const body = spotContributionSchema.parse(input);
+  await getOwnedRequest(body.dateRequestId, sessionUser.id);
+  const db = await getDb();
+  const media = await db
+    .selectFrom("date_media")
+    .select("id")
+    .where("id", "=", body.dateMediaId)
+    .where("date_request_id", "=", body.dateRequestId)
+    .where("uploaded_by_user_id", "=", sessionUser.id)
+    .executeTakeFirst();
+  if (!media) throw new Error("Spot contribution media not found");
+
+  const [created] = await db
+    .insertInto("spot_contribution")
+    .values({
+      created_at: new Date(),
+      date_media_id: body.dateMediaId,
+      date_request_id: body.dateRequestId,
+      google_place_id: body.googlePlaceId,
+      id: crypto.randomUUID(),
+      kind: body.kind,
+      reward_points: 0,
+      reward_status: "pending",
+      reviewed_at: null,
+      status: "pending",
+      submitted_by_user_id: sessionUser.id,
+    })
+    .onConflict((conflict) =>
+      conflict
+        .columns([
+          "submitted_by_user_id",
+          "google_place_id",
+          "kind",
+          "date_media_id",
+        ])
+        .doNothing()
+    )
+    .returningAll()
+    .execute();
+  const contribution =
+    created ??
+    (await db
+      .selectFrom("spot_contribution")
+      .selectAll()
+      .where("submitted_by_user_id", "=", sessionUser.id)
+      .where("google_place_id", "=", body.googlePlaceId)
+      .where("kind", "=", body.kind)
+      .where("date_media_id", "=", body.dateMediaId)
+      .executeTakeFirst());
+  if (!contribution) throw new Error("Could not save spot contribution");
+  return {
+    contribution: {
+      createdAt: new Date(contribution.created_at).toISOString(),
+      dateMediaId: contribution.date_media_id,
+      dateRequestId: contribution.date_request_id,
+      googlePlaceId: contribution.google_place_id,
+      id: contribution.id,
+      kind: contribution.kind as SpotContributionResponse["kind"],
+      rewardPoints: contribution.reward_points,
+      rewardStatus: contribution.reward_status === "paid" ? "paid" : "pending",
+      status: contribution.status as SpotContributionResponse["status"],
+    } satisfies SpotContributionResponse,
   };
 };
 
@@ -4339,37 +4437,74 @@ const publishRecap = async (sessionUser: SessionUser, input: unknown) => {
       .executeTakeFirst();
     if (!review) throw new Error("Review not found");
   }
+  if (body.mediaIds) {
+    const distinctMediaIds = new Set(body.mediaIds);
+    if (distinctMediaIds.size !== body.mediaIds.length) {
+      throw new Error("A recap cannot attach the same media twice.");
+    }
+    const media = await db
+      .selectFrom("date_media")
+      .select("id")
+      .where("date_request_id", "=", body.dateRequestId)
+      .where("id", "in", body.mediaIds)
+      .execute();
+    if (media.length !== distinctMediaIds.size) {
+      throw new Error("One or more recap media items are invalid.");
+    }
+  }
   const now = new Date();
   const storyExpiresAt = body.storyHours
     ? new Date(now.getTime() + body.storyHours * 60 * 60 * 1000)
     : null;
-  const [recap] = await db
-    .insertInto("recap")
-    .values({
-      author_user_id: sessionUser.id,
-      caption: body.caption ?? null,
-      created_at: now,
-      date_request_id: body.dateRequestId,
-      id: crypto.randomUUID(),
-      published_at: now,
-      review_id: body.reviewId ?? null,
-      story_expires_at: storyExpiresAt,
-      thumbnail_url: body.thumbnailUrl ?? null,
-      video_url: body.videoUrl,
-    })
-    .onConflict((conflict) =>
-      conflict.columns(["author_user_id", "date_request_id"]).doUpdateSet({
+  const recap = await db.transaction().execute(async (tx) => {
+    const [savedRecap] = await tx
+      .insertInto("recap")
+      .values({
+        author_user_id: sessionUser.id,
         caption: body.caption ?? null,
+        created_at: now,
+        date_request_id: body.dateRequestId,
+        id: crypto.randomUUID(),
         published_at: now,
         review_id: body.reviewId ?? null,
         story_expires_at: storyExpiresAt,
         thumbnail_url: body.thumbnailUrl ?? null,
-        video_url: body.videoUrl,
+        video_url: body.videoUrl ?? null,
       })
-    )
-    .returningAll()
-    .execute();
-  if (!recap) throw new Error("Could not publish recap");
+      .onConflict((conflict) =>
+        conflict.columns(["author_user_id", "date_request_id"]).doUpdateSet({
+          caption: body.caption ?? null,
+          published_at: now,
+          review_id: body.reviewId ?? null,
+          story_expires_at: storyExpiresAt,
+          thumbnail_url: body.thumbnailUrl ?? null,
+          video_url: body.videoUrl ?? null,
+        })
+      )
+      .returningAll()
+      .execute();
+    if (!savedRecap) throw new Error("Could not publish recap");
+
+    if (body.mediaIds) {
+      await tx
+        .deleteFrom("recap_media")
+        .where("recap_id", "=", savedRecap.id)
+        .execute();
+      if (body.mediaIds.length > 0) {
+        await tx
+          .insertInto("recap_media")
+          .values(
+            body.mediaIds.map((dateMediaId) => ({
+              created_at: now,
+              date_media_id: dateMediaId,
+              recap_id: savedRecap.id,
+            }))
+          )
+          .execute();
+      }
+    }
+    return savedRecap;
+  });
   return {
     recap: {
       authorUserId: recap.author_user_id,
@@ -4377,12 +4512,13 @@ const publishRecap = async (sessionUser: SessionUser, input: unknown) => {
       createdAt: new Date(recap.created_at).toISOString(),
       dateRequestId: recap.date_request_id,
       id: recap.id,
+      media: await getRecapMedia(db, recap.id),
       publishedAt: toIso(recap.published_at),
       reviewId: recap.review_id ?? undefined,
       storyExpiresAt: toIso(recap.story_expires_at),
       storyHours: body.storyHours,
       thumbnailUrl: recap.thumbnail_url ?? undefined,
-      videoUrl: recap.video_url,
+      videoUrl: recap.video_url ?? undefined,
     } satisfies RecapResponse,
   };
 };
@@ -4396,18 +4532,21 @@ const getRecaps = async () => {
     .orderBy("created_at", "desc")
     .execute();
   return {
-    recaps: recaps.map((recap) => ({
-      authorUserId: recap.author_user_id,
-      caption: recap.caption ?? undefined,
-      createdAt: new Date(recap.created_at).toISOString(),
-      dateRequestId: recap.date_request_id,
-      id: recap.id,
-      publishedAt: toIso(recap.published_at),
-      reviewId: recap.review_id ?? undefined,
-      storyExpiresAt: toIso(recap.story_expires_at),
-      thumbnailUrl: recap.thumbnail_url ?? undefined,
-      videoUrl: recap.video_url,
-    })),
+    recaps: await Promise.all(
+      recaps.map(async (recap) => ({
+        authorUserId: recap.author_user_id,
+        caption: recap.caption ?? undefined,
+        createdAt: new Date(recap.created_at).toISOString(),
+        dateRequestId: recap.date_request_id,
+        id: recap.id,
+        media: await getRecapMedia(db, recap.id),
+        publishedAt: toIso(recap.published_at),
+        reviewId: recap.review_id ?? undefined,
+        storyExpiresAt: toIso(recap.story_expires_at),
+        thumbnailUrl: recap.thumbnail_url ?? undefined,
+        videoUrl: recap.video_url ?? undefined,
+      }))
+    ),
   };
 };
 
@@ -6095,6 +6234,13 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     return observeOperation("uploadDateMedia", async () => {
       const sessionUser = await requireSession(context.request.headers);
       return uploadDateMedia(sessionUser, input);
+    });
+  },
+
+  async submitSpotContribution(input: SpotContributionInput) {
+    return observeOperation("submitSpotContribution", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return submitSpotContribution(sessionUser, input);
     });
   },
 

@@ -95,6 +95,7 @@ describe("AWS Blocks API surface", () => {
       "runDateLifecycle",
       "saveProfile",
       "saveProfileDraft",
+      "submitSpotContribution",
       "savePushSubscription",
       "seedPricingPlans",
       "sendMessage",
@@ -127,7 +128,7 @@ describe("AWS Blocks API surface", () => {
       "inviteVenueMembers",
     ];
 
-    expect(methodNames).toHaveLength(120);
+    expect(methodNames).toHaveLength(121);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {

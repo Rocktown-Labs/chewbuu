@@ -1,31 +1,29 @@
+import { useLiveQuery } from "@tanstack/react-db";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import {
-  CalendarPlus,
-  CheckCircle2,
-  Heart,
-  Info,
-  MapPin,
+  CalendarDays,
+  ChevronRight,
+  RefreshCw,
   Sparkles,
-  Video,
-  X,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
-import {
-  Dimensions,
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { GlassView } from "@/components/ui/glass-view";
 import { useAppTheme } from "@/contexts/app-theme-context";
+import { authClient } from "@/lib/auth-client";
+import { getUpcomingRequests } from "@/lib/dating-utils";
+import {
+  dateRequestsCollection,
+  recapsCollection,
+  refreshDatingData,
+} from "@/lib/db/collections";
 import {
   calculateCompletionPercentage,
   DEFAULT_ONBOARDING_DATA,
@@ -33,286 +31,287 @@ import {
   type OnboardingData,
 } from "@/lib/onboarding-storage";
 
-const { width } = Dimensions.get("window");
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 
-const MOCK_PROFILES = [
-  {
-    id: "p1",
-    name: "Elena Rostova",
-    age: 26,
-    occupation: "UX Architect & Foodie",
-    area: "Downtown / Arts District",
-    bio: "Video first, real dinner dates second. Looking for someone to explore hidden speakeasies and late-night ramen spots.",
-    image:
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&auto=format&fit=crop&q=80",
-    hasVideo: true,
-    interests: ["Ramen", "A24 Films", "Live Jazz", "Pottery"],
-    favoriteSpot: "Daikaya Izakaya",
-    verified: true,
-  },
-  {
-    id: "p2",
-    name: "Marcus Vance",
-    age: 29,
-    occupation: "Sound Designer & Runner",
-    area: "West End",
-    bio: "Coffee snob, vinyl collector, and weekend trail runner. Let's grab espresso and talk favorite directors.",
-    image:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&auto=format&fit=crop&q=80",
-    hasVideo: true,
-    interests: ["Espresso", "Film Scoring", "Rock Climbing", "Vinyl"],
-    favoriteSpot: "Blue Bottle Roastery",
-    verified: true,
-  },
-];
-
-export default function DiscoverScreen() {
+export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark } = useAppTheme();
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const { data: session, isPending: isSessionPending } =
+    authClient.useSession();
   const [onboardingDraft, setOnboardingDraft] = useState<OnboardingData>(
     DEFAULT_ONBOARDING_DATA
   );
-  const [dismissBanner, setDismissBanner] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const {
+    data: requests,
+    isError,
+    isLoading,
+  } = useLiveQuery({
+    query: (q) =>
+      session?.user
+        ? q
+            .from({ request: dateRequestsCollection })
+            .orderBy(({ request }) => request.scheduledAt, "asc")
+        : undefined,
+  });
+  const { data: recaps } = useLiveQuery({
+    query: (q) =>
+      session?.user
+        ? q
+            .from({ recap: recapsCollection })
+            .orderBy(({ recap }) => recap.createdAt, "desc")
+            .limit(1)
+        : undefined,
+  });
 
   useEffect(() => {
-    async function load() {
+    const loadDraft = async () => {
       const draft = await loadOnboardingDraft();
       setOnboardingDraft(draft);
-    }
-    void load();
+    };
+    void loadDraft();
   }, []);
 
-  const profile = MOCK_PROFILES[currentIndex % MOCK_PROFILES.length];
+  const upcomingRequests = useMemo(
+    () => getUpcomingRequests(requests ?? []).slice(0, 3),
+    [requests]
+  );
   const completionPercent = calculateCompletionPercentage(onboardingDraft);
+  const latestRecap = recaps?.[0];
 
-  const handleLike = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setCurrentIndex((prev) => prev + 1);
-  };
-
-  const handlePass = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setCurrentIndex((prev) => prev + 1);
-  };
-
-  const handleVibeCheck = () => {
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  };
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshDatingData();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
 
   return (
     <View className="flex-1 bg-background">
-      {/* Top Header Bar */}
       <View
         className="flex-row items-center justify-between px-5 pb-3 pt-2"
         style={{ paddingTop: insets.top + 4 }}
       >
         <View className="flex-row items-center gap-2">
-          <View className="h-8 w-8 rounded-full bg-amber-500/20 border border-amber-400/40 items-center justify-center">
+          <View className="h-8 w-8 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
             <Sparkles size={16} color="#f59e0b" />
           </View>
-          <Text className="text-xl font-extrabold text-foreground tracking-tight">
-            Chewbuu
+          <Text className="text-xl font-extrabold tracking-tight text-foreground">
+            Home
           </Text>
         </View>
-
-        <Badge variant="sugar" className="px-3 py-1">
-          <Text className="text-xs font-bold text-amber-300">Live Radar</Text>
-        </Badge>
+        <Pressable
+          accessibilityLabel="Refresh dating data"
+          className="rounded-full p-2 active:bg-muted"
+          disabled={isRefreshing}
+          onPress={() => void handleRefresh()}
+        >
+          <RefreshCw color={isDark ? "#f4f4f5" : "#3f3f46"} size={18} />
+        </Pressable>
       </View>
 
-      <ScrollView
+      <FlatList
         contentContainerStyle={{
-          paddingHorizontal: 16,
           paddingBottom: 110,
+          paddingHorizontal: 16,
         }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Onboarding Resume Banner if profile is incomplete */}
-        {!onboardingDraft.isComplete && !dismissBanner && (
-          <GlassView
-            className="mb-3 p-3.5 border-amber-500/40 bg-amber-950/40 flex-row items-center justify-between shadow-md"
-            borderRadius={22}
-          >
-            <View className="flex-col flex-1 pr-2">
-              <Text className="text-xs font-bold text-amber-300">
-                Profile Setup: {completionPercent}% Complete
+        data={upcomingRequests}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={
+          isSessionPending ? (
+            <Card className="mb-4 p-4">
+              <Text className="text-sm text-muted-foreground">
+                Checking your account…
               </Text>
-              <Text className="text-[11px] text-zinc-300">
-                Finish basics & media to unlock all dating matches
+            </Card>
+          ) : !session?.user ? (
+            <Card className="mb-4 p-4">
+              <Text className="text-sm font-semibold text-foreground">
+                Sign in to see your dates.
               </Text>
-            </View>
-
-            <View className="flex-row items-center gap-1.5">
               <Button
+                className="mt-3 h-9 self-start px-3"
+                onPress={() => router.push("/auth/login")}
                 size="sm"
                 variant="sugar"
-                className="h-8 px-3"
-                onPress={() => router.push("/onboarding")}
               >
-                <Text className="text-[11px] font-bold text-black">Resume</Text>
+                <Text className="text-xs font-bold text-black">Sign in</Text>
               </Button>
-              <Pressable
-                onPress={() => setDismissBanner(true)}
-                className="p-1 rounded-full active:bg-white/10"
+            </Card>
+          ) : isLoading ? (
+            <Card className="mb-4 p-4">
+              <Text className="text-sm text-muted-foreground">
+                Loading your dates…
+              </Text>
+            </Card>
+          ) : isError ? (
+            <Card className="mb-4 border-red-500/40 p-4">
+              <Text className="text-sm font-semibold text-red-400">
+                We couldn&apos;t load your dates.
+              </Text>
+              <Text className="mt-1 text-xs text-muted-foreground">
+                Check your connection and try again.
+              </Text>
+              <Button
+                className="mt-3 h-9 self-start px-3"
+                onPress={() => void handleRefresh()}
+                size="sm"
+                variant="outline"
               >
-                <X size={14} color="#a1a1aa" />
+                <Text className="text-xs font-semibold text-foreground">
+                  Retry
+                </Text>
+              </Button>
+            </Card>
+          ) : (
+            <Card className="mb-4 p-4">
+              <Text className="text-sm font-semibold text-foreground">
+                No upcoming dates yet.
+              </Text>
+              <Text className="mt-1 text-xs text-muted-foreground">
+                Plan a date and Chewbuu will keep the itinerary here.
+              </Text>
+              <Button
+                className="mt-3 h-9 self-start px-3"
+                onPress={() => router.push("/date/new")}
+                size="sm"
+                variant="sugar"
+              >
+                <Text className="text-xs font-bold text-black">
+                  Plan a date
+                </Text>
+              </Button>
+            </Card>
+          )
+        }
+        ListHeaderComponent={
+          <View>
+            {!onboardingDraft.isComplete && (
+              <GlassView
+                borderRadius={22}
+                className="mb-4 flex-row items-center justify-between border-amber-500/40 bg-amber-950/40 p-3.5"
+              >
+                <View className="flex-1 pr-2">
+                  <Text className="text-xs font-bold text-amber-300">
+                    Profile setup: {completionPercent}% complete
+                  </Text>
+                  <Text className="mt-1 text-[11px] text-zinc-300">
+                    Finish your profile to unlock more date matches.
+                  </Text>
+                </View>
+                <Button
+                  className="h-8 px-3"
+                  onPress={() => router.push("/onboarding")}
+                  size="sm"
+                  variant="sugar"
+                >
+                  <Text className="text-[11px] font-bold text-black">
+                    Resume
+                  </Text>
+                </Button>
+              </GlassView>
+            )}
+
+            <View className="mb-3 flex-row items-center justify-between">
+              <Text className="text-lg font-bold text-foreground">
+                Upcoming dates
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                className="flex-row items-center gap-1 rounded-full px-2 py-1 active:bg-muted"
+                onPress={() => router.push("/(drawer)/(tabs)/dates")}
+              >
+                <Text className="text-xs font-bold text-amber-400">
+                  View all
+                </Text>
+                <ChevronRight color="#f59e0b" size={14} />
               </Pressable>
             </View>
-          </GlassView>
-        )}
-
-        {/* Main Discovery Card with Liquid Glass Overlay */}
-        <View
-          className="relative rounded-[36px] overflow-hidden border border-border/60 bg-card shadow-2xl mt-1"
-          style={{ width: width - 32, height: 490 }}
-        >
-          <Image
-            source={{ uri: profile.image }}
-            className="w-full h-full object-cover"
-          />
-
-          {/* Video Verification Badge */}
-          <View className="absolute top-4 left-4 flex-row gap-2">
-            {profile.verified && (
-              <GlassView
-                className="flex-row items-center gap-1.5 px-3 py-1.5 border-emerald-500/40 bg-emerald-950/60"
-                borderRadius={20}
-              >
-                <CheckCircle2 size={13} color="#10b981" />
-                <Text className="text-[11px] font-bold text-emerald-300">
-                  Live Verified
-                </Text>
-              </GlassView>
-            )}
-            {profile.hasVideo && (
-              <GlassView
-                className="flex-row items-center gap-1.5 px-3 py-1.5 border-amber-400/40 bg-amber-950/60"
-                borderRadius={20}
-              >
-                <Video size={13} color="#f59e0b" />
-                <Text className="text-[11px] font-bold text-amber-300">
-                  60s Intro
-                </Text>
-              </GlassView>
-            )}
           </View>
-
-          {/* Bottom Card Glass Metadata Panel */}
-          <LinearGradient
-            colors={["transparent", "rgba(0,0,0,0.6)", "rgba(0,0,0,0.92)"]}
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              padding: 20,
-              paddingBottom: 24,
-            }}
-          >
-            <View className="flex-col gap-1.5">
-              <View className="flex-row items-baseline gap-2">
-                <Text className="text-2xl font-black text-white tracking-tight">
-                  {profile.name}, {profile.age}
-                </Text>
-              </View>
-
-              <Text className="text-xs font-semibold text-amber-400">
-                {profile.occupation}
-              </Text>
-
-              <View className="flex-row items-center gap-1.5 mt-0.5">
-                <MapPin size={12} color="#d4d4d8" />
-                <Text className="text-xs font-medium text-zinc-300">
-                  {profile.area}
-                </Text>
-              </View>
-
-              <Text
-                className="text-xs text-zinc-200 mt-2 leading-relaxed"
-                numberOfLines={2}
-              >
-                "{profile.bio}"
-              </Text>
-
-              {/* Interest Tag Chips */}
-              <View className="flex-row flex-wrap gap-1.5 mt-3">
-                {profile.interests.map((interest) => (
-                  <View
-                    key={interest}
-                    className="rounded-full px-2.5 py-1 bg-white/15 border border-white/20"
-                  >
-                    <Text className="text-[10px] font-semibold text-white">
-                      {interest}
+        }
+        renderItem={({ item }) => {
+          const acceptedMatch = item.matches.find((match) =>
+            ["accepted", "friended"].includes(match.status)
+          );
+          const [place] = item.places;
+          return (
+            <Pressable
+              className="mb-3"
+              onPress={() =>
+                router.push({
+                  pathname: "/date/[date-id]",
+                  params: { "date-id": item.id },
+                })
+              }
+            >
+              <Card className="border-amber-500/40 p-4">
+                <View className="flex-row items-start justify-between gap-3">
+                  <View className="flex-1">
+                    <View className="mb-2 flex-row items-center gap-2">
+                      <CalendarDays color="#f59e0b" size={16} />
+                      <Text className="text-xs font-bold text-amber-400">
+                        {formatDate(item.scheduledAt)}
+                      </Text>
+                    </View>
+                    <Text className="text-base font-bold text-foreground">
+                      {acceptedMatch
+                        ? `Date with ${acceptedMatch.displayName}`
+                        : "Date request"}
+                    </Text>
+                    <Text className="mt-1 text-xs text-muted-foreground">
+                      {place?.name ?? item.searchArea} · {item.status}
                     </Text>
                   </View>
-                ))}
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
+                  <Badge variant="outline">
+                    <Text className="text-[10px] font-semibold text-foreground">
+                      {item.matches.length} matches
+                    </Text>
+                  </Badge>
+                </View>
+              </Card>
+            </Pressable>
+          );
+        }}
+        showsVerticalScrollIndicator={false}
+      />
 
-        {/* Action Controls: Pass, 3-Min Vibe Check, Like, Propose Spot */}
-        <View className="flex-row items-center justify-center gap-4 mt-5">
-          {/* Pass Button */}
-          <Pressable
-            onPress={handlePass}
-            className="size-14 rounded-full border border-red-500/30 bg-red-500/10 items-center justify-center shadow-lg active:scale-95 transition-transform"
-          >
-            <X size={24} color="#ef4444" />
-          </Pressable>
-
-          {/* 3-Min Video Vibe Check Button */}
-          <Pressable
-            onPress={handleVibeCheck}
-            className="h-14 px-5 rounded-full border border-amber-500/40 bg-amber-500/15 flex-row items-center gap-2 shadow-lg active:scale-95"
-          >
-            <Video size={18} color="#f59e0b" />
-            <Text className="text-xs font-bold text-amber-400">
-              3-Min Vibe Check
+      <View className="absolute bottom-[88px] left-4 right-4">
+        <Card className="flex-row items-center justify-between border-amber-500/30 bg-amber-500/10 p-4">
+          <View className="flex-1 pr-3">
+            <Text className="text-sm font-bold text-foreground">
+              Capture the good parts
             </Text>
-          </Pressable>
-
-          {/* Like / Match Button */}
-          <Pressable
-            onPress={handleLike}
-            className="size-14 rounded-full border border-emerald-500/40 bg-emerald-500/20 items-center justify-center shadow-lg active:scale-95"
-          >
-            <Heart size={24} color="#10b981" fill="#10b981" />
-          </Pressable>
-        </View>
-
-        {/* Spot Match Suggestion Banner */}
-        <GlassView
-          className="mt-6 p-4 border-amber-500/30 bg-amber-500/5 flex-row items-center justify-between"
-          borderRadius={24}
-        >
-          <View className="flex-col gap-0.5 flex-1 pr-3">
-            <Text className="text-xs font-bold text-amber-400">
-              Top Date Spot Match
-            </Text>
-            <Text className="text-xs font-semibold text-foreground">
-              {profile.favoriteSpot}
-            </Text>
-            <Text className="text-[10px] text-muted-foreground">
-              Pre-order drinks & invite {profile.name.split(" ")[0]}
+            <Text className="mt-1 text-xs text-muted-foreground">
+              Publish a recap with photos, videos, and spot memories.
             </Text>
           </View>
-
           <Button
-            size="sm"
-            variant="sugar"
-            className="h-9 px-3.5 gap-1.5"
+            className="h-9 px-3"
             onPress={() => {
-              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/recaps");
             }}
+            size="sm"
+            variant="outline"
           >
-            <CalendarPlus size={14} color="#000000" />
-            <Text className="text-xs font-bold text-black">Invite</Text>
+            {latestRecap?.thumbnailUrl ? (
+              <Image
+                contentFit="cover"
+                source={{ uri: latestRecap.thumbnailUrl }}
+                style={{ borderRadius: 4, height: 20, width: 20 }}
+              />
+            ) : null}
+            <Text className="text-xs font-bold text-foreground">Recaps</Text>
           </Button>
-        </GlassView>
-      </ScrollView>
+        </Card>
+      </View>
     </View>
   );
 }

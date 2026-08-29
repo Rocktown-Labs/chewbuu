@@ -61,7 +61,6 @@ import {
   ArrowLeft,
   Bell,
   Calendar as CalendarIcon,
-  CalendarCheck,
   CalendarHeart,
   Check,
   ChevronDown,
@@ -100,7 +99,6 @@ import { z } from "zod";
 
 import { AnalyticsDrawer } from "@/components/analytics/analytics-drawer";
 import { PasskeysCard } from "@/components/auth/passkey";
-import { DateRecapFeed } from "@/components/feed/date-recap-feed";
 import { NavigationBlocker } from "@/components/navigation-blocker";
 import {
   HorizontalStepper,
@@ -110,6 +108,7 @@ import {
 import type { ChatPerson } from "@/features/chat/chat-types";
 import { DateConfirmScreen } from "@/features/chat/date-confirm";
 import { DateWizard } from "@/features/date-wizard/date-wizard";
+import { RecapsPage } from "@/features/recaps/recaps-page";
 import { getMatchAgeBounds } from "@/lib/age-rules";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -152,6 +151,7 @@ type DashboardTab =
   | "matches"
   | "notifications"
   | "profile"
+  | "recaps"
   | "spots";
 type SpotCategory = "all" | "eat" | "drink" | "play";
 type DateHistoryMatchStatus =
@@ -215,6 +215,7 @@ const meSearchSchema = z.object({
       "matches",
       "notifications",
       "profile",
+      "recaps",
       "spots",
     ])
     .optional(),
@@ -904,11 +905,11 @@ function HomeDashboardView({
           </div>
         </button>
 
-        {/* Card 4: Recaps Posted -> Profile Tab */}
+        {/* Card 4: Recaps Posted -> Recaps */}
         <button
-          aria-label="View published recaps on profile"
+          aria-label="View published recaps"
           className="group relative flex min-h-36 flex-col justify-between overflow-hidden rounded-lg border border-purple-500/30 bg-gradient-to-br from-purple-500/15 via-pink-500/10 to-transparent p-4 text-left shadow-sm transition hover:border-purple-500/60 hover:shadow-md"
-          onClick={() => onNavigateTab("profile")}
+          onClick={() => onNavigateTab("recaps")}
           type="button"
         >
           <Badge className="w-fit rounded-full border-0 bg-purple-500/20 font-extrabold text-[10px] text-purple-600">
@@ -927,7 +928,7 @@ function HomeDashboardView({
                 : "Share your first recap"}
             </h4>
             <p className="mt-1 flex items-center text-[11px] font-bold text-purple-600 group-hover:underline">
-              My Profile Recaps <ChevronRight className="ml-0.5 size-3.5" />
+              Open Recaps <ChevronRight className="ml-0.5 size-3.5" />
             </p>
           </div>
         </button>
@@ -1430,7 +1431,6 @@ export function MePage({
   const unreadRequestCount = pendingRequests.filter(
     (request) => !readRequestIds.includes(request.id)
   ).length;
-  const calendarBadgeCount = pendingRequests.length;
   const chatBadgeCount = pendingRequests.length;
   const notificationBadgeCount =
     unreadRequestCount + (summary?.readiness.pendingReviews ?? 0);
@@ -1889,23 +1889,18 @@ export function MePage({
               </button>
               <button
                 type="button"
-                onClick={() => setDashboardTab("calendar")}
+                onClick={() => setDashboardTab("recaps")}
                 className={cn(
                   "flex items-center gap-3 px-3.5 py-3 rounded-full text-sm font-bold transition-all duration-200 cursor-pointer w-full select-none",
                   isSidebarCollapsed && "justify-center px-0",
-                  activeTab === "calendar"
+                  activeTab === "recaps"
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
-                title="Calendar"
+                title="Recaps"
               >
-                <CalendarCheck className="size-5 shrink-0" />
-                {!isSidebarCollapsed && <span>Calendar</span>}
-                {!isSidebarCollapsed && calendarBadgeCount > 0 && (
-                  <Badge className="ml-auto rounded-full px-2 py-0 text-[10px]">
-                    {calendarBadgeCount}
-                  </Badge>
-                )}
+                <Sparkles className="size-5 shrink-0" />
+                {!isSidebarCollapsed && <span>Recaps</span>}
               </button>
               <button
                 type="button"
@@ -2362,6 +2357,8 @@ export function MePage({
               )}
             </div>
           )}
+
+          {activeTab === "recaps" && <RecapsPage />}
 
           {/* SPOTS SUB-VIEW (DoorDash & Influencer Recaps Style) */}
           {activeTab === "spots" && (
@@ -3332,24 +3329,26 @@ export function MePage({
                         </Card>
                       )}
 
-                      <DateRecapFeed
-                        emptyAction={
-                          <Link
-                            className={buttonVariants({
-                              className:
-                                "rounded-full font-bold shadow-sm shadow-primary/15",
-                              size: "sm",
-                            })}
-                            to={canDate ? "/date/new" : "/onboarding"}
-                          >
-                            <CalendarHeart className="size-4" />
-                            {canDate
-                              ? "Book a Date to Capture a Recap"
-                              : "Finish Profile Setup"}
-                          </Link>
-                        }
-                        initialItems={userRecaps}
-                      />
+                      <Card className="rounded-2xl border-border bg-card/45 p-5">
+                        <h4 className="text-sm font-bold text-foreground">
+                          Date recaps now have their own space
+                        </h4>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Publish captured date media and see your recap history
+                          with the real date details attached.
+                        </p>
+                        <Link
+                          className={buttonVariants({
+                            className:
+                              "mt-4 rounded-full font-bold shadow-sm shadow-primary/15",
+                            size: "sm",
+                          })}
+                          to="/me/recaps"
+                        >
+                          <Sparkles className="size-4" />
+                          Open Recaps
+                        </Link>
+                      </Card>
                     </div>
                   </div>
                 </>
@@ -3497,10 +3496,9 @@ export function MePage({
                       badge: chatBadgeCount,
                     },
                     {
-                      icon: CalendarCheck,
-                      label: "Calendar",
-                      tab: "calendar",
-                      badge: calendarBadgeCount,
+                      icon: Sparkles,
+                      label: "Recaps",
+                      tab: "recaps",
                     },
                     {
                       icon: Bell,
@@ -3576,7 +3574,7 @@ export function MePage({
           </div>
         )}
 
-        {/* MOBILE BOTTOM TAB BAR (Exact 5 Tabs: Feed, Spots, Dates, Chats, Calendar) */}
+        {/* MOBILE BOTTOM TAB BAR (Home, Spots, Dates, Chats, Recaps) */}
         <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border/80 bg-background/90 backdrop-blur-md lg:hidden">
           <div className="grid grid-cols-5">
             {(
@@ -3585,7 +3583,7 @@ export function MePage({
                 { icon: MapPin, label: "Spots", tab: "spots" },
                 { icon: Heart, label: "Dates", tab: "matches" },
                 { icon: MessageCircle, label: "Chats", tab: "chats" },
-                { icon: CalendarCheck, label: "Calendar", tab: "calendar" },
+                { icon: Sparkles, label: "Recaps", tab: "recaps" },
               ] as const
             ).map((item) => (
               <button
@@ -3609,11 +3607,6 @@ export function MePage({
                   {item.tab === "chats" && chatBadgeCount > 0 && (
                     <span className="-right-2 -top-1 absolute flex size-4 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground">
                       {chatBadgeCount}
-                    </span>
-                  )}
-                  {item.tab === "calendar" && calendarBadgeCount > 0 && (
-                    <span className="-right-2 -top-1 absolute flex size-4 items-center justify-center rounded-full bg-primary text-[9px] text-primary-foreground">
-                      {calendarBadgeCount}
                     </span>
                   )}
                 </span>

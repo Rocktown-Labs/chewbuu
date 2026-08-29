@@ -527,7 +527,8 @@ export interface DateRecap {
   storyExpiresAt: string | null;
   storyHours?: number;
   thumbnailUrl?: string;
-  videoUrl: string;
+  videoUrl?: string;
+  media?: DateMedia[];
 }
 
 export const getServerUrl = (url: string) => {
@@ -1171,9 +1172,10 @@ export const recapsApi = {
   publish: (input: {
     caption?: string;
     dateRequestId: string;
+    mediaIds?: string[];
     reviewId?: string;
     storyHours?: number;
     thumbnailUrl?: string;
-    videoUrl: string;
+    videoUrl?: string;
   }) => blocksApi.publishRecap(input),
 };

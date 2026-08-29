@@ -21,6 +21,9 @@ export type {
   CommunityKind,
   CreateCommunityInput,
   DateMediaResponse,
+  DateRequestInput,
+  DatingProfileResponse,
+  DatingSummaryResponse,
   FriendshipResponse,
   InviteCommunityMembersInput,
   IdentityVerificationSession,
@@ -41,6 +44,10 @@ export type {
   ReviewResponse,
   SendChatMessageInput,
   SendChatMessageResponse,
+  SpotContributionInput,
+  SpotContributionKind,
+  SpotContributionResponse,
+  SpotContributionStatus,
   StripeCheckoutSessionResponse,
   StripeConnectedAccountResponse,
   StripeConnectStatus,
@@ -103,7 +110,12 @@ export type {
   DateLifecycleStatus,
 } from "./date-lifecycle";
 
+const nativeApiUrl =
+  typeof process !== "undefined"
+    ? process.env?.EXPO_PUBLIC_BLOCKS_API_URL
+    : undefined;
 const apiUrl =
+  nativeApiUrl ??
   (
     import.meta as ImportMeta & {
       env?: {

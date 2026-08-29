@@ -564,6 +564,9 @@ export interface AwsBlocksApi {
     profile: DatingProfileResponse;
     readiness: DatingReadiness;
   }>;
+  submitSpotContribution: (input: SpotContributionInput) => Promise<{
+    contribution: SpotContributionResponse;
+  }>;
   createDateRequest: (input: DateRequestInput) => Promise<{
     matches: DatingMatchResponse[];
     request: DatingRequestResponse;
@@ -1180,6 +1183,24 @@ export interface AccountEntitlementsResponse {
   sync: { plan: string; status: string };
 }
 
+export type SpotContributionKind = "menu_photo" | "spot_photo";
+export type SpotContributionStatus = "approved" | "pending" | "rejected";
+
+export interface SpotContributionInput {
+  dateMediaId: string;
+  dateRequestId: string;
+  googlePlaceId: string;
+  kind: SpotContributionKind;
+}
+
+export interface SpotContributionResponse extends SpotContributionInput {
+  createdAt: string;
+  id: string;
+  rewardPoints: number;
+  rewardStatus: "pending" | "paid";
+  status: SpotContributionStatus;
+}
+
 export interface DateMediaResponse {
   createdAt: string;
   dateRequestId: string;
@@ -1200,16 +1221,18 @@ export interface UploadDateMediaInput {
 export interface PublishRecapInput {
   caption?: string;
   dateRequestId: string;
+  mediaIds?: string[];
   reviewId?: string;
   storyHours?: number;
   thumbnailUrl?: string;
-  videoUrl: string;
+  videoUrl?: string;
 }
 
 export interface RecapResponse extends PublishRecapInput {
   authorUserId: string;
   createdAt: string;
   id: string;
+  media?: DateMediaResponse[];
   publishedAt: string | null;
   storyExpiresAt: string | null;
 }

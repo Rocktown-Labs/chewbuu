@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added API-backed mobile dating parity across Home, Dates, Google Maps spots, chats, profile, onboarding media, reviews, and Recaps; calendar is now a secondary Dates view and Recaps is the primary recap destination.
+- Added server support for image-only recaps with attached date media and idempotent pending spot/menu contribution submissions.
 - Added server-only Stripe billing and marketplace foundations: Better Auth organization subscriptions with the Chewbuu Sync $60/50-seat plan, idempotent catalog and webhook reconciliation, Connect onboarding for venues/workers/referrers, platform Checkout, multi-recipient tip settlement, refund/dispute reversal ledgers, admin Stripe health visibility, and hosted iPad checkout handoff.
 - Added the authenticated Expo Sync mobile workspace under `apps/sync` with grouped Operations, People, Business, and Account navigation; mobile Overview, Tables, Orders, Shifts, Tips, Reservations, Kitchen, Clock In, Guests, Work Chat, Menu, Specials, Jobs, Settings, and detail/create workflows.
 - Refined the native Sync iPad workspace with a burgundy-first theme, direct order taking, multi-guest parties, sectioned table picking, adaptive panes, simple creation sheets, menu-linked specials, job applicants, and expanded venue settings.
