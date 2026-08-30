@@ -54,6 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed AWS Blocks Better Auth session resolution across deployed ESM/CommonJS module shapes so authenticated API calls no longer fail while reading `auth.api`.
 - Removed date planning and dating-readiness widgets from the authenticated Spots view; nearby spots now use the selected or device location before dating onboarding is complete.
 - Removed the oversized upcoming-date calendar panel from the Dates/Requests view so request history is the primary content.
 - Provisioned the Sync attendance signing secret as platform-managed production configuration and passed it into the AWS Blocks runtime, so venues and staff never need to configure it.

@@ -23,6 +23,7 @@ import {
   CreateMeetingCommand,
   GetMeetingCommand,
 } from "@aws-sdk/client-chime-sdk-meetings";
+import { resolveAuthModule } from "@chewbuu/auth/runtime";
 import {
   createStripeClient,
   getStripeMode,
@@ -527,8 +528,7 @@ const handleStripeWebhook = async (
   }
   if (kind === "billing") {
     try {
-      await initializeAuthEnvironment();
-      const { auth } = await import("@chewbuu/auth");
+      const auth = await getBetterAuth();
       const authRequest = new Request(
         new URL("/api/auth/stripe/webhook", ctx.request.url),
         {
@@ -815,6 +815,9 @@ interface SessionUser {
 }
 
 let authEnvironmentPromise: Promise<void> | undefined;
+let betterAuthPromise:
+  | Promise<ReturnType<typeof resolveAuthModule>>
+  | undefined;
 
 const initializeAuthEnvironment = async () => {
   authEnvironmentPromise ??= (async () => {
@@ -824,6 +827,15 @@ const initializeAuthEnvironment = async () => {
     process.env.CORS_ORIGIN ??= "https://chewbuu.com";
   })();
   await authEnvironmentPromise;
+};
+
+const getBetterAuth = async (): Promise<
+  ReturnType<typeof resolveAuthModule>
+> => {
+  await initializeAuthEnvironment();
+  betterAuthPromise ??= (async () =>
+    resolveAuthModule(await import("@chewbuu/auth")))();
+  return betterAuthPromise;
 };
 
 const provisionAdminTestEntitlements = async (user: {
@@ -927,8 +939,7 @@ const ensureAdminTestEntitlements = async (user: {
 };
 
 const requireSession = async (headers: Headers): Promise<SessionUser> => {
-  await initializeAuthEnvironment();
-  const { auth } = await import("@chewbuu/auth");
+  const auth = await getBetterAuth();
   const session = await auth.api.getSession({ headers });
   if (!session?.user) throw new Error("Authentication required");
   await ensureAdminTestEntitlements(session.user);
