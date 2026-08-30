@@ -111,6 +111,9 @@ describe("AWS Blocks API surface", () => {
       "subscribeNotifications",
       "subscribeVenueEvents",
       "suggestPlaces",
+      "searchPublicSpots",
+      "getPublicSpot",
+      "getPublicSpotMenu",
       "syncPricingPlans",
       "getStripeIntegrationHealth",
       "syncStripeWebhookEndpoints",
@@ -134,7 +137,7 @@ describe("AWS Blocks API surface", () => {
       "inviteVenueMembers",
     ];
 
-    expect(methodNames).toHaveLength(127);
+    expect(methodNames).toHaveLength(130);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {

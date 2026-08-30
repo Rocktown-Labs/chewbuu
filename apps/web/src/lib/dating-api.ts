@@ -16,6 +16,10 @@ import type {
   StripeWebhookSyncResponse,
   SpotCaptureOffer,
   SpotCaptureRewardConfig,
+  PublicSpotDetails as BlocksPublicSpotDetails,
+  PublicSpotMenuResponse as BlocksPublicSpotMenuResponse,
+  PublicSpotSearchInput as BlocksPublicSpotSearchInput,
+  SpotDataSource,
   SpotContributionKind,
   SpotContributionModerationItem,
   VenueShiftAttendance as BlocksVenueShiftAttendance,
@@ -129,22 +133,30 @@ export type DatingProfileDraftPayload = Partial<
 export interface DatePlace {
   address?: string;
   attributions?: string[];
+  communityPhotoUrl?: string;
+  dataSource?: SpotDataSource;
   googleMapsUri?: string;
   latitude?: number;
   longitude?: number;
+  menuPhotoUrl?: string;
   name: string;
   openNow?: boolean;
   phone?: string;
-  communityPhotoUrl?: string;
-  menuPhotoUrl?: string;
+  photoAttributions?: string[];
+  photoName?: string;
   photoUrl?: string;
   placeId: string;
   priceLevel?: string;
   rating?: string;
+  syncLocationId?: string;
+  types: string[];
   userRatingCount?: number;
   websiteUri?: string;
-  types: string[];
 }
+
+export type PublicSpotDetails = BlocksPublicSpotDetails;
+export type PublicSpotMenuResponse = BlocksPublicSpotMenuResponse;
+export type PublicSpotSearchInput = BlocksPublicSpotSearchInput;
 
 export interface VenueMenuPreviewItem {
   description?: string;
@@ -972,6 +984,16 @@ export const venueApi = {
     tipAllocations?: StripeTipAllocationInput[];
     tipCents?: number;
   }) => blocksApi.createVenueOrder(input),
+};
+
+export const spotsApi = {
+  get: (placeId: string) =>
+    blocksApi.getPublicSpot(placeId) as Promise<PublicSpotDetails>,
+  getMenu: (placeId: string) =>
+    blocksApi.getPublicSpotMenu(placeId) as Promise<PublicSpotMenuResponse>,
+  getPhoto: (photoName: string) => blocksApi.getPlacePhoto(photoName),
+  search: (input: PublicSpotSearchInput = {}) =>
+    blocksApi.searchPublicSpots(input),
 };
 
 export const datingApi = {

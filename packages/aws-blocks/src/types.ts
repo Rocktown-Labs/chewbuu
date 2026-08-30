@@ -346,11 +346,41 @@ export interface VenuePublicMenuItem {
   section?: string;
 }
 
+export type SpotDataSource = "google" | "sync";
+
 export interface PublicVenueLocation {
   address?: string;
+  dataSource: "sync";
+  discoveryPlaceId?: string;
   handle: string;
   id: string;
+  latitude?: number;
+  longitude?: number;
   name: string;
+  phone?: string;
+  websiteUri?: string;
+}
+
+export interface PublicSpotSearchInput {
+  area?: string;
+  category?: "all" | "drink" | "eat" | "play";
+  latitude?: number;
+  longitude?: number;
+  query?: string;
+}
+
+export interface PublicSpotDetails {
+  place: PlaceSuggestion;
+  source: SpotDataSource;
+  syncSummary?: VenuePublicSummary;
+}
+
+export interface PublicSpotMenuResponse {
+  menu: VenueMenuPreview | null;
+  place: PlaceSuggestion;
+  reason?: "firecrawl_not_configured" | "invalid_menu" | "unavailable";
+  source: SpotDataSource;
+  syncSummary?: VenuePublicSummary;
 }
 
 export interface VenuePublicSummary {
@@ -594,6 +624,12 @@ export interface AwsBlocksApi {
     places: PlaceSuggestion[];
     reason?: "google_not_configured" | "unavailable";
   }>;
+  searchPublicSpots: (input: PublicSpotSearchInput) => Promise<{
+    places: PlaceSuggestion[];
+    reason?: "google_not_configured" | "unavailable";
+  }>;
+  getPublicSpot: (placeId: string) => Promise<PublicSpotDetails>;
+  getPublicSpotMenu: (placeId: string) => Promise<PublicSpotMenuResponse>;
   getPlacePhoto: (photoName: string) => Promise<PlacePhotoResponse>;
   checkIn: (input: CheckInInput) => Promise<CheckInResponse>;
   startDate: (dateRequestId: string) => Promise<{
@@ -1055,17 +1091,21 @@ export interface PlaceSuggestion {
   address?: string;
   communityPhotoUrl?: string;
   attributions?: string[];
+  dataSource?: SpotDataSource;
   googleMapsUri?: string;
   latitude?: number;
   longitude?: number;
   menuPhotoUrl?: string;
   name: string;
   openNow?: boolean;
+  photoAttributions?: string[];
+  photoName?: string;
   photoUrl?: string;
   phone?: string;
   placeId: string;
   priceLevel?: string;
   rating?: string;
+  syncLocationId?: string;
   types: string[];
   userRatingCount?: number;
   websiteUri?: string;

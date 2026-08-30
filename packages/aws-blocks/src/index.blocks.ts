@@ -94,6 +94,9 @@ import type {
   PlacePhotoResponse,
   PlaceSuggestion,
   PlaceSuggestionInput,
+  PublicSpotDetails,
+  PublicSpotMenuResponse,
+  PublicSpotSearchInput,
   SpotCaptureOffer,
   SpotCaptureRewardConfig,
   SpotContributionInput,
@@ -750,16 +753,20 @@ const roomListCache = new KVStore(scope, "room-list-cache", {
 const placeSuggestionSchema = z.object({
   address: z.string().optional(),
   attributions: z.array(z.string()).optional(),
+  dataSource: z.enum(["google", "sync"]).optional(),
   googleMapsUri: z.string().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   name: z.string(),
   openNow: z.boolean().optional(),
+  photoAttributions: z.array(z.string()).optional(),
+  photoName: z.string().optional(),
   photoUrl: z.string().optional(),
   phone: z.string().optional(),
   placeId: z.string(),
   priceLevel: z.string().optional(),
   rating: z.string().optional(),
+  syncLocationId: z.string().optional(),
   types: z.array(z.string()),
   userRatingCount: z.number().optional(),
   websiteUri: z.string().optional(),
@@ -2867,6 +2874,14 @@ const placeSuggestionInputSchema = z.object({
   what: z.array(z.string().trim().min(1)).min(1),
 });
 
+const publicSpotSearchInputSchema = z.object({
+  area: z.string().trim().max(160).optional(),
+  category: z.enum(["all", "drink", "eat", "play"]).default("all"),
+  latitude: z.number().finite().optional(),
+  longitude: z.number().finite().optional(),
+  query: z.string().trim().max(200).optional(),
+});
+
 const reviewInputSchema = z.object({
   mediaIds: z.array(z.string()).default([]),
   personComment: z.string().trim().max(1000).optional(),
@@ -2954,8 +2969,10 @@ export const buildBlocksPlaceSearchTextQuery = (
   input: PlaceSuggestionInput
 ) => {
   const filters = input.filters.join(" ");
+  const area = input.area.trim();
+  const areaSuffix = area ? ` near ${area}` : "";
   if (input.searchKind === "venue") {
-    return input.query?.trim() || filters || input.area;
+    return input.query?.trim() || filters || area;
   }
   if (input.searchKind === "place" && filters) {
     const normalizedFilters = filters.trim().toLowerCase();
@@ -2963,12 +2980,161 @@ export const buildBlocksPlaceSearchTextQuery = (
       normalizedFilters === "steak" || normalizedFilters === "steakhouse"
         ? `${filters} steakhouse restaurant`
         : filters;
-    return `${expandedFilters} near ${input.area}`;
+    return `${expandedFilters}${areaSuffix}`;
   }
   const categories = input.what.map(
     (item) => placeSearchKeywords[item] ?? item
   );
-  return `${[filters, ...categories].filter(Boolean).join(" ")} near ${input.area}`;
+  return `${[filters, ...categories].filter(Boolean).join(" ")}${areaSuffix}`;
+};
+
+type GooglePlaceRecord = {
+  currentOpeningHours?: { openNow?: boolean };
+  displayName?: { text?: string };
+  formattedAddress?: string;
+  googleMapsUri?: string;
+  id?: string;
+  internationalPhoneNumber?: string;
+  location?: { latitude?: number; longitude?: number };
+  photos?: {
+    authorAttributions?: { displayName?: string }[];
+    name?: string;
+  }[];
+  priceLevel?: string;
+  rating?: number;
+  types?: string[];
+  userRatingCount?: number;
+  websiteUri?: string;
+};
+
+const toGooglePlaceSuggestion = (
+  place: GooglePlaceRecord
+): PlaceSuggestion | null => {
+  const name = place.displayName?.text;
+  const placeId = place.id;
+  if (!name || !placeId) return null;
+
+  const photo = place.photos?.[0];
+  const photoAttributions = (photo?.authorAttributions ?? []).flatMap(
+    (attribution) => (attribution.displayName ? [attribution.displayName] : [])
+  );
+
+  return {
+    ...(place.formattedAddress ? { address: place.formattedAddress } : {}),
+    dataSource: "google",
+    ...(place.googleMapsUri ? { googleMapsUri: place.googleMapsUri } : {}),
+    ...(place.location?.latitude !== undefined &&
+    place.location.longitude !== undefined
+      ? {
+          latitude: place.location.latitude,
+          longitude: place.location.longitude,
+        }
+      : {}),
+    ...(place.currentOpeningHours?.openNow !== undefined
+      ? { openNow: place.currentOpeningHours.openNow }
+      : {}),
+    ...(place.internationalPhoneNumber
+      ? { phone: place.internationalPhoneNumber }
+      : {}),
+    ...(place.priceLevel ? { priceLevel: place.priceLevel } : {}),
+    ...(place.rating !== undefined ? { rating: place.rating.toFixed(1) } : {}),
+    ...(photoAttributions.length > 0 ? { photoAttributions } : {}),
+    ...(photo?.name ? { photoName: photo.name } : {}),
+    name,
+    placeId,
+    ...(place.types ? { types: place.types } : { types: [] }),
+    ...(place.userRatingCount !== undefined
+      ? { userRatingCount: place.userRatingCount }
+      : {}),
+    ...(place.websiteUri ? { websiteUri: place.websiteUri } : {}),
+  };
+};
+
+const requestGooglePlaces = async (
+  input: PlaceSuggestionInput,
+  area: string
+): Promise<{
+  places: PlaceSuggestion[];
+  reason?: "google_not_configured" | "unavailable";
+}> => {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
+  if (!apiKey) return { places: [], reason: "google_not_configured" };
+
+  const latitudeNumber = Number(input.latitude);
+  const longitudeNumber = Number(input.longitude);
+  const hasCoordinates =
+    Number.isFinite(latitudeNumber) && Number.isFinite(longitudeNumber);
+
+  try {
+    const response = await fetch(
+      "https://places.googleapis.com/v1/places:searchText",
+      {
+        body: JSON.stringify({
+          pageSize: 12,
+          textQuery: buildBlocksPlaceSearchTextQuery({ ...input, area }),
+          ...(hasCoordinates
+            ? {
+                locationBias: {
+                  circle: {
+                    center: {
+                      latitude: latitudeNumber,
+                      longitude: longitudeNumber,
+                    },
+                    radius: 50_000,
+                  },
+                },
+              }
+            : {}),
+        }),
+        headers: {
+          "content-type": "application/json",
+          "x-goog-api-key": apiKey,
+          "x-goog-fieldmask":
+            "places.id,places.displayName,places.formattedAddress,places.rating,places.types,places.photos,places.priceLevel,places.googleMapsUri,places.websiteUri,places.location,places.currentOpeningHours,places.userRatingCount,places.internationalPhoneNumber",
+        },
+        method: "POST",
+      }
+    );
+    if (!response.ok) return { places: [], reason: "unavailable" };
+
+    const data = (await response.json()) as { places?: GooglePlaceRecord[] };
+    return {
+      places: (data.places ?? []).flatMap((place) => {
+        const normalized = toGooglePlaceSuggestion(place);
+        return normalized ? [normalized] : [];
+      }),
+    };
+  } catch {
+    return { places: [], reason: "unavailable" };
+  }
+};
+
+const getGooglePlaceDetails = async (
+  placeId: string
+): Promise<PlaceSuggestion | null> => {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
+  if (!apiKey || !/^places\/[^/]+$/.test(placeId)) return null;
+
+  const resourceName = `places/${encodeURIComponent(placeId.slice("places/".length))}`;
+  try {
+    const response = await fetch(
+      `https://places.googleapis.com/v1/${resourceName}`,
+      {
+        headers: {
+          "x-goog-api-key": apiKey,
+          "x-goog-fieldmask":
+            "id,displayName,formattedAddress,rating,types,photos,priceLevel,googleMapsUri,websiteUri,location,currentOpeningHours,userRatingCount,internationalPhoneNumber",
+        },
+        method: "GET",
+      }
+    );
+    if (!response.ok) return null;
+    return toGooglePlaceSuggestion(
+      (await response.json()) as GooglePlaceRecord
+    );
+  } catch {
+    return null;
+  }
 };
 
 const acquirePlaceSearchRateLimit = async (userId: string) => {
@@ -3094,7 +3260,7 @@ const suggestPlaces = async (userId: string, input: unknown) => {
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
   if (!apiKey) {
-    if (body.searchKind === "venue") {
+    if (body.searchKind === "venue" || body.searchKind === "place") {
       return { places: [], reason: "google_not_configured" as const };
     }
     const fallback = generateFallbackPlaces(area, body.what, body.filters);
@@ -3137,7 +3303,7 @@ const suggestPlaces = async (userId: string, input: unknown) => {
       }
     );
     if (!response.ok) {
-      if (body.searchKind === "venue") {
+      if (body.searchKind === "venue" || body.searchKind === "place") {
         return { places: [], reason: "unavailable" as const };
       }
       const fallback = generateFallbackPlaces(area, body.what, body.filters);
@@ -3173,6 +3339,7 @@ const suggestPlaces = async (userId: string, input: unknown) => {
           ...(place.formattedAddress
             ? { address: place.formattedAddress }
             : {}),
+          dataSource: "google" as const,
           ...(place.googleMapsUri
             ? { googleMapsUri: place.googleMapsUri }
             : {}),
@@ -3193,15 +3360,22 @@ const suggestPlaces = async (userId: string, input: unknown) => {
           ...(place.rating !== undefined
             ? { rating: place.rating.toFixed(1) }
             : {}),
+          ...(place.photos?.[0]?.name
+            ? { photoName: place.photos[0].name }
+            : {}),
+          ...(place.photos?.[0]?.authorAttributions
+            ? {
+                photoAttributions: place.photos[0].authorAttributions.flatMap(
+                  (attribution) =>
+                    attribution.displayName ? [attribution.displayName] : []
+                ),
+              }
+            : {}),
           ...(place.userRatingCount !== undefined
             ? { userRatingCount: place.userRatingCount }
             : {}),
           ...(place.websiteUri ? { websiteUri: place.websiteUri } : {}),
-          id,
           name,
-          photos: (place.photos ?? []).flatMap((photo) =>
-            photo.name ? [photo.name] : []
-          ),
           placeId: id,
           types: place.types ?? [],
         },
@@ -3209,7 +3383,9 @@ const suggestPlaces = async (userId: string, input: unknown) => {
     });
 
     const resultPlaces =
-      places.length > 0 || body.searchKind === "venue"
+      places.length > 0 ||
+      body.searchKind === "venue" ||
+      body.searchKind === "place"
         ? places
         : generateFallbackPlaces(area, body.what, body.filters);
     const enrichedPlaces = await enrichPlacesWithApprovedSpotMedia(
@@ -3223,12 +3399,287 @@ const suggestPlaces = async (userId: string, input: unknown) => {
     });
     return { places: enrichedPlaces };
   } catch {
-    if (body.searchKind === "venue") {
+    if (body.searchKind === "venue" || body.searchKind === "place") {
       return { places: [], reason: "unavailable" as const };
     }
     const fallback = generateFallbackPlaces(area, body.what, body.filters);
     return { places: fallback };
   }
+};
+
+const publicVenueStatuses = ["claimed", "live", "verified"] as const;
+
+const publicVenueLocationFields = [
+  "address",
+  "discovery_place_id",
+  "handle",
+  "id",
+  "latitude",
+  "longitude",
+  "name",
+  "phone",
+  "status",
+  "stripe_identity_status",
+  "website_url",
+] as const;
+
+const toPublicSyncPlace = (location: {
+  address: string | null;
+  discovery_place_id: string | null;
+  handle: string | null;
+  id: string;
+  latitude: number | null;
+  longitude: number | null;
+  name: string;
+  phone: string | null;
+  website_url: string | null;
+}): PlaceSuggestion => ({
+  ...(location.address ? { address: location.address } : {}),
+  dataSource: "sync",
+  ...(location.discovery_place_id
+    ? {
+        googleMapsUri: `https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${encodeURIComponent(location.discovery_place_id)}`,
+      }
+    : {}),
+  ...(location.latitude !== null ? { latitude: location.latitude } : {}),
+  ...(location.longitude !== null ? { longitude: location.longitude } : {}),
+  name: location.name,
+  ...(location.phone ? { phone: location.phone } : {}),
+  placeId: location.discovery_place_id ?? `sync:${location.id}`,
+  syncLocationId: location.id,
+  types: ["sync_venue"],
+  ...(location.website_url ? { websiteUri: location.website_url } : {}),
+});
+
+const listPublicSyncPlaces = async (
+  db: Kysely<BlocksDatabase>,
+  input: {
+    area?: string;
+    latitude?: number;
+    longitude?: number;
+    query?: string;
+  } = {}
+) => {
+  const normalizedArea = input.area?.trim();
+  const normalizedQuery = input.query?.trim();
+  let locationQuery = db
+    .selectFrom("venue_location")
+    .select(publicVenueLocationFields)
+    .where("status", "in", publicVenueStatuses)
+    .where("stripe_identity_status", "=", "verified");
+
+  if (normalizedQuery) {
+    locationQuery = locationQuery.where((expression) =>
+      expression.or([
+        expression("name", "ilike", `%${normalizedQuery}%`),
+        expression("address", "ilike", `%${normalizedQuery}%`),
+      ])
+    );
+  }
+
+  const { latitude } = input;
+  const { longitude } = input;
+  const hasCoordinates =
+    typeof latitude === "number" &&
+    typeof longitude === "number" &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude);
+  if (hasCoordinates) {
+    locationQuery = locationQuery
+      .where("latitude", ">=", latitude - 0.5)
+      .where("latitude", "<=", latitude + 0.5)
+      .where("longitude", ">=", longitude - 0.65)
+      .where("longitude", "<=", longitude + 0.65);
+  } else if (normalizedArea) {
+    locationQuery = locationQuery.where((expression) =>
+      expression.or([
+        expression("name", "ilike", `%${normalizedArea}%`),
+        expression("address", "ilike", `%${normalizedArea}%`),
+      ])
+    );
+  }
+
+  const locations = await locationQuery
+    .orderBy("name", "asc")
+    .limit(100)
+    .execute();
+
+  return locations.map((location) =>
+    toPublicSyncPlace({
+      address: location.address,
+      discovery_place_id: location.discovery_place_id,
+      handle: location.handle,
+      id: location.id,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      name: location.name,
+      phone: location.phone,
+      website_url: location.website_url,
+    })
+  );
+};
+
+const searchPublicSpots = async (input: unknown) => {
+  const body = publicSpotSearchInputSchema.parse(input);
+  const db = await getDb();
+  const area = body.area?.trim() ?? "";
+  const query = body.query?.trim();
+  const syncPlaces = await listPublicSyncPlaces(db, {
+    area,
+    latitude: body.latitude,
+    longitude: body.longitude,
+    query,
+  });
+  const hasCoordinates =
+    body.latitude !== undefined && body.longitude !== undefined;
+  const cacheKey = JSON.stringify({
+    area: area.toLowerCase(),
+    category: body.category,
+    latitude: body.latitude,
+    longitude: body.longitude,
+    query,
+    scope: "public",
+  });
+  const cached = await placeSearchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      places: await enrichPlacesWithApprovedSpotMedia(db, cached.places),
+    };
+  }
+
+  const googlePlaces =
+    query || hasCoordinates
+      ? await requestGooglePlaces(
+          {
+            area,
+            filters: query ? [query] : [],
+            latitude:
+              body.latitude !== undefined ? String(body.latitude) : undefined,
+            longitude:
+              body.longitude !== undefined ? String(body.longitude) : undefined,
+            searchKind: "place",
+            what:
+              body.category === "all"
+                ? ["eat", "drink", "play"]
+                : [body.category],
+          },
+          area
+        )
+      : { places: [] as PlaceSuggestion[] };
+  const syncByDiscoveryId = new Map(
+    syncPlaces.map((place) => [place.placeId, place] as const)
+  );
+  const mergedPlaces = new Map<string, PlaceSuggestion>();
+  for (const place of syncPlaces) {
+    mergedPlaces.set(place.placeId, place);
+  }
+  for (const place of googlePlaces.places) {
+    const syncPlace = syncByDiscoveryId.get(place.placeId);
+    mergedPlaces.set(
+      place.placeId,
+      syncPlace
+        ? {
+            ...place,
+            dataSource: "sync",
+            syncLocationId: syncPlace.syncLocationId,
+          }
+        : place
+    );
+  }
+
+  const places = await enrichPlacesWithApprovedSpotMedia(
+    db,
+    Array.from(mergedPlaces.values())
+  );
+  await placeSearchCache.put(cacheKey, {
+    expiresAt: Date.now() + 1000 * 60 * 15,
+    places,
+  });
+  return {
+    places,
+    ...(googlePlaces.reason && places.length === 0
+      ? { reason: googlePlaces.reason }
+      : {}),
+  };
+};
+
+const getPublicSpotDetails = async (
+  input: string
+): Promise<PublicSpotDetails> => {
+  const spotId = z.string().trim().min(1).max(300).parse(input);
+  const db = await getDb();
+  const location = await db
+    .selectFrom("venue_location")
+    .select(publicVenueLocationFields)
+    .where("status", "in", publicVenueStatuses)
+    .where("stripe_identity_status", "=", "verified")
+    .where((expression) =>
+      expression.or([
+        expression("id", "=", spotId),
+        expression("handle", "=", spotId),
+        expression("discovery_place_id", "=", spotId),
+      ])
+    )
+    .executeTakeFirst();
+
+  if (location) {
+    const syncSummary = await getVenuePublicSummary(location.id);
+    const googlePlace = location.discovery_place_id
+      ? await getGooglePlaceDetails(location.discovery_place_id)
+      : null;
+    const place = googlePlace
+      ? {
+          ...googlePlace,
+          dataSource: "sync" as const,
+          syncLocationId: location.id,
+        }
+      : toPublicSyncPlace({
+          address: location.address,
+          discovery_place_id: location.discovery_place_id,
+          handle: location.handle,
+          id: location.id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          name: location.name,
+          phone: location.phone,
+          website_url: location.website_url,
+        });
+    return { place, source: "sync", syncSummary };
+  }
+
+  const place = await getGooglePlaceDetails(spotId);
+  if (!place) throw new Error("Spot details are unavailable");
+  return { place, source: "google" };
+};
+
+const getPublicSpotMenu = async (
+  input: string
+): Promise<PublicSpotMenuResponse> => {
+  const details = await getPublicSpotDetails(input);
+  if (details.source === "sync") {
+    return {
+      menu: null,
+      place: details.place,
+      source: details.source,
+      syncSummary: details.syncSummary,
+    };
+  }
+  if (!details.place.websiteUri) {
+    return {
+      menu: null,
+      place: details.place,
+      reason: "unavailable",
+      source: details.source,
+    };
+  }
+
+  const result = await previewVenueMenu({ url: details.place.websiteUri });
+  return {
+    menu: result.preview,
+    place: details.place,
+    ...(result.reason ? { reason: result.reason } : {}),
+    source: details.source,
+  };
 };
 
 const getPlacePhoto = async (
@@ -5342,8 +5793,25 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     });
   },
 
+  async searchPublicSpots(input: PublicSpotSearchInput) {
+    return observeOperation("searchPublicSpots", () =>
+      searchPublicSpots(input)
+    );
+  },
+
+  async getPublicSpot(placeId: string) {
+    return observeOperation("getPublicSpot", () =>
+      getPublicSpotDetails(placeId)
+    );
+  },
+
+  async getPublicSpotMenu(placeId: string) {
+    return observeOperation("getPublicSpotMenu", () =>
+      getPublicSpotMenu(placeId)
+    );
+  },
+
   async getPlacePhoto(photoName: string) {
-    await requireSession(context.request.headers);
     return getPlacePhoto(photoName);
   },
 

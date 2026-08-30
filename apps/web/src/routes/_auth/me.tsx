@@ -65,10 +65,8 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardList,
-  Clock,
   Eye,
   Compass,
-  ExternalLink,
   Heart,
   Home,
   Link2,
@@ -111,17 +109,15 @@ import {
 } from "@/features/date-requests/date-request-window";
 import { DateWizard } from "@/features/date-wizard/date-wizard";
 import { RecapsPage } from "@/features/recaps/recaps-page";
-import {
-  getNearbySpotsArea,
-  getNearbySpotsFilters,
-} from "@/features/spots/spot-search";
+import { SpotCard, SpotSection } from "@/features/spots/spot-card";
+import { getNearbySpotsArea } from "@/features/spots/spot-search";
 import { getMatchAgeBounds } from "@/lib/age-rules";
 import { authClient } from "@/lib/auth-client";
 import {
   datingApi,
   dateMediaApi,
-  getApiUrl,
   recapsApi,
+  spotsApi,
   venueApi,
   type DatePlace,
   type DatingMedia,
@@ -1511,8 +1507,6 @@ export function MePage({
     0
   );
 
-  const featuredSpot =
-    spots.find((spot) => spot.communityPhotoUrl || spot.photoUrl) ?? spots[0];
   const spotsByCategory = useMemo(() => {
     const grouped: Record<Exclude<SpotCategory, "all">, DatePlace[]> = {
       drink: [],
@@ -1756,44 +1750,24 @@ export function MePage({
 
   useEffect(() => {
     if (activeTab !== "spots") return;
-    if (!spotsSearchArea) {
+    if (!summary?.readiness.onboarded || !spotsSearchArea) {
       setSpots([]);
+      setIsLoadingSpots(false);
       return;
     }
 
     const fetchSpots = async () => {
       setIsLoadingSpots(true);
       try {
-        const filters = getNearbySpotsFilters(spotsQuery);
-        const requests =
-          spotsCategory === "all"
-            ? (["eat", "drink", "play"] as const).map((what) =>
-                datingApi.suggestPlaces({
-                  area: spotsSearchArea,
-                  filters,
-                  latitude: profile?.latitude || undefined,
-                  longitude: profile?.longitude || undefined,
-                  what: [what],
-                })
-              )
-            : [
-                datingApi.suggestPlaces({
-                  area: spotsSearchArea,
-                  filters,
-                  latitude: profile?.latitude || undefined,
-                  longitude: profile?.longitude || undefined,
-                  what: [spotsCategory],
-                }),
-              ];
-        const responses = await Promise.all(requests);
-        const placeById = new Map(
-          responses.flatMap((response) =>
-            response.places.map((place) => [place.placeId, place] as const)
-          )
-        );
-        const places = Array.from(placeById.values());
-        setSpots(places);
-        syncPlacesToDb(places, spotsCategory);
+        const result = await spotsApi.search({
+          area: spotsSearchArea,
+          category: spotsCategory,
+          latitude: profile?.latitude ? Number(profile.latitude) : undefined,
+          longitude: profile?.longitude ? Number(profile.longitude) : undefined,
+          ...(spotsQuery.trim() ? { query: spotsQuery.trim() } : {}),
+        });
+        setSpots(result.places);
+        syncPlacesToDb(result.places, spotsCategory);
       } catch (error) {
         toast.error(
           error instanceof Error
@@ -1815,6 +1789,7 @@ export function MePage({
     profile?.latitude,
     profile?.longitude,
     spotsCategory,
+    summary?.readiness.onboarded,
     spotsQuery,
     spotsSearchArea,
   ]);
@@ -2533,30 +2508,20 @@ export function MePage({
                 ) : spots.length === 0 ? (
                   <Card className="rounded-2xl border-border bg-card/45">
                     <CardContent className="p-6 text-sm text-muted-foreground">
-                      Choose a location or allow location access to fetch real
-                      spots near you.
+                      {!summary
+                        ? "Loading your Spots access…"
+                        : !summary.readiness.onboarded
+                          ? "Complete onboarding to discover real spots near you."
+                          : "No spots matched this search. Try another category or search."}
                     </CardContent>
                   </Card>
                 ) : spotsCategory === "all" ? (
                   <>
-                    {featuredSpot && (
-                      <section className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-bold text-lg">Featured nearby</h3>
-                          <Badge className="rounded-full bg-primary/10 text-primary">
-                            Spot partner
-                          </Badge>
-                        </div>
-                        <SpotCard featured spot={featuredSpot} />
-                      </section>
-                    )}
                     {(["eat", "drink", "play"] as const).map((category) => {
                       const categorySpots =
                         spotsByCategory[category].length > 0
                           ? spotsByCategory[category]
-                          : spots.filter(
-                              (spot) => spot.placeId !== featuredSpot?.placeId
-                            );
+                          : spots;
 
                       return (
                         <SpotSection
@@ -6415,45 +6380,6 @@ function MatchStatusBadge({ status }: { status: DateHistoryMatchStatus }) {
   );
 }
 
-function SpotSection({
-  category,
-  spots,
-  onViewAll,
-}: {
-  category: Exclude<SpotCategory, "all">;
-  spots: DatePlace[];
-  onViewAll: () => void;
-}) {
-  if (spots.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="font-bold text-lg capitalize">{category}</h3>
-        <Button
-          className="rounded-full px-3 text-xs"
-          onClick={onViewAll}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
-          View all
-          <ChevronRight className="size-4" />
-        </Button>
-      </div>
-      <div className="-mx-5 flex gap-4 overflow-x-auto px-5 pb-1">
-        {spots.map((spot) => (
-          <div className="w-72 shrink-0" key={spot.placeId}>
-            <SpotCard spot={spot} />
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function SpecialCard({ special }: { special: VenueSpecial }) {
   return (
     <article className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
@@ -6474,170 +6400,5 @@ function SpecialCard({ special }: { special: VenueSpecial }) {
         </p>
       ) : null}
     </article>
-  );
-}
-
-const formatPlaceType = (value: string) =>
-  value
-    .split("_")
-    .join(" ")
-    .replaceAll(/\b\w/g, (letter) => letter.toUpperCase());
-
-const formatPriceLevel = (value?: string) => {
-  if (!value) return null;
-
-  const prices: Record<string, string> = {
-    PRICE_LEVEL_EXPENSIVE: "$$$",
-    PRICE_LEVEL_INEXPENSIVE: "$",
-    PRICE_LEVEL_MODERATE: "$$",
-    PRICE_LEVEL_VERY_EXPENSIVE: "$$$$",
-  };
-
-  return prices[value] ?? null;
-};
-
-function SpotCard({
-  spot,
-  featured = false,
-}: {
-  spot: DatePlace;
-  featured?: boolean;
-}) {
-  const price = formatPriceLevel(spot.priceLevel);
-  const photoUrl = spot.communityPhotoUrl ?? spot.photoUrl;
-  const photoSrc = photoUrl?.startsWith("/") ? getApiUrl(photoUrl) : photoUrl;
-
-  return (
-    <div
-      className={`flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card transition duration-200 hover:border-primary/35 hover:shadow-md ${
-        featured ? "md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]" : ""
-      }`}
-    >
-      <div
-        className={`relative bg-muted/20 ${
-          featured ? "min-h-56 md:min-h-full" : "aspect-[4/3]"
-        }`}
-      >
-        {photoSrc ? (
-          <img
-            alt={spot.name}
-            className="h-full w-full object-cover"
-            src={photoSrc}
-          />
-        ) : (
-          <div className="flex h-full min-h-40 items-center justify-center text-primary">
-            <MapPin className="size-8" />
-          </div>
-        )}
-        {spot.rating && (
-          <Badge className="absolute right-3 top-3 rounded-full bg-background/90 font-bold text-[10px] text-foreground shadow-sm">
-            <Star className="size-3 fill-yellow-500 text-yellow-500" />
-            {spot.rating}
-            {spot.userRatingCount ? (
-              <span className="text-muted-foreground">
-                ({spot.userRatingCount})
-              </span>
-            ) : null}
-          </Badge>
-        )}
-      </div>
-      <div className="flex flex-1 flex-col justify-between gap-4 p-4">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-3">
-            <h4 className="font-bold text-sm text-foreground leading-snug">
-              {spot.name}
-            </h4>
-            {typeof spot.openNow === "boolean" && (
-              <Badge
-                className={`shrink-0 rounded-full text-[10px] ${
-                  spot.openNow
-                    ? "bg-emerald-500/10 text-emerald-600"
-                    : "bg-muted text-muted-foreground"
-                }`}
-                variant="secondary"
-              >
-                <Clock className="size-3" />
-                {spot.openNow ? "Open" : "Closed"}
-              </Badge>
-            )}
-          </div>
-          {spot.address && (
-            <p className="text-[10px] text-muted-foreground">{spot.address}</p>
-          )}
-          <div className="flex flex-wrap gap-1">
-            {price && (
-              <Badge
-                className="rounded-full px-2 py-0 text-[9px] font-semibold"
-                variant="secondary"
-              >
-                {price}
-              </Badge>
-            )}
-            {spot.types.slice(0, 3).map((tag) => (
-              <Badge
-                key={tag}
-                className="text-[9px] font-semibold rounded-full px-2 py-0"
-                variant="secondary"
-              >
-                {formatPlaceType(tag)}
-              </Badge>
-            ))}
-            {spot.communityPhotoUrl ? (
-              <Badge
-                className="rounded-full bg-emerald-500/10 px-2 py-0 text-[9px] font-semibold text-emerald-600"
-                variant="secondary"
-              >
-                Community photo
-              </Badge>
-            ) : null}
-            {spot.menuPhotoUrl ? (
-              <Badge
-                className="rounded-full bg-primary/10 px-2 py-0 text-[9px] font-semibold text-primary"
-                variant="secondary"
-              >
-                Menu captured
-              </Badge>
-            ) : null}
-          </div>
-          {spot.attributions?.length ? (
-            <p className="text-[9px] text-muted-foreground">
-              Photo: {spot.attributions.join(", ")}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex gap-2">
-          {spot.googleMapsUri && (
-            <a
-              className={buttonVariants({
-                className: "flex-1 rounded-full text-xs font-semibold h-8",
-                size: "sm",
-                variant: "outline",
-              })}
-              href={spot.googleMapsUri}
-              rel="noopener"
-              target="_blank"
-            >
-              Maps
-              <ExternalLink className="size-3.5" />
-            </a>
-          )}
-          {spot.websiteUri && (
-            <a
-              className={buttonVariants({
-                className: "flex-1 rounded-full text-xs font-semibold h-8",
-                size: "sm",
-                variant: "outline",
-              })}
-              href={spot.websiteUri}
-              rel="noopener"
-              target="_blank"
-            >
-              Site
-              <ExternalLink className="size-3.5" />
-            </a>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }
