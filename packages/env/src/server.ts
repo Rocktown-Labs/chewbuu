@@ -1,10 +1,31 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { createEnv } from "@t3-oss/env-core";
 import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 
-const workspaceRoot = path.resolve(import.meta.dirname, "../../../");
+const findWorkspaceRoot = () => {
+  let currentDirectory = process.cwd();
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (
+      existsSync(path.join(currentDirectory, "apps/server")) &&
+      existsSync(path.join(currentDirectory, "packages"))
+    ) {
+      return currentDirectory;
+    }
+
+    const parentDirectory = path.dirname(currentDirectory);
+    if (parentDirectory === currentDirectory) {
+      break;
+    }
+    currentDirectory = parentDirectory;
+  }
+
+  return process.cwd();
+};
+
+const workspaceRoot = findWorkspaceRoot();
 
 for (const envFile of [
   path.join(workspaceRoot, ".env"),
