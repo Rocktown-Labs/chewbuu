@@ -675,11 +675,16 @@ export const listPublicVenueLocations = async () => {
     .selectFrom("venue_location")
     .select([
       "address",
+      "discovery_place_id",
       "handle",
       "id",
+      "latitude",
+      "longitude",
       "name",
+      "phone",
       "status",
       "stripe_identity_status",
+      "website_url",
     ])
     .where("status", "in", publicVenueStatuses)
     .where("stripe_identity_status", "=", "verified")
@@ -693,9 +698,23 @@ export const listPublicVenueLocations = async () => {
         ? [
             {
               address: location.address ?? undefined,
+              dataSource: "sync" as const,
+              ...(location.discovery_place_id
+                ? { discoveryPlaceId: location.discovery_place_id }
+                : {}),
               handle: location.handle,
               id: location.id,
+              ...(location.latitude !== null
+                ? { latitude: location.latitude }
+                : {}),
+              ...(location.longitude !== null
+                ? { longitude: location.longitude }
+                : {}),
               name: location.name,
+              ...(location.phone ? { phone: location.phone } : {}),
+              ...(location.website_url
+                ? { websiteUri: location.website_url }
+                : {}),
             },
           ]
         : []

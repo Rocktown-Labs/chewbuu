@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added deployment-managed Stripe Connect health, recipient onboarding, multi-recipient settlement, refund/dispute handling, and webhook reconciliation; raw Stripe credentials are not accepted from browser forms.
 - Added branded Chewbuu Sync venue and Crew workflows with admin Sugar/Sync test entitlements, reserved brand handles, styled community metadata, people invitations, venue staff invitations, lifecycle emails, venue operations pages, and the branded-community migration.
 - Added debounced Google venue lookup with Place ID retention, editable prefill, Chewbuu-hosted menu planning, and public Sync-verified spot listings and detail pages.
+- Added standalone `/spots` discovery with verified Sync venue merging, Google Places fallback, lazy Google photos, and optional Firecrawl menu previews.
 - Added the platform-neutral Sync service operations API for location-scoped staff assignments, shift attendance, breaks/lunches, daily-code and optional geofence clock-in, late/ETA reporting, service boards, tables, service customers, staff orders with modifiers, kitchen/payment state, shared Sync channels, staff removal, and location job listings.
 - Added the authenticated `/sync` web workspace with responsive manager/iPad service controls, staff clock-in and attendance fallback, order/customer/table operations, team and schedule management, service settings, public hiring controls, and location-scoped work chat.
 - Added full-featured mobile authentication and multi-step onboarding in \`apps/native\` with **Basics**, **Device Permissions**, **Media Check**, **Dating Preferences**, and **Interests & Category Spots**, plus an explicit **Save for Later** action that persists drafts via \`expo-secure-store\` and enables immediate home tab exploration with top-feed resumption banners.
@@ -56,6 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Fixed AWS Blocks Better Auth session resolution across deployed ESM/CommonJS module shapes so authenticated API calls no longer fail while reading `auth.api`.
 - Removed date planning and dating-readiness widgets from the authenticated Spots view; nearby spots now use the selected or device location before dating onboarding is complete.
+- Slimmed authenticated and public Spot cards to compact image placeholders with clear `View menu` and `Get info` actions, while keeping authenticated discovery gated by onboarding and nearby location data.
 - Removed the oversized upcoming-date calendar panel from the Dates/Requests view so request history is the primary content.
 - Provisioned the Sync attendance signing secret as platform-managed production configuration and passed it into the AWS Blocks runtime, so venues and staff never need to configure it.
 - Added the missing `venue_location.style` migration, required venue contact details in the venue portal, and removed the ordinary-member Chewbuu Sync brand shortcut. The portal now explains that any signed-in member can submit a venue, while venue operations require an approved claim, team invitation, or admin access.
