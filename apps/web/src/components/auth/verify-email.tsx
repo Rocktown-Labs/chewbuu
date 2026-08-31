@@ -12,6 +12,8 @@ import { cn } from "@chewbuu/ui/lib/utils";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
+import { getAuthCallbackUrl } from "@/lib/venue-onboarding-intent";
+
 import { OpenEmailButton } from "./open-email-button";
 
 export interface VerifyEmailProps {
@@ -118,7 +120,7 @@ export function VerifyEmail({ className }: VerifyEmailProps) {
                 disabled={!email || isCoolingDown || isPending}
                 onClick={() =>
                   sendVerificationEmail({
-                    callbackURL: `${baseURL}${redirectTo}`,
+                    callbackURL: getAuthCallbackUrl(baseURL, redirectTo),
                     email,
                   })
                 }

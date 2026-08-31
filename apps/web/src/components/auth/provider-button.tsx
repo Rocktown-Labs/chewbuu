@@ -8,6 +8,8 @@ import { useIsMutating } from "@tanstack/react-query";
 import type { SocialProvider } from "better-auth/social-providers";
 import type { ComponentProps } from "react";
 
+import { getAuthCallbackUrl } from "@/lib/venue-onboarding-intent";
+
 export type ProviderButtonProps = {
   provider: SocialProvider;
   display?: "full" | "name" | "icon";
@@ -27,7 +29,7 @@ export function ProviderButton({
 }: ProviderButtonProps) {
   const { authClient, baseURL, localization, redirectTo } = useAuth();
 
-  const callbackURL = `${baseURL}${redirectTo}`;
+  const callbackURL = getAuthCallbackUrl(baseURL, redirectTo);
 
   const { mutate: signInSocial, isPending: signInSocialPending } =
     useSignInSocial(authClient);

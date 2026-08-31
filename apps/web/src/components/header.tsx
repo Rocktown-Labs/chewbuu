@@ -11,6 +11,7 @@ import {
 
 import { useTheme } from "@/components/theme-provider";
 import { authClient } from "@/lib/auth-client";
+import { trackMarketingEvent } from "@/lib/marketing-events";
 import { useAdminStatus } from "@/lib/use-admin-status";
 
 import UserMenu from "./user-menu";
@@ -21,9 +22,10 @@ export default function Header() {
   const { theme, setTheme } = useTheme();
 
   const publicLinks = [
-    { label: "How it works", hash: "how-it-works" },
-    { label: "Pricing", hash: "pricing" },
-    { label: "FAQ", hash: "faq" },
+    { href: "/#how-it-works", label: "How it works" },
+    { href: "/#pricing", label: "Pricing" },
+    { href: "/#faq", label: "FAQ" },
+    { label: "For venues", to: "/sync-platform" },
   ] as const;
 
   const cycleTheme = () => {
@@ -59,15 +61,33 @@ export default function Header() {
         </div>
         {!session && (
           <nav className="hidden items-center justify-center gap-5 text-muted-foreground text-sm lg:flex">
-            {publicLinks.map(({ hash, label }) => (
-              <a
-                className="transition-colors hover:text-foreground"
-                href={`/#${hash}`}
-                key={hash}
-              >
-                {label}
-              </a>
-            ))}
+            {publicLinks.map((link) =>
+              "to" in link ? (
+                <Link
+                  className="transition-colors hover:text-foreground"
+                  key={link.to}
+                  onClick={() =>
+                    trackMarketingEvent("cta_clicked", {
+                      button_text: link.label,
+                      destination: link.to,
+                      location: "header",
+                      product: "sync",
+                    })
+                  }
+                  to={link.to}
+                >
+                  {link.label}
+                </Link>
+              ) : (
+                <a
+                  className="transition-colors hover:text-foreground"
+                  href={link.href}
+                  key={link.href}
+                >
+                  {link.label}
+                </a>
+              )
+            )}
           </nav>
         )}
         <div className="flex items-center justify-end gap-2">
