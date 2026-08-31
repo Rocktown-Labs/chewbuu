@@ -37,6 +37,9 @@ import { useState } from "react";
 import type { SyntheticEvent } from "react";
 import { toast } from "sonner";
 
+import { trackMarketingEvent } from "@/lib/marketing-events";
+import { consumeSyncOnboardingIntent } from "@/lib/venue-onboarding-intent";
+
 import { AdditionalField } from "./additional-field";
 import { ProviderButtons } from "./provider-buttons";
 import type { SocialLayout } from "./provider-buttons";
@@ -98,6 +101,12 @@ export function SignUp({
           navigate({
             to: `${basePaths.auth}/${viewPaths.auth.verifyEmail}`,
           });
+        } else if (consumeSyncOnboardingIntent()) {
+          trackMarketingEvent("signup_completed", {
+            method: "email",
+            product: "sync",
+          });
+          navigate({ to: "/venue-portal" });
         } else {
           navigate({ to: "/onboarding" });
         }

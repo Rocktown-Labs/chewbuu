@@ -5,12 +5,17 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import {
+  ArrowRight,
+  BarChart3,
   Check,
+  ChefHat,
   ChevronDown,
   ChevronRight,
+  LayoutDashboard,
   MapPin,
   Receipt,
   ShieldCheck,
+  Store,
   Users,
   Video,
 } from "lucide-react";
@@ -18,6 +23,7 @@ import { useEffect, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { pricingApi, type MembershipPlan } from "@/lib/dating-api";
+import { trackMarketingEvent } from "@/lib/marketing-events";
 import {
   OG_IMAGE_URL,
   SITE_DESCRIPTION,
@@ -27,6 +33,7 @@ import {
   getCanonicalUrl,
 } from "@/lib/seo";
 import { getServerSession } from "@/lib/session.functions";
+import { markSyncOnboardingIntent } from "@/lib/venue-onboarding-intent";
 
 const HERO_IMAGES = [
   "/hero/date-rooftop.webp",
@@ -78,6 +85,24 @@ const REASONS = [
     icon: ShieldCheck,
     title: "Trusted Safety Shield",
     text: "Designate safety contacts who receive automatic location coordinates when your dates start.",
+  },
+] as const;
+
+const SYNC_HOME_FEATURES = [
+  {
+    icon: LayoutDashboard,
+    title: "One operating workspace",
+    text: "Service board, tables, orders, and team context.",
+  },
+  {
+    icon: ChefHat,
+    title: "Built for the floor",
+    text: "Menus, kitchen states, guests, reservations, and tips.",
+  },
+  {
+    icon: BarChart3,
+    title: "Real venue signals",
+    text: "Learn from the operational events you actually record.",
   },
 ] as const;
 
@@ -353,6 +378,69 @@ const HomeComponent = () => {
           </div>
         </div>
       </section>
+
+      <section
+        className="border-b-8 border-border bg-foreground px-5 py-16 text-background sm:px-8 sm:py-20 lg:px-12"
+        id="sync"
+      >
+        <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[1fr_0.85fr]">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/15 px-3 py-1 font-bold text-primary text-xs uppercase tracking-wider">
+              <Store className="size-3.5" />
+              Chewbuu Sync for venues
+            </div>
+            <h2 className="mt-5 max-w-2xl text-balance font-black text-3xl tracking-tight sm:text-5xl">
+              The place guests discover—and your team can actually run.
+            </h2>
+            <p className="mt-4 max-w-2xl text-background/70 text-base leading-7 sm:text-lg">
+              Sync keeps your real venue profile, menu, staff, reservations,
+              orders, and service flow connected. Start free with one location,
+              then activate the $60/month plan when your team is ready.
+            </p>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+              <Link
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-primary px-6 font-bold text-primary-foreground text-sm shadow-lg shadow-primary/20 transition hover:bg-primary/90"
+                onClick={() => {
+                  markSyncOnboardingIntent();
+                  trackMarketingEvent("cta_clicked", {
+                    button_text: "Start free venue setup",
+                    destination: "/venue-portal",
+                    location: "home_sync_section",
+                    product: "sync",
+                  });
+                }}
+                to="/venue-portal"
+              >
+                Start free venue setup <ArrowRight className="size-4" />
+              </Link>
+              <Link
+                className="inline-flex h-12 items-center justify-center rounded-full border border-background/20 px-6 font-bold text-background text-sm transition hover:bg-background/10"
+                to="/sync-platform"
+              >
+                Explore Sync
+              </Link>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            {SYNC_HOME_FEATURES.map(({ icon: Icon, title, text }) => (
+              <div
+                className="flex gap-3 rounded-2xl border border-background/10 bg-background/5 p-4"
+                key={title}
+              >
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+                  <Icon aria-hidden="true" className="size-5" />
+                </span>
+                <div>
+                  <p className="font-bold text-sm">{title}</p>
+                  <p className="mt-1 text-background/55 text-xs leading-5">
+                    {text}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
       <footer className="border-t border-border px-5 py-10 md:px-12">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div>
@@ -368,6 +456,9 @@ const HomeComponent = () => {
             <a className="hover:text-foreground" href="/#pricing">
               Pricing
             </a>
+            <Link className="hover:text-foreground" to="/sync-platform">
+              For venues
+            </Link>
             <Link className="hover:text-foreground" to="/specials">
               Specials
             </Link>

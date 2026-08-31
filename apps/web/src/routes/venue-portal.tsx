@@ -42,6 +42,12 @@ import {
   type VenueMenuPreview,
   type VenueReferral,
 } from "@/lib/dating-api";
+import { trackMarketingEvent } from "@/lib/marketing-events";
+import {
+  consumeSyncOnboardingIntent,
+  hasSyncOnboardingIntent,
+  markSyncOnboardingIntent,
+} from "@/lib/venue-onboarding-intent";
 
 export const Route = createFileRoute("/venue-portal")({
   component: VenuePortalPage,
@@ -78,6 +84,13 @@ function VenuePortalPage() {
   useEffect(() => {
     const loadSession = async () => {
       const session = await authClient.getSession();
+      if (session.data && hasSyncOnboardingIntent()) {
+        consumeSyncOnboardingIntent();
+        trackMarketingEvent("auth_completed", {
+          method: "social",
+          product: "sync",
+        });
+      }
       setIsSignedIn(Boolean(session.data));
     };
     void loadSession();
@@ -162,6 +175,11 @@ function VenuePortalPage() {
       });
       setLocation(result.location);
       setReferral(result.referral);
+      trackMarketingEvent("venue_setup_started", {
+        menu_destination: menuPlan,
+        product: "sync",
+        role: isOwner ? "owner" : "referrer",
+      });
 
       if (isOwner) {
         const claimResult = await venueApi.requestClaim(result.location.id);
@@ -217,18 +235,76 @@ function VenuePortalPage() {
   if (isSignedIn === false) {
     return (
       <main className="mx-auto flex min-h-screen max-w-2xl items-center px-6 py-16">
-        <Card className="w-full">
-          <CardHeader>
-            <CardTitle>Bring a venue to Chewbuu</CardTitle>
-            <CardDescription>
-              Sign in to claim your venue or earn a referral reward for helping
-              a favorite spot get set up.
+        <Card className="w-full overflow-hidden rounded-3xl shadow-xl shadow-primary/5">
+          <CardHeader className="bg-primary/5">
+            <Badge variant="secondary" className="w-fit">
+              Chewbuu Sync
+            </Badge>
+            <CardTitle className="mt-3 text-3xl">
+              Start your venue setup for free
+            </CardTitle>
+            <CardDescription className="max-w-lg text-base leading-6">
+              Create one Chewbuu account, then we’ll take you straight to the
+              venue flow. No card is required to submit a location, claim it,
+              and build the profile your guests and team will use.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Link className={buttonVariants()} to="/login">
-              Sign in to continue
-            </Link>
+          <CardContent className="space-y-5 p-6">
+            <div className="grid gap-3 sm:grid-cols-3">
+              {[
+                "Find the location",
+                "Verify the venue",
+                "Build your workspace",
+              ].map((step, index) => (
+                <div
+                  className="rounded-2xl border border-border bg-muted/30 p-3"
+                  key={step}
+                >
+                  <p className="font-mono font-bold text-primary text-xs">
+                    0{index + 1}
+                  </p>
+                  <p className="mt-2 font-semibold text-sm">{step}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                className={buttonVariants()}
+                onClick={() => {
+                  markSyncOnboardingIntent();
+                  trackMarketingEvent("cta_clicked", {
+                    button_text: "Create free Sync account",
+                    destination: "/auth/sign-up",
+                    location: "venue_portal_auth_gate",
+                    product: "sync",
+                  });
+                }}
+                to="/auth/sign-up"
+              >
+                Create free Sync account
+              </Link>
+              <Link
+                className={buttonVariants({ variant: "outline" })}
+                onClick={() => {
+                  markSyncOnboardingIntent();
+                  trackMarketingEvent("cta_clicked", {
+                    button_text: "Sign in to continue",
+                    destination: "/auth/sign-in",
+                    location: "venue_portal_auth_gate",
+                    product: "sync",
+                  });
+                }}
+                to="/auth/sign-in"
+              >
+                Sign in to continue
+              </Link>
+            </div>
+            <p className="text-muted-foreground text-xs leading-5">
+              Already have a Chewbuu account? Sign in and you’ll skip consumer
+              onboarding and continue here. Paid Sync billing is separate and
+              only begins when you choose the $60/month plan for up to 50 staff
+              seats.
+            </p>
           </CardContent>
         </Card>
       </main>
