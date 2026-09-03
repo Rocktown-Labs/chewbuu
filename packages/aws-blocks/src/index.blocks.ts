@@ -4787,13 +4787,12 @@ const syncPricingPlans = async (
       .execute();
   }
 
-  const syncPlan = await db
+  const syncPlans = await db
     .selectFrom("sync_plan")
     .selectAll()
     .where("active", "=", true)
-    .where("code", "=", "sync_50")
-    .executeTakeFirst();
-  if (syncPlan) {
+    .execute();
+  for (const syncPlan of syncPlans) {
     const product =
       (syncPlan.stripe_product_id
         ? await retrieveStripeProduct(stripe, syncPlan.stripe_product_id)
@@ -4822,7 +4821,7 @@ const syncPricingPlans = async (
       currency: syncPlan.stripe_currency,
       existingPrices,
       interval: "month",
-      lookupKey: `chewbuu_sync_50_monthly_${stripeMode}`,
+      lookupKey: `chewbuu_${syncPlan.code}_monthly_${stripeMode}`,
       planId: syncPlan.id,
       priceCents: syncPlan.monthly_price_cents,
       productId: product.id,

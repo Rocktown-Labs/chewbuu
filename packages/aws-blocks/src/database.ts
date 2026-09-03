@@ -146,6 +146,23 @@ export interface SyncPlanTable {
   updated_at: Timestamp;
 }
 
+export interface VenueSpotlightTable {
+  created_at: Timestamp;
+  description: string | null;
+  ends_at: Timestamp;
+  id: string;
+  kind: "event" | "special" | "venue";
+  location_id: string;
+  organization_id: string;
+  price_cents: number;
+  special_id: string | null;
+  starts_at: Timestamp;
+  status: "active" | "cancelled" | "completed" | "draft";
+  stripe_payment_id: string | null;
+  title: string;
+  updated_at: Timestamp;
+}
+
 export interface ProfileTable {
   age_range_max: number | null;
   age_range_min: number | null;
@@ -1015,6 +1032,7 @@ export interface BlocksDatabase {
   venue_shift_attendance: VenueShiftAttendanceTable;
   venue_shift_swap: VenueShiftSwapTable;
   venue_special: VenueSpecialTable;
+  venue_spotlight: VenueSpotlightTable;
   venue_sync_channel: VenueSyncChannelTable;
   venue_table: VenueTableTable;
   venue_job_listing: VenueJobListingTable;
