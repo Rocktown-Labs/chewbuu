@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added a dedicated 'Specials' filter tab to the Spots exploration view with active daily specials, search filtering, and quick date-planning actions.
+- Added headcount-based Chewbuu Sync tiers (Sync 50 at $69/mo, Sync 100 at $139/mo, Sync Enterprise at $249/mo) with interactive billing toggles, dynamic staff limits, the Chewbuu Spotlight promotional advertising suite ($49/wk venue spotlight, $29/event spotlight, $19/3-day special boost), and a transparent 5% F&B transaction fee breakdown.
+
 - Added a conversion-focused Chewbuu Sync venue product page, homepage CTA section, public header navigation, free-to-start $60/month/50-seat positioning, and auth intent handoff into venue onboarding.
 - Added automatic local environment loading and TLS-enabled PostgreSQL setup for Blocks development, including local-only auth/database defaults and strict production certificate verification.
 - Added pinned Portless development routing for the web, dating Expo, Sync Expo, and email preview apps with named URLs and a Vite proxy to the fixed Blocks API.

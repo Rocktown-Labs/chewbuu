@@ -82,6 +82,7 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Tag,
   User,
   UserPlus,
   Users,
@@ -154,7 +155,7 @@ type DashboardTab =
   | "profile"
   | "recaps"
   | "spots";
-type SpotCategory = "all" | "eat" | "drink" | "play";
+type SpotCategory = "all" | "specials" | "eat" | "drink" | "play";
 type DateHistoryMatchStatus =
   | "accepted"
   | "archived"
@@ -205,7 +206,7 @@ interface DateHistoryItem {
 }
 
 const meSearchSchema = z.object({
-  category: z.enum(["all", "eat", "drink", "play"]).optional(),
+  category: z.enum(["all", "specials", "eat", "drink", "play"]).optional(),
   dateId: z.string().optional(),
   usernameToken: z.string().optional(),
   filter: z.enum(["all", "received", "sent", "active"]).optional(),
@@ -1507,8 +1508,20 @@ export function MePage({
     0
   );
 
+  const filteredSpecials = useMemo(() => {
+    if (!spotsQuery.trim()) return publicSpecials;
+    const q = spotsQuery.toLowerCase();
+    return publicSpecials.filter(
+      (special) =>
+        special.title.toLowerCase().includes(q) ||
+        special.description?.toLowerCase().includes(q) ||
+        special.category.toLowerCase().includes(q) ||
+        special.priceText?.toLowerCase().includes(q)
+    );
+  }, [publicSpecials, spotsQuery]);
+
   const spotsByCategory = useMemo(() => {
-    const grouped: Record<Exclude<SpotCategory, "all">, DatePlace[]> = {
+    const grouped: Record<"drink" | "eat" | "play", DatePlace[]> = {
       drink: [],
       eat: [],
       play: [],
@@ -1750,6 +1763,10 @@ export function MePage({
 
   useEffect(() => {
     if (activeTab !== "spots") return;
+    if (spotsCategory === "specials") {
+      setIsLoadingSpots(false);
+      return;
+    }
     if (!summary?.readiness.onboarded || !spotsSearchArea) {
       setSpots([]);
       setIsLoadingSpots(false);
@@ -2461,93 +2478,177 @@ export function MePage({
 
               {/* Category selector pills */}
               <div className="flex gap-2 overflow-x-auto px-5 py-4 border-b border-border/80 scrollbar-none">
-                {["all", "eat", "drink", "play"].map((cat) => (
+                {(
+                  [
+                    { icon: undefined, id: "all", label: "All" },
+                    { icon: Sparkles, id: "specials", label: "Specials" },
+                    { icon: undefined, id: "eat", label: "Eat" },
+                    { icon: undefined, id: "drink", label: "Drink" },
+                    { icon: undefined, id: "play", label: "Play" },
+                  ] as const
+                ).map(({ icon: Icon, id, label }) => (
                   <button
-                    key={cat}
-                    onClick={() => setSpotCategory(cat as SpotCategory)}
-                    className={`rounded-full px-5 py-1.5 text-xs font-bold capitalize transition shrink-0 cursor-pointer ${
-                      spotsCategory === cat
+                    key={id}
+                    onClick={() => setSpotCategory(id as SpotCategory)}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-5 py-1.5 text-xs font-bold transition shrink-0 cursor-pointer ${
+                      spotsCategory === id
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-muted-foreground hover:bg-muted-hover hover:text-foreground"
                     }`}
                     type="button"
                   >
-                    {cat}
+                    {Icon ? <Icon className="size-3.5" /> : null}
+                    <span>{label}</span>
+                    {id === "specials" && publicSpecials.length > 0 ? (
+                      <span
+                        className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-extrabold ${
+                          spotsCategory === "specials"
+                            ? "bg-primary-foreground/20 text-primary-foreground"
+                            : "bg-primary/15 text-primary"
+                        }`}
+                      >
+                        {publicSpecials.length}
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>
 
               <div className="p-5 flex flex-col gap-8">
-                {publicSpecials.length > 0 ? (
-                  <section className="flex flex-col gap-3">
-                    <div className="flex items-center justify-between gap-3">
+                {spotsCategory === "specials" ? (
+                  <section className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <h3 className="font-bold text-lg">Live specials</h3>
+                        <h3 className="flex items-center gap-2 font-bold text-lg text-foreground">
+                          <span>Daily Specials & Date Perks</span>
+                          <Badge
+                            className="rounded-full bg-primary/10 text-primary text-[10px]"
+                            variant="secondary"
+                          >
+                            {filteredSpecials.length} active
+                          </Badge>
+                        </h3>
                         <p className="text-sm text-muted-foreground">
-                          Venue-published offers nearby.
+                          Venue-published happy hours, dinner discounts, and
+                          date perks near you.
                         </p>
                       </div>
                       <Link
-                        className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
+                        className="text-xs font-semibold text-primary underline-offset-4 hover:underline"
                         to="/specials"
                       >
-                        View all
+                        View all public specials
                       </Link>
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {publicSpecials.slice(0, 4).map((special) => (
-                        <SpecialCard key={special.id} special={special} />
-                      ))}
-                    </div>
+                    {filteredSpecials.length === 0 ? (
+                      <Card className="rounded-2xl border-dashed border-border bg-card/45">
+                        <CardContent className="p-8 text-center">
+                          <Tag className="mx-auto size-8 text-muted-foreground" />
+                          <h4 className="mt-3 font-semibold">
+                            No daily specials found
+                          </h4>
+                          <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">
+                            {spotsQuery.trim()
+                              ? `No daily specials match "${spotsQuery}". Try another keyword or browse all spots.`
+                              : "Check back soon as local partner venues post happy hours and daily specials."}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {filteredSpecials.map((special) => (
+                          <SpecialCard
+                            key={special.id}
+                            onPlanDate={() => {
+                              setIsPlanDateDrawerOpen(true);
+                            }}
+                            special={special}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </section>
-                ) : null}
-                {isLoadingSpots ? (
-                  <p className="text-sm text-muted-foreground">
-                    Finding nearby spots...
-                  </p>
-                ) : spots.length === 0 ? (
-                  <Card className="rounded-2xl border-border bg-card/45">
-                    <CardContent className="p-6 text-sm text-muted-foreground">
-                      {!summary
-                        ? "Loading your Spots access…"
-                        : !summary.readiness.onboarded
-                          ? "Complete onboarding to discover real spots near you."
-                          : "No spots matched this search. Try another category or search."}
-                    </CardContent>
-                  </Card>
-                ) : spotsCategory === "all" ? (
-                  <>
-                    {(["eat", "drink", "play"] as const).map((category) => {
-                      const categorySpots =
-                        spotsByCategory[category].length > 0
-                          ? spotsByCategory[category]
-                          : spots;
-
-                      return (
-                        <SpotSection
-                          category={category}
-                          key={category}
-                          onViewAll={() => setSpotCategory(category)}
-                          spots={categorySpots.slice(0, 6)}
-                        />
-                      );
-                    })}
-                  </>
                 ) : (
-                  <section className="flex flex-col gap-4">
-                    <h3 className="font-bold text-lg text-foreground flex items-center justify-between">
-                      <span className="capitalize">
-                        {spotsCategory} spots near{" "}
-                        {spotsSearchArea || "your area"}
-                      </span>
-                      <ChevronRight className="size-4 text-muted-foreground" />
-                    </h3>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      {spots.map((spot) => (
-                        <SpotCard key={spot.placeId} spot={spot} />
-                      ))}
-                    </div>
-                  </section>
+                  <>
+                    {publicSpecials.length > 0 ? (
+                      <section className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <h3 className="font-bold text-lg">Live specials</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Venue-published offers nearby.
+                            </p>
+                          </div>
+                          <button
+                            className="text-sm font-semibold text-primary underline-offset-4 hover:underline cursor-pointer"
+                            onClick={() => setSpotCategory("specials")}
+                            type="button"
+                          >
+                            View all ({publicSpecials.length})
+                          </button>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {publicSpecials.slice(0, 4).map((special) => (
+                            <SpecialCard
+                              key={special.id}
+                              onPlanDate={() => {
+                                setIsPlanDateDrawerOpen(true);
+                              }}
+                              special={special}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    ) : null}
+                    {isLoadingSpots ? (
+                      <p className="text-sm text-muted-foreground">
+                        Finding nearby spots...
+                      </p>
+                    ) : spots.length === 0 ? (
+                      <Card className="rounded-2xl border-border bg-card/45">
+                        <CardContent className="p-6 text-sm text-muted-foreground">
+                          {!summary
+                            ? "Loading your Spots access…"
+                            : !summary.readiness.onboarded
+                              ? "Complete onboarding to discover real spots near you."
+                              : "No spots matched this search. Try another category or search."}
+                        </CardContent>
+                      </Card>
+                    ) : spotsCategory === "all" ? (
+                      <>
+                        {(["eat", "drink", "play"] as const).map((category) => {
+                          const categorySpots =
+                            spotsByCategory[category].length > 0
+                              ? spotsByCategory[category]
+                              : spots;
+
+                          return (
+                            <SpotSection
+                              category={category}
+                              key={category}
+                              onViewAll={() => setSpotCategory(category)}
+                              spots={categorySpots.slice(0, 6)}
+                            />
+                          );
+                        })}
+                      </>
+                    ) : (
+                      <section className="flex flex-col gap-4">
+                        <h3 className="font-bold text-lg text-foreground flex items-center justify-between">
+                          <span className="capitalize">
+                            {spotsCategory} spots near{" "}
+                            {spotsSearchArea || "your area"}
+                          </span>
+                          <ChevronRight className="size-4 text-muted-foreground" />
+                        </h3>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {spots.map((spot) => (
+                            <SpotCard key={spot.placeId} spot={spot} />
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -6380,24 +6481,59 @@ function MatchStatusBadge({ status }: { status: DateHistoryMatchStatus }) {
   );
 }
 
-function SpecialCard({ special }: { special: VenueSpecial }) {
+function SpecialCard({
+  onPlanDate,
+  special,
+}: {
+  onPlanDate?: () => void;
+  special: VenueSpecial;
+}) {
   return (
-    <article className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-primary">
-            {special.category}
-          </p>
-          <h4 className="mt-1 font-bold">{special.title}</h4>
+    <article className="flex flex-col justify-between rounded-2xl border border-primary/20 bg-primary/5 p-4 transition hover:border-primary/40">
+      <div>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-bold uppercase tracking-wide text-primary">
+                {special.category}
+              </span>
+              {special.featured ? (
+                <Badge
+                  className="gap-1 rounded-full border-amber-500/30 bg-amber-500/10 text-[10px] font-bold text-amber-600"
+                  variant="outline"
+                >
+                  <Sparkles className="size-2.5" />
+                  Spotlight
+                </Badge>
+              ) : null}
+            </div>
+            <h4 className="mt-1 font-bold text-base">{special.title}</h4>
+          </div>
+          {special.priceText ? (
+            <Badge className="shrink-0 font-bold" variant="secondary">
+              {special.priceText}
+            </Badge>
+          ) : null}
         </div>
-        {special.priceText ? (
-          <Badge variant="secondary">{special.priceText}</Badge>
+        {special.description ? (
+          <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
+            {special.description}
+          </p>
         ) : null}
       </div>
-      {special.description ? (
-        <p className="mt-2 text-sm text-muted-foreground">
-          {special.description}
-        </p>
+      {onPlanDate ? (
+        <div className="mt-4 flex items-center justify-between border-t border-primary/10 pt-3">
+          <span className="text-xs text-muted-foreground">Special active</span>
+          <Button
+            className="h-8 gap-1.5 rounded-full px-3 text-xs font-semibold"
+            onClick={onPlanDate}
+            size="sm"
+            type="button"
+          >
+            <CalendarHeart className="size-3.5" />
+            <span>Plan date here</span>
+          </Button>
+        </div>
       ) : null}
     </article>
   );

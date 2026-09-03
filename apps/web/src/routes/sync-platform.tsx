@@ -6,16 +6,20 @@ import {
   ArrowRight,
   BarChart3,
   BadgeCheck,
+  CalendarHeart,
   Check,
   ChefHat,
   ClipboardList,
+  Flame,
   LayoutDashboard,
+  Percent,
   ShieldCheck,
   Sparkles,
   Store,
+  Tag,
   Users,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { trackMarketingEvent } from "@/lib/marketing-events";
 import { OG_IMAGE_URL, getCanonicalUrl, SITE_NAME } from "@/lib/seo";
@@ -67,26 +71,155 @@ const SETUP_STEPS = [
   },
 ] as const;
 
+const SYNC_TIERS = [
+  {
+    badge: "Independent & Neighborhood",
+    buttonText: "Start with Sync 50",
+    description:
+      "Full operational software suite for neighborhood cafes, bars, and independent bistros.",
+    features: [
+      "Table & floor map management with real-time dining seat states",
+      "Full order taking and digital ticket lifecycle",
+      "Kitchen Display System (KDS) tickets & cook timers",
+      "Shift scheduling, shift swaps & manager approvals",
+      "3-digit HMAC attendance kiosk & break tracking",
+      "Isolated internal staff work chat (sync_staff)",
+      "Guest dining CRM (visit history, VIP notes, party size)",
+      "Public /spots/:handle listing & basic specials posting",
+      "5% platform fee on in-app F&B dining transactions",
+    ],
+    id: "sync_50",
+    maxStaffText: "Up to 50 active staff members",
+    name: "Sync 50",
+    popular: false,
+    priceAnnual: 59,
+    priceMonthly: 69,
+  },
+  {
+    badge: "High-Volume & Multi-Shift",
+    buttonText: "Start with Sync 100",
+    description:
+      "For busy restaurants and multi-station venues needing higher team capacity and kitchen routing.",
+    features: [
+      "Everything in Sync 50 included",
+      "Up to 100 active staff members across all shifts",
+      "Multi-station KDS routing (separate Bar, Hot Line, Prep)",
+      "Advanced operational bottleneck analytics & table turnover pacing",
+      "1 free Chewbuu Spotlight promotion included per month ($49 value)",
+      "In-app local job listings board & applicant review pipeline",
+      "Priority customer & technical support",
+    ],
+    id: "sync_100",
+    maxStaffText: "Up to 100 active staff members",
+    name: "Sync 100",
+    popular: true,
+    priceAnnual: 119,
+    priceMonthly: 139,
+  },
+  {
+    badge: "Hospitality Groups & Chains",
+    buttonText: "Start with Enterprise",
+    description:
+      "For multi-unit groups requiring brand-level oversight, cross-branch staff, and custom integrations.",
+    features: [
+      "Everything in Sync 100 included",
+      "Unlimited active staff across all shifts and seasons",
+      "Centralized multi-location brand portal with unified organization",
+      "Distinct location menus, pricing overrides & operating schedules",
+      "Cross-location staff borrowing and schedule transfers",
+      "Enterprise payroll & tip pool export integrations",
+      "Guaranteed priority placement in Spots discovery & 99.9% uptime SLA",
+      "Dedicated hospitality account manager",
+    ],
+    id: "sync_enterprise",
+    maxStaffText: "Unlimited active staff members",
+    name: "Sync Enterprise",
+    popular: false,
+    priceAnnual: 219,
+    priceMonthly: 249,
+  },
+] as const;
+
+const SPOTLIGHT_OFFERS = [
+  {
+    badge: "Most Popular for Weekends",
+    description:
+      "Pin your restaurant to the top of Explore Spots and Date Wizard recommendations for couples in your area.",
+    duration: "7 days placement",
+    features: [
+      "Pinned to #1 in local Spots feed within 10 miles",
+      "Featured placement in Date Wizard venue suggestions",
+      "Warm gold 'Spotlight Partner' glow badge on your spot card",
+      "Guaranteed visibility to couples planning upcoming date nights",
+    ],
+    icon: Flame,
+    id: "spotlight_venue",
+    name: "Spotlight Venue",
+    price: "$49",
+    priceSuffix: "/ week",
+  },
+  {
+    badge: "Event & Entertainment Booster",
+    description:
+      "Drive daters to high-energy happenings: live jazz, trivia nights, wine pairings, and chef tastings.",
+    duration: "Single event or 4-pack",
+    features: [
+      "Featured on dater home screen & 'What's Happening This Weekend'",
+      "Prioritized in Date Wizard 'Play & Drink' date activity pickers",
+      "Custom date tag (e.g. 'Live Jazz Tonight', 'Trivia Thursday')",
+      "Bundle: $29 for single event or $89 for a monthly 4-event series",
+    ],
+    icon: CalendarHeart,
+    id: "spotlight_event",
+    name: "Spotlight Event",
+    price: "$29",
+    priceSuffix: "/ event",
+  },
+  {
+    badge: "Happy Hour & Off-Peak Boost",
+    description:
+      "Fill empty seats on slow Tuesdays and Thursdays by pushing food & drink specials to active daters nearby.",
+    duration: "3 days boost",
+    features: [
+      "Top placement in the in-app '⭐ Specials' tab",
+      "Spotlight badge on the special with price highlight",
+      "One-tap 'Plan date here' action button for daters",
+      "Push badge to daters who saved or favorited your venue",
+    ],
+    icon: Tag,
+    id: "special_boost",
+    name: "Special Boost",
+    price: "$19",
+    priceSuffix: "/ 3 days",
+  },
+] as const;
+
 const SYNC_FAQS = [
   {
-    question: "Is Sync only for restaurants?",
+    question: "How do the staff headcount tiers work?",
     answer:
-      "Restaurants are our first focus, but Sync is built around flexible venue data and workflows. Cafes, bars, activity spaces, and other guest-facing businesses can use the same location, team, menu, reservation, and service foundations.",
+      "All Chewbuu Sync tiers include our full operational software suite: table management, order taking, KDS tickets, shift scheduling, 3-digit HMAC attendance kiosk, and team chat. You choose your tier based on how many active staff members you schedule: Sync 50 covers up to 50 staff ($69/mo), Sync 100 covers up to 100 staff ($139/mo), and Sync Enterprise provides unlimited staff for hospitality groups ($249/mo).",
   },
   {
-    question: "What does free to start mean?",
+    question: "What is the 5% in-app transaction fee?",
     answer:
-      "You can create an account, submit a real venue, and work through the setup flow without entering a card. The intended Sync plan is $60 per month for up to 50 staff seats when you choose to activate paid operations.",
+      "When daters discover your venue and pay their check in the Chewbuu app via Stripe Connect, a 5% platform fee applies strictly to the food and beverage subtotal. Tips go 100% to your staff and taxes pass through 100% fee-free to your tax account. We charge $0 for reservations booked directly or checks paid in cash or standard card at the table.",
   },
   {
-    question: "What happens to my venue data?",
+    question:
+      "What is Chewbuu Spotlight and how does it help fill slow nights?",
     answer:
-      "Your Chewbuu venue record is the source of truth. Discovery services can help find and prefill a place, while approved venue operators control the profile, menu, media, team, and operational data that guests see.",
+      "Chewbuu Spotlight allows partner venues to promote their restaurant, date-night events, or daily specials directly to active daters planning nights out nearby. Venues can buy a Spotlight Venue placement for $49/week, boost a live event (like jazz or trivia) for $29, or boost a daily happy hour or food special for $19. Sync 100 subscribers receive 1 free Spotlight promotion every month.",
   },
   {
     question: "Can I manage more than one location?",
     answer:
-      "Yes. Sync models organizations and physical locations separately, so independent venues can start simply and growing groups can add locations without mixing their operating data. Expansion and enterprise pricing can be scoped as your footprint grows.",
+      "Yes. Sync models organizations and physical locations separately. With Sync Enterprise, hospitality groups get a centralized brand portal to manage distinct menus, pricing, tables, and staff per branch, plus cross-location staff borrowing.",
+  },
+  {
+    question: "What does free to start mean?",
+    answer:
+      "You can create an account, claim or add your venue, build your menu, and configure your tables without entering a credit card. You only choose a Sync subscription tier once you are ready to put the system into live service with your team.",
   },
 ] as const;
 
@@ -116,6 +249,10 @@ const SyncCta = ({
 );
 
 function SyncPlatformPage() {
+  const [billingInterval, setBillingInterval] = useState<"monthly" | "annual">(
+    "monthly"
+  );
+
   return (
     <main className="overflow-hidden bg-background text-foreground">
       <section className="relative isolate border-b-8 border-border bg-foreground px-5 py-20 text-background sm:px-8 sm:py-28 lg:px-12">
@@ -329,115 +466,380 @@ function SyncPlatformPage() {
         </div>
       </section>
 
-      <section className="border-b-8 border-border bg-background px-5 py-16 sm:px-8 sm:py-20 lg:px-12">
+      {/* Headcount-Based Sync Plans */}
+      <section className="border-b-8 border-border bg-background px-5 py-16 sm:px-8 sm:py-24 lg:px-12">
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="font-bold text-primary text-xs uppercase tracking-[0.2em]">
-              Start without the sales dance
-            </p>
-            <h2 className="mt-3 text-balance font-black text-3xl tracking-tight sm:text-5xl">
-              Set up free. Pay when Sync is doing real work for your team.
+            <Badge className="border-primary/30 bg-primary/10 text-primary">
+              <Store data-icon="inline-start" /> Headcount-based plans
+            </Badge>
+            <h2 className="mt-4 text-balance font-black text-3xl tracking-tight sm:text-5xl">
+              All the tools. Sized for your staff, not your feature wishlist.
             </h2>
-            <p className="mt-4 text-muted-foreground leading-7">
-              Get the location and profile right first. Activate the operating
-              plan when your venue is ready to use the workspace day to day.
+            <p className="mt-4 text-muted-foreground text-base leading-7 sm:text-lg">
+              Every tier includes our full operational software suite—table
+              maps, KDS tickets, shift schedules, and team chat. Choose the
+              capacity your team needs.
             </p>
-          </div>
-          <div className="mx-auto mt-12 grid max-w-4xl gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-            <Card className="overflow-hidden rounded-3xl border-primary/35 shadow-xl shadow-primary/10">
-              <div className="bg-primary px-6 py-5 text-primary-foreground">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-black text-2xl">Sync Core</p>
-                    <p className="mt-1 text-primary-foreground/75 text-sm">
-                      The starting plan for a working venue team
-                    </p>
-                  </div>
-                  <Badge className="border-primary-foreground/20 bg-primary-foreground/15 text-primary-foreground">
-                    Planned offer
-                  </Badge>
-                </div>
-                <p className="mt-7 font-black text-5xl">
-                  $60<span className="font-bold text-lg">/mo</span>
-                </p>
-                <p className="mt-1 text-primary-foreground/75 text-sm">
-                  includes up to 50 staff seats
-                </p>
-              </div>
-              <CardContent className="p-6">
-                <ul className="grid gap-3 sm:grid-cols-2">
-                  {[
-                    "Venue profile and public spot page",
-                    "Menus, modifiers, photos, and specials",
-                    "Reservations, tables, and service board",
-                    "Staff roles, invitations, shifts, and chat",
-                    "Guest, order, kitchen, and tip workflows",
-                    "Operational events and venue analytics",
-                  ].map((feature) => (
-                    <li className="flex gap-2 text-sm" key={feature}>
-                      <Check className="mt-0.5 size-4 shrink-0 text-primary" />
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-                  <SyncCta location="sync_pricing">
-                    Build my venue for free
-                  </SyncCta>
-                  <Link
-                    className={buttonVariants({
-                      variant: "outline",
-                      size: "lg",
-                    })}
-                    onClick={() => {
-                      markSyncOnboardingIntent();
-                      trackMarketingEvent("cta_clicked", {
-                        button_text: "I am helping a venue",
-                        destination: "/venue-portal",
-                        location: "sync_pricing",
-                        product: "sync",
-                      });
-                    }}
-                    to="/venue-portal"
-                  >
-                    I am helping a venue
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-            <div className="flex flex-col justify-center rounded-3xl border border-border bg-muted/30 p-6 sm:p-8">
-              <Sparkles className="size-6 text-primary" />
-              <h3 className="mt-5 font-black text-2xl">
-                Growing past one location?
-              </h3>
-              <p className="mt-3 text-muted-foreground text-sm leading-6">
-                Sync keeps organizations and locations separate, so your next
-                branch can have its own menu, staff, hours, tables, and
-                operating data. Ask us about expansion and enterprise pricing
-                when you are ready.
-              </p>
-              <Link
-                className="mt-6 inline-flex items-center gap-2 font-bold text-primary text-sm hover:underline"
-                onClick={() => {
-                  markSyncOnboardingIntent();
-                  trackMarketingEvent("cta_clicked", {
-                    button_text: "Start with one real location",
-                    destination: "/venue-portal",
-                    location: "sync_expansion",
-                    product: "sync",
-                  });
-                }}
-                to="/venue-portal"
+
+            {/* Billing Toggle */}
+            <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 p-1.5">
+              <button
+                className={`rounded-full px-5 py-2 text-xs font-bold transition cursor-pointer ${
+                  billingInterval === "monthly"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setBillingInterval("monthly")}
+                type="button"
               >
-                Start with one real location <ArrowRight className="size-4" />
-              </Link>
+                Monthly billing
+              </button>
+              <button
+                className={`inline-flex items-center gap-1.5 rounded-full px-5 py-2 text-xs font-bold transition cursor-pointer ${
+                  billingInterval === "annual"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setBillingInterval("annual")}
+                type="button"
+              >
+                <span>Annual billing</span>
+                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-extrabold text-emerald-400">
+                  Save ~15%
+                </span>
+              </button>
             </div>
           </div>
-          <p className="mx-auto mt-6 max-w-3xl text-center text-muted-foreground text-xs leading-5">
-            Pricing shown is the intended Sync Core offer and may be finalized
-            as paid billing is enabled. Venue setup remains free for now; no
-            payment is collected by this page.
+
+          <div className="mt-14 grid gap-6 lg:grid-cols-3">
+            {SYNC_TIERS.map((tier) => {
+              const price =
+                billingInterval === "annual"
+                  ? tier.priceAnnual
+                  : tier.priceMonthly;
+
+              return (
+                <Card
+                  className={`flex flex-col justify-between overflow-hidden rounded-3xl border transition ${
+                    tier.popular
+                      ? "border-primary shadow-2xl shadow-primary/15 ring-2 ring-primary"
+                      : "border-border hover:border-primary/40"
+                  }`}
+                  key={tier.id}
+                >
+                  <div>
+                    <div
+                      className={`p-6 sm:p-8 ${
+                        tier.popular
+                          ? "bg-primary text-primary-foreground"
+                          : "border-b border-border bg-card"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p
+                            className={`text-xs font-bold uppercase tracking-wider ${
+                              tier.popular
+                                ? "text-primary-foreground/80"
+                                : "text-primary"
+                            }`}
+                          >
+                            {tier.badge}
+                          </p>
+                          <h3 className="mt-1 font-black text-2xl sm:text-3xl">
+                            {tier.name}
+                          </h3>
+                        </div>
+                        {tier.popular ? (
+                          <Badge className="border-primary-foreground/30 bg-primary-foreground/20 text-primary-foreground font-bold text-xs">
+                            Most Popular
+                          </Badge>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-6 flex items-baseline gap-1">
+                        <span className="font-black text-5xl tracking-tight">
+                          ${price}
+                        </span>
+                        <span
+                          className={`text-sm font-semibold ${
+                            tier.popular
+                              ? "text-primary-foreground/75"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          /mo
+                        </span>
+                      </div>
+                      <p
+                        className={`mt-2 font-bold text-sm ${
+                          tier.popular
+                            ? "text-primary-foreground/90"
+                            : "text-foreground"
+                        }`}
+                      >
+                        {tier.maxStaffText}
+                      </p>
+                      <p
+                        className={`mt-1 text-xs ${
+                          tier.popular
+                            ? "text-primary-foreground/75"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {billingInterval === "annual"
+                          ? "Billed annually"
+                          : "Billed monthly"}
+                      </p>
+                    </div>
+
+                    <CardContent className="p-6 sm:p-8">
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {tier.description}
+                      </p>
+
+                      <div className="mt-6 space-y-3">
+                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Included capabilities:
+                        </p>
+                        <ul className="space-y-2.5">
+                          {tier.features.map((feature) => (
+                            <li
+                              className="flex items-start gap-2.5 text-sm"
+                              key={feature}
+                            >
+                              <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                              <span className="text-foreground/90 leading-tight">
+                                {feature}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </CardContent>
+                  </div>
+
+                  <div className="p-6 pt-0 sm:p-8 sm:pt-0">
+                    <SyncCta location={`sync_tier_${tier.id}`}>
+                      {tier.buttonText}
+                    </SyncCta>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          <p className="mx-auto mt-8 max-w-2xl text-center text-xs text-muted-foreground">
+            Venue onboarding and operational setup are free to explore.
+            Subscription billing activates only when your venue turns on live
+            service.
           </p>
+        </div>
+      </section>
+
+      {/* Chewbuu Spotlight Promotion Suite */}
+      <section className="border-b-8 border-border bg-muted/20 px-5 py-16 sm:px-8 sm:py-24 lg:px-12">
+        <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-2xl text-center">
+            <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <Sparkles data-icon="inline-start" /> Chewbuu Spotlight
+            </Badge>
+            <h2 className="mt-4 text-balance font-black text-3xl tracking-tight sm:text-5xl">
+              Turn slow nights into busy date nights.
+            </h2>
+            <p className="mt-4 text-muted-foreground text-base leading-7 sm:text-lg">
+              No generic ads. Chewbuu Spotlight packages put your venue, live
+              events, and daily specials directly in front of couples actively
+              planning their next night out.
+            </p>
+          </div>
+
+          <div className="mt-14 grid gap-6 lg:grid-cols-3">
+            {SPOTLIGHT_OFFERS.map(
+              ({
+                badge,
+                description,
+                duration,
+                features,
+                icon: Icon,
+                id,
+                name,
+                price,
+                priceSuffix,
+              }) => (
+                <article
+                  className="flex flex-col justify-between rounded-3xl border border-border bg-card p-6 sm:p-8 transition hover:border-amber-500/40 hover:shadow-xl hover:shadow-amber-500/5"
+                  key={id}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="grid size-12 place-items-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <Icon className="size-6" />
+                      </span>
+                      <Badge
+                        className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-bold"
+                        variant="outline"
+                      >
+                        {badge}
+                      </Badge>
+                    </div>
+
+                    <h3 className="mt-6 font-black text-2xl">{name}</h3>
+                    <div className="mt-3 flex items-baseline gap-1">
+                      <span className="font-black text-4xl text-foreground">
+                        {price}
+                      </span>
+                      <span className="text-sm font-semibold text-muted-foreground">
+                        {priceSuffix}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                      {duration}
+                    </p>
+                    <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
+                      {description}
+                    </p>
+
+                    <div className="mt-6 border-t border-border/80 pt-5 space-y-2.5">
+                      {features.map((feat) => (
+                        <div
+                          className="flex items-start gap-2 text-xs sm:text-sm text-foreground/85"
+                          key={feat}
+                        >
+                          <Sparkles className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                          <span>{feat}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-8">
+                    <Link
+                      className={buttonVariants({
+                        className: "w-full rounded-full font-bold",
+                        size: "lg",
+                        variant: "outline",
+                      })}
+                      onClick={() => {
+                        markSyncOnboardingIntent();
+                        trackMarketingEvent("cta_clicked", {
+                          button_text: `Boost with ${name}`,
+                          destination: "/venue-portal",
+                          location: `sync_spotlight_${id}`,
+                          product: "sync",
+                        });
+                      }}
+                      to="/venue-portal"
+                    >
+                      Boost with {name}
+                    </Link>
+                  </div>
+                </article>
+              )
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* 5% In-App Platform Fee Breakdown */}
+      <section className="border-b-8 border-border bg-background px-5 py-16 sm:px-8 sm:py-24 lg:px-12">
+        <div className="mx-auto max-w-5xl">
+          <div className="mx-auto max-w-2xl text-center">
+            <Badge className="border-primary/30 bg-primary/10 text-primary">
+              <Percent data-icon="inline-start" /> Transparent marketplace
+            </Badge>
+            <h2 className="mt-4 text-balance font-black text-3xl tracking-tight sm:text-5xl">
+              5% in-app dining fee. 100% pass-through for tips and taxes.
+            </h2>
+            <p className="mt-4 text-muted-foreground text-base leading-7 sm:text-lg">
+              No 30% delivery app commissions. No per-cover booking penalties.
+              When daters pay their tab in the Chewbuu app, our take-rate is
+              predictable and fair.
+            </p>
+          </div>
+
+          <div className="mt-12 rounded-3xl border border-primary/20 bg-primary/5 p-6 sm:p-10">
+            <div className="grid gap-8 md:grid-cols-[1.2fr_0.8fr] md:items-center">
+              <div>
+                <h3 className="font-black text-2xl">
+                  Example check: $100 Food & Drink bill
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  On a $130 total credit card transaction ($100 food & beverage
+                  + $10 municipal tax + $20 server tip):
+                </p>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Chewbuu 5% Fee
+                    </p>
+                    <p className="mt-1 font-black text-2xl text-primary">
+                      $5.00
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      5% strictly on F&B subtotal
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Staff Tip Pass-Through
+                    </p>
+                    <p className="mt-1 font-black text-2xl text-emerald-600">
+                      $20.00
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      100% to servers & kitchen ($0 fee)
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Taxes & Venue Net
+                    </p>
+                    <p className="mt-1 font-black text-2xl text-foreground">
+                      $105.00
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      $10 tax to escrow + $95 net
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border/80 bg-card p-6 shadow-sm">
+                <h4 className="font-extrabold text-base">
+                  Why venues prefer Chewbuu:
+                </h4>
+                <ul className="mt-4 space-y-3 text-xs sm:text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <span>
+                      <strong>High-margin dine-in seats:</strong> Brings paying
+                      couples directly into your dining room instead of
+                      discounted takeout.
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <span>
+                      <strong>Zero hardware leases:</strong> Runs on standard
+                      iPads and phones. No locked proprietary POS hardware
+                      contracts.
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <span>
+                      <strong>Instant payout settlement:</strong> Built on
+                      Stripe Connect with automated tip allocation to staff bank
+                      accounts.
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -530,7 +932,7 @@ export const Route = createFileRoute("/sync-platform")({
           offers: {
             "@type": "Offer",
             description:
-              "Free venue setup; the intended Sync Core plan is $60 per month for up to 50 staff seats.",
+              "Free venue setup; plans start at $59 per month for up to 50 staff seats.",
             price: "0",
             priceCurrency: "USD",
           },

@@ -505,23 +505,22 @@ export const inviteVenueMembers = async (
     .where("id", "=", body.locationId)
     .executeTakeFirst();
   if (!location) throw new Error("Venue not found.");
-  const [syncPlan, organizationSubscription, legacySubscription, activeStaff] =
+  const [syncPlans, organizationSubscription, legacySubscription, activeStaff] =
     await Promise.all([
       db
         .selectFrom("sync_plan")
-        .select("max_staff")
-        .where("code", "=", "sync_50")
-        .executeTakeFirst(),
+        .select(["code", "max_staff"])
+        .where("active", "=", true)
+        .execute(),
       db
         .selectFrom("subscription")
-        .select("status")
+        .select(["plan", "status"])
         .where("reference_id", "=", location.organization_id)
-        .where("plan", "=", "sync")
         .where("status", "in", ["active", "trialing"])
         .executeTakeFirst(),
       db
         .selectFrom("sync_subscription")
-        .select("status")
+        .select(["plan", "status"])
         .where("organization_id", "=", location.organization_id)
         .where("status", "in", ["active", "trialing"])
         .executeTakeFirst(),
@@ -535,8 +534,18 @@ export const inviteVenueMembers = async (
   if (!organizationSubscription && !legacySubscription) {
     throw new Error("An active Chewbuu Sync subscription is required.");
   }
-  const maxStaff = syncPlan?.max_staff ?? 50;
-  if (activeStaff.length + body.members.length > maxStaff) {
+  const subscribedPlanCode =
+    organizationSubscription?.plan ?? legacySubscription?.plan ?? "sync_50";
+  const matchedPlan = syncPlans.find(
+    (p) =>
+      p.code === subscribedPlanCode ||
+      (subscribedPlanCode === "sync" && p.code === "sync_50")
+  );
+  const maxStaff = matchedPlan?.max_staff ?? 50;
+  if (
+    maxStaff < 999_999 &&
+    activeStaff.length + body.members.length > maxStaff
+  ) {
     throw new Error(
       `This Sync plan supports up to ${maxStaff} active staff members.`
     );

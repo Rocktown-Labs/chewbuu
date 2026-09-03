@@ -20,6 +20,7 @@ import {
   LoaderCircle,
   Menu,
   RefreshCw,
+  Sparkles,
   Store,
   Tag,
   Table2,
@@ -231,6 +232,18 @@ function VenueWorkspacePage() {
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not publish special."
+      );
+    }
+  };
+
+  const boostSpecial = async (id: string) => {
+    try {
+      await venueApi.updateSpecial({ featured: true, id });
+      toast.success("Special boosted to Spotlight!");
+      await refresh();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not boost special."
       );
     }
   };
@@ -700,6 +713,11 @@ function VenueWorkspacePage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
+                        {special.featured ? (
+                          <Badge className="gap-1 border-amber-500/30 bg-amber-500/10 text-[10px] font-bold text-amber-600">
+                            <Sparkles className="size-2.5" /> Spotlight
+                          </Badge>
+                        ) : null}
                         <StatusBadge status={special.status} />
                         {special.status === "draft" ? (
                           <Button
@@ -708,6 +726,17 @@ function VenueWorkspacePage() {
                             variant="outline"
                           >
                             Publish
+                          </Button>
+                        ) : null}
+                        {special.status === "published" && !special.featured ? (
+                          <Button
+                            className="gap-1 text-xs"
+                            onClick={() => void boostSpecial(special.id)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            <Sparkles className="size-3 text-amber-500" />
+                            Boost ($19)
                           </Button>
                         ) : null}
                       </div>
