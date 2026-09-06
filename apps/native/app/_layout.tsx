@@ -13,10 +13,14 @@ export const unstable_settings = {
 
 function StackLayout() {
   return (
-    <Stack screenOptions={{}}>
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
-      <Stack.Screen name="date" options={{ headerShown: false }} />
-      <Stack.Screen name="review" options={{ headerShown: false }} />
+      <Stack.Screen name="date/[date-id]" options={{ headerShown: false }} />
+      <Stack.Screen name="date/new" options={{ headerShown: false }} />
+      <Stack.Screen
+        name="review/[request-id]"
+        options={{ headerShown: false }}
+      />
       <Stack.Screen
         name="modal"
         options={{ presentation: "modal", title: "Modal" }}
