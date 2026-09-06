@@ -26,6 +26,14 @@ const departments = [
       "Help with your profile, date planning, app navigation, or general questions.",
   },
   {
+    email: "support@chewbuu.com",
+    icon: ShieldCheck,
+    response: "Review timing varies",
+    title: "Account Action Appeals",
+    description:
+      "Request review of a content removal, feature restriction, suspension, or account termination.",
+  },
+  {
     email: "billing@chewbuu.com",
     icon: CreditCard,
     response: "Response timing varies",
@@ -80,11 +88,13 @@ function ContactRoute() {
         ? "billing@chewbuu.com"
         : topic === "safety"
           ? "safety@chewbuu.com"
-          : topic === "venue"
-            ? "venues@chewbuu.com"
-            : topic === "legal"
-              ? "lawenforcement@chewbuu.com"
-              : "support@chewbuu.com";
+          : topic === "appeal"
+            ? "support@chewbuu.com"
+            : topic === "venue"
+              ? "venues@chewbuu.com"
+              : topic === "legal"
+                ? "lawenforcement@chewbuu.com"
+                : "support@chewbuu.com";
 
     const subject = encodeURIComponent(
       `[Chewbuu Inquiry] ${topic.toUpperCase()} - from ${name || "Member"}`
@@ -159,8 +169,9 @@ function ContactRoute() {
               Send us a direct message
             </h2>
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-              Select your topic and submit; our support team will follow up
-              quickly.
+              Select your topic and submit; response timing varies by request
+              type. Reports and appeals should include the relevant account or
+              content details.
             </p>
 
             <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
@@ -217,6 +228,7 @@ function ContactRoute() {
                     Billing, Cancellation & Refunds
                   </option>
                   <option value="safety">Trust & Safety / Member Report</option>
+                  <option value="appeal">Account Action Appeal</option>
                   <option value="venue">Venue Partner (Chewbuu Sync)</option>
                   <option value="legal">Legal Process & Compliance</option>
                 </select>
@@ -232,7 +244,7 @@ function ContactRoute() {
                 <Textarea
                   id="contact-message"
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Describe your inquiry, order details, or question..."
+                  placeholder="For a report, include the profile or content details. For an appeal, include the account action and relevant context."
                   required
                   rows={4}
                   value={message}
