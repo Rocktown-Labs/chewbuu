@@ -4,8 +4,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import {
   CalendarHeart,
   Flame,
+  House,
   MessageCircle,
-  ShieldCheck,
+  Sparkles,
   UtensilsCrossed,
 } from "lucide-react-native";
 import React from "react";
@@ -29,9 +30,9 @@ interface TabItemConfig {
 const TAB_CONFIGS: Record<string, TabItemConfig> = {
   index: {
     name: "index",
-    label: "Discover",
+    label: "Home",
     icon: ({ color, size, focused }) => (
-      <Flame color={color} size={size} fill={focused ? color : "transparent"} />
+      <House color={color} size={size} fill={focused ? color : "transparent"} />
     ),
   },
   spots: {
@@ -49,8 +50,6 @@ const TAB_CONFIGS: Record<string, TabItemConfig> = {
         fill={focused ? color : "transparent"}
       />
     ),
-    // Active date beacon
-    badgeCount: 1,
   },
   chats: {
     name: "chats",
@@ -62,13 +61,11 @@ const TAB_CONFIGS: Record<string, TabItemConfig> = {
         fill={focused ? color : "transparent"}
       />
     ),
-    // Unread messages
-    badgeCount: 2,
   },
-  profile: {
-    name: "profile",
-    label: "Profile",
-    icon: ({ color, size }) => <ShieldCheck color={color} size={size} />,
+  recaps: {
+    name: "recaps",
+    label: "Recaps",
+    icon: ({ color, size }) => <Sparkles color={color} size={size} />,
   },
 };
 
@@ -187,8 +184,8 @@ export function LiquidGlassTabBar({
               });
             };
 
-            // Chewbuu Gold/Amber Brand
-            const activeColor = isDark ? "#e6a15c" : "#d97706";
+            // Chewbuu brand gold (web primary)
+            const activeColor = isDark ? "#e6c46a" : "#3a2410";
             const inactiveColor = isDark
               ? "rgba(255, 255, 255, 0.45)"
               : "rgba(0, 0, 0, 0.45)";

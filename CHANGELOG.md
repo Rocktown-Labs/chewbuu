@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed native social-app login: web no longer 500s on `/api/auth/*` when `RESEND_API_KEY` is unset (Resend client is now lazily initialized; webhook returns 503 only when actually called unconfigured), native `authClient` baseURL now includes the `/api/auth` mount, sign-in accepts email or username via the username plugin, and dev `allowedHosts` covers `localhost:3001`/`8081`.
+- Rebuilt the native social app toward 1-1 web parity: Chewbuu brand theme tokens (dark brown/gold) shared by web and native, minimal shared header (logo + notifications + avatar), tabs aligned to the web mobile footer (Home, Spots, Dates, Chats, Recaps with Specials as a filter inside Spots, not a separate tab), web-copy screen headings with pull-to-refresh, and onboarding expanded to Basics, Permissions, Identity, Media, Preferences, Interests, Values, and Friends & Safety.
+
 ### Added
 
 - Added a dedicated 'Specials' filter tab to the Spots exploration view with active daily specials, search filtering, and quick date-planning actions.

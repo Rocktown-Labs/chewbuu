@@ -5,12 +5,18 @@ import {
   CheckCircle2,
   ChevronRight,
   MapPin,
-  RefreshCw,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, Pressable, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  Text,
+  View,
+} from "react-native";
 
+import { ScreenHeading } from "@/components/screen-heading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -121,7 +127,6 @@ function CalendarGrid({
 }
 
 export default function DatesScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ view?: string }>();
   const [view, setView] = useState<"list" | "calendar">(
@@ -200,27 +205,10 @@ export default function DatesScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View
-        className="flex-row items-center justify-between px-5 pb-3 pt-2"
-        style={{ paddingTop: insets.top + 4 }}
-      >
-        <View className="flex-row items-center gap-2">
-          <View className="h-8 w-8 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
-            <CalendarDays color="#f59e0b" size={16} />
-          </View>
-          <Text className="text-xl font-extrabold tracking-tight text-foreground">
-            Dates
-          </Text>
-        </View>
-        <Pressable
-          accessibilityLabel="Refresh dates"
-          className="rounded-full p-2 active:bg-muted"
-          disabled={isRefreshing}
-          onPress={() => void handleRefresh()}
-        >
-          <RefreshCw color="#f59e0b" size={18} />
-        </Pressable>
-      </View>
+      <ScreenHeading
+        subtitle="Request history, match options, date rooms, reviews, and recap content live here."
+        title="Dates & Requests"
+      />
 
       <FlatList
         contentContainerStyle={{
@@ -230,6 +218,12 @@ export default function DatesScreen() {
         }}
         data={view === "list" ? [...upcoming, ...past] : []}
         keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl
+            onRefresh={() => void handleRefresh()}
+            refreshing={isRefreshing}
+          />
+        }
         ListEmptyComponent={
           view === "calendar" ? (
             <CalendarGrid

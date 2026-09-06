@@ -66,9 +66,12 @@ import { cn } from "@/lib/utils";
 const STEPS = [
   { id: 1, label: "Basics" },
   { id: 2, label: "Permissions" },
-  { id: 3, label: "Media" },
-  { id: 4, label: "Preferences" },
-  { id: 5, label: "Interests" },
+  { id: 3, label: "Identity" },
+  { id: 4, label: "Media" },
+  { id: 5, label: "Preferences" },
+  { id: 6, label: "Interests" },
+  { id: 7, label: "Values" },
+  { id: 8, label: "Friends" },
 ];
 
 export default function OnboardingScreen() {
@@ -370,7 +373,7 @@ export default function OnboardingScreen() {
           <View className="flex-col gap-4">
             <View className="flex-col gap-1">
               <Text className="text-xl font-extrabold text-foreground">
-                Tell us about you
+                Tell Chewbuu who is going out.
               </Text>
               <Text className="text-xs text-muted-foreground">
                 Your first name, age, and neighborhood will be visible on your
@@ -521,7 +524,7 @@ export default function OnboardingScreen() {
           <View className="flex-col gap-4">
             <View className="flex-col gap-1">
               <Text className="text-xl font-extrabold text-foreground">
-                Device Permissions & Safety Alerts
+                Enable Device Access & Alerts
               </Text>
               <Text className="text-xs text-muted-foreground">
                 Chewbuu uses live verification, background safety beacons, and
@@ -649,12 +652,56 @@ export default function OnboardingScreen() {
           </View>
         )}
 
-        {/* Step 3: Media Verification */}
+        {/* Step 3: Identity */}
         {currentStep === 3 && (
           <View className="flex-col gap-4">
             <View className="flex-col gap-1">
               <Text className="text-xl font-extrabold text-foreground">
-                Media & Video Verification
+                Confirm you’re a real person
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                Verified identities unlock dating. Complete the live selfie
+                check to continue.
+              </Text>
+            </View>
+
+            <Card className="p-4 border-border/80 flex-col gap-3">
+              <View className="flex-row items-center gap-2">
+                <ShieldCheck size={16} color="#e6c46a" />
+                <Text className="text-sm font-bold text-foreground">
+                  Identity status:{" "}
+                  {data.media.selfieVerified ? "Verified" : "Not verified"}
+                </Text>
+              </View>
+              <Text className="text-xs text-muted-foreground">
+                You’ll take a quick live photo. Chewbuu reviews it for
+                verification.
+              </Text>
+              <Button
+                variant={data.media.selfieVerified ? "outline" : "default"}
+                size="sm"
+                className="gap-1.5"
+                onPress={() => {
+                  void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  void handleCaptureSelfie();
+                }}
+              >
+                <Text className="text-xs font-bold text-primary-foreground">
+                  {data.media.selfieVerified
+                    ? "Retake verification selfie"
+                    : "Start verification"}
+                </Text>
+              </Button>
+            </Card>
+          </View>
+        )}
+
+        {/* Step 4: Media Verification */}
+        {currentStep === 4 && (
+          <View className="flex-col gap-4">
+            <View className="flex-col gap-1">
+              <Text className="text-xl font-extrabold text-foreground">
+                Live Capture. Real photos.
               </Text>
               <Text className="text-xs text-muted-foreground">
                 Chewbuu profiles require live selfie verification and an
@@ -758,12 +805,12 @@ export default function OnboardingScreen() {
           </View>
         )}
 
-        {/* Step 4: Preferences */}
-        {currentStep === 4 && (
+        {/* Step 5: Preferences */}
+        {currentStep === 5 && (
           <View className="flex-col gap-4">
             <View className="flex-col gap-1">
               <Text className="text-xl font-extrabold text-foreground">
-                Dating Preferences
+                Set your match lane.
               </Text>
               <Text className="text-xs text-muted-foreground">
                 Filter who you want to meet for dinner dates, cocktails, and
@@ -887,12 +934,12 @@ export default function OnboardingScreen() {
           </View>
         )}
 
-        {/* Step 5: Interests & Category Spots */}
-        {currentStep === 5 && (
+        {/* Step 6: Interests & Category Spots */}
+        {currentStep === 6 && (
           <View className="flex-col gap-4">
             <View className="flex-col gap-1">
               <Text className="text-xl font-extrabold text-foreground">
-                Favorite Spots & Interests
+                Give matching more signal.
               </Text>
               <Text className="text-xs text-muted-foreground">
                 We'll match you with singles who love the same places and
@@ -1052,6 +1099,109 @@ export default function OnboardingScreen() {
                   <Plus size={14} color="#000000" />
                   <Text className="text-xs font-bold text-black">Add</Text>
                 </Button>
+              </View>
+            </Card>
+          </View>
+        )}
+
+        {/* Step 7: Values */}
+        {currentStep === 7 && (
+          <View className="flex-col gap-4">
+            <View className="flex-col gap-1">
+              <Text className="text-xl font-extrabold text-foreground">
+                Make the matching signal honest
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                Share what matters. “Prefer not to say” counts too.
+              </Text>
+            </View>
+
+            <Card className="p-4 flex-col gap-4 border-border/80">
+              {(
+                [
+                  { key: "politics", label: "Politics" },
+                  { key: "religion", label: "Religion" },
+                  { key: "kids", label: "Kids" },
+                  { key: "familyPlans", label: "Family plans" },
+                ] as const
+              ).map((field) => (
+                <View className="flex-col gap-1.5" key={field.key}>
+                  <Text className="text-xs font-bold text-foreground">
+                    {field.label}
+                  </Text>
+                  <Input
+                    placeholder="Prefer not to say"
+                    value={data.values[field.key]}
+                    onChangeText={(value) =>
+                      handleUpdate((prev) => ({
+                        ...prev,
+                        values: { ...prev.values, [field.key]: value },
+                      }))
+                    }
+                  />
+                </View>
+              ))}
+            </Card>
+          </View>
+        )}
+
+        {/* Step 8: Friends & Safety */}
+        {currentStep === 8 && (
+          <View className="flex-col gap-4">
+            <View className="flex-col gap-1">
+              <Text className="text-xl font-extrabold text-foreground">
+                Chewbuu is better with friends
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                Add a safety contact and invite someone you trust.
+              </Text>
+            </View>
+
+            <Card className="p-4 flex-col gap-4 border-border/80">
+              <View className="flex-col gap-1.5">
+                <Text className="text-xs font-bold text-foreground">
+                  Safety contact name
+                </Text>
+                <Input
+                  placeholder="e.g. Jordan"
+                  value={data.friends.trustedName}
+                  onChangeText={(trustedName) =>
+                    handleUpdate((prev) => ({
+                      ...prev,
+                      friends: { ...prev.friends, trustedName },
+                    }))
+                  }
+                />
+              </View>
+              <View className="flex-col gap-1.5">
+                <Text className="text-xs font-bold text-foreground">
+                  Safety contact email or phone
+                </Text>
+                <Input
+                  placeholder="jordan@example.com"
+                  value={data.friends.trustedContact}
+                  onChangeText={(trustedContact) =>
+                    handleUpdate((prev) => ({
+                      ...prev,
+                      friends: { ...prev.friends, trustedContact },
+                    }))
+                  }
+                />
+              </View>
+              <View className="flex-col gap-1.5">
+                <Text className="text-xs font-bold text-foreground">
+                  Invite a friend (optional)
+                </Text>
+                <Input
+                  placeholder="friend@example.com"
+                  value={data.friends.friendInvite}
+                  onChangeText={(friendInvite) =>
+                    handleUpdate((prev) => ({
+                      ...prev,
+                      friends: { ...prev.friends, friendInvite },
+                    }))
+                  }
+                />
               </View>
             </Card>
           </View>

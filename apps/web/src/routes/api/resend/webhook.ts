@@ -2,7 +2,16 @@ import { env } from "@chewbuu/env/server";
 import { createFileRoute } from "@tanstack/react-router";
 import { Resend } from "resend";
 
-const resend = new Resend(env.RESEND_API_KEY);
+let resendClient: Resend | null = null;
+
+const getResendClient = () => {
+  if (!env.RESEND_API_KEY) {
+    return null;
+  }
+
+  resendClient ??= new Resend(env.RESEND_API_KEY);
+  return resendClient;
+};
 
 export const Route = createFileRoute("/api/resend/webhook")({
   server: {
@@ -10,6 +19,13 @@ export const Route = createFileRoute("/api/resend/webhook")({
       POST: async ({ request }) => {
         if (!env.RESEND_WEBHOOK_SECRET) {
           return new Response("Resend webhook secret is not configured", {
+            status: 503,
+          });
+        }
+
+        const resend = getResendClient();
+        if (!resend) {
+          return new Response("Resend API key is not configured", {
             status: 503,
           });
         }

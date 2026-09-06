@@ -3,3 +3,104 @@
 @import "heroui-native/styles";
 
 @source './node_modules/heroui-native/lib';
+
+/*
+ * Chewbuu brand parity with web (packages/ui/src/styles/globals.css).
+ * HeroUI Native resolves bg-background / text-foreground / border-border from
+ * the --background / --foreground / --border vars below. The @theme inline
+ * aliases map the web-style tokens used across native screens
+ * (bg-card, text-muted-foreground, bg-primary, ...) onto HeroUI vars so
+ * existing classes render brand colors instead of silently falling back.
+ */
+
+@layer theme {
+  :root {
+    @variant light {
+      --background: oklch(0.985 0.018 87);
+      --foreground: oklch(0.205 0.055 38);
+
+      --surface: oklch(0.996 0.01 82);
+      --surface-foreground: oklch(0.205 0.055 38);
+      --surface-secondary: oklch(0.935 0.026 79);
+      --surface-secondary-foreground: oklch(0.205 0.055 38);
+      --surface-tertiary: oklch(0.905 0.078 82);
+      --surface-tertiary-foreground: oklch(0.245 0.068 38);
+
+      --overlay: oklch(0.996 0.01 82);
+      --overlay-foreground: oklch(0.205 0.055 38);
+
+      --muted: oklch(0.47 0.046 47);
+
+      --default: oklch(0.905 0.078 82);
+      --default-foreground: oklch(0.245 0.068 38);
+
+      --accent: oklch(0.245 0.068 38);
+      --accent-foreground: oklch(0.925 0.075 84);
+
+      --field-background: oklch(0.996 0.01 82);
+      --field-foreground: oklch(0.205 0.055 38);
+      --field-placeholder: oklch(0.47 0.046 47);
+      --field-border: oklch(0.86 0.035 72);
+
+      --border: oklch(0.86 0.035 72);
+      --separator: oklch(0.86 0.035 72);
+      --focus: oklch(0.69 0.115 70);
+    }
+
+    @variant dark {
+      --background: oklch(0.18 0.05 38);
+      --foreground: oklch(0.94 0.03 78);
+
+      --surface: oklch(0.22 0.054 38);
+      --surface-foreground: oklch(0.94 0.03 78);
+      --surface-secondary: oklch(0.3 0.052 46);
+      --surface-secondary-foreground: oklch(0.94 0.03 78);
+      --surface-tertiary: oklch(0.3 0.052 46);
+      --surface-tertiary-foreground: oklch(0.94 0.03 78);
+
+      --overlay: oklch(0.22 0.054 38);
+      --overlay-foreground: oklch(0.94 0.03 78);
+
+      --muted: oklch(0.74 0.045 73);
+
+      --default: oklch(0.3 0.052 46);
+      --default-foreground: oklch(0.94 0.03 78);
+
+      --accent: oklch(0.84 0.1 82);
+      --accent-foreground: oklch(0.18 0.05 38);
+
+      --field-background: oklch(0.22 0.054 38);
+      --field-foreground: oklch(0.94 0.03 78);
+      --field-placeholder: oklch(0.74 0.045 73);
+      --field-border: oklch(0.94 0.03 78 / 18%);
+
+      --border: oklch(0.94 0.03 78 / 14%);
+      --separator: oklch(0.94 0.03 78 / 14%);
+      --focus: oklch(0.84 0.1 82);
+    }
+  }
+}
+
+@theme inline {
+  --color-card: var(--surface);
+  --color-card-foreground: var(--surface-foreground);
+  --color-popover: var(--overlay);
+  --color-popover-foreground: var(--overlay-foreground);
+
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-foreground);
+
+  --color-secondary: var(--surface-secondary);
+  --color-secondary-foreground: var(--surface-secondary-foreground);
+
+  --color-muted: var(--surface-secondary);
+  --color-muted-foreground: var(--muted);
+
+  --color-accent: var(--surface-tertiary);
+  --color-accent-foreground: var(--surface-tertiary-foreground);
+
+  --color-input: var(--field-background);
+  --color-ring: var(--focus);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--danger-foreground);
+}

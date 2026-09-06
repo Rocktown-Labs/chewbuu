@@ -198,8 +198,10 @@ export const createAuth = () => {
     baseURL: {
       allowedHosts: [
         "localhost:3000",
+        "localhost:3001",
         "localhost:5173",
         "localhost:4173",
+        "localhost:8081",
         "localhost",
         "*.localhost",
         "*.local",

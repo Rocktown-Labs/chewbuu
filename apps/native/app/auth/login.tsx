@@ -1,13 +1,7 @@
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import { Link, useRouter } from "expo-router";
-import {
-  ArrowRight,
-  Flame,
-  KeyRound,
-  Lock,
-  Mail,
-  Sparkles,
-} from "lucide-react-native";
+import { ArrowRight, Lock, Mail, Sparkles } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -18,27 +12,26 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { GlassView } from "@/components/ui/glass-view";
 import { Input } from "@/components/ui/input";
-import { useAppTheme } from "@/contexts/app-theme-context";
 import { authClient } from "@/lib/auth-client";
+
+const brandIcon = require("@/assets/images/icon.png");
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isDark } = useAppTheme();
 
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSignIn = async () => {
-    if (!email.trim() || !password.trim()) {
-      setErrorMessage("Please enter both email and password.");
+    const trimmedIdentifier = identifier.trim();
+    if (!trimmedIdentifier || !password) {
+      setErrorMessage("Please enter both email/username and password.");
       return;
     }
 
@@ -47,22 +40,41 @@ export default function LoginScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      const response = await authClient.signIn.email({
-        email: email.trim(),
-        password: password.trim(),
-      });
+      const isEmail = trimmedIdentifier.includes("@");
+      const response = isEmail
+        ? await authClient.signIn.email({
+            email: trimmedIdentifier,
+            password,
+          })
+        : await authClient.signIn.username({
+            password,
+            username: trimmedIdentifier.replace(/^@/, ""),
+          });
 
       if (response.error) {
-        setErrorMessage(response.error.message || "Failed to sign in.");
+        const { code } = response.error as { code?: string };
+        if (code === "EMAIL_NOT_VERIFIED") {
+          setErrorMessage("Please verify your email, then sign in.");
+        } else {
+          setErrorMessage(response.error.message || "Failed to sign in.");
+        }
         setLoading(false);
         return;
       }
 
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const session = await authClient.getSession();
+      const hasCompletedOnboarding =
+        (session.data?.user as { hasCompletedOnboarding?: boolean } | undefined)
+          ?.hasCompletedOnboarding ?? true;
       setLoading(false);
-      router.replace("/(drawer)/(tabs)");
-    } catch (error: any) {
-      setErrorMessage(error?.message || "Sign in failed.");
+      router.replace(
+        hasCompletedOnboarding ? "/(drawer)/(tabs)" : "/onboarding"
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Sign in failed."
+      );
       setLoading(false);
     }
   };
@@ -76,105 +88,127 @@ export default function LoginScreen() {
     <View className="flex-1 bg-background">
       <ScrollView
         contentContainerStyle={{
+          paddingBottom: insets.bottom + 40,
           paddingHorizontal: 24,
           paddingTop: insets.top + 40,
-          paddingBottom: insets.bottom + 40,
           flexGrow: 1,
           justifyContent: "center",
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Logo & Headline */}
-        <View className="flex-col items-center gap-3 mb-8 text-center">
-          <GlassView
-            className="size-16 rounded-3xl border-amber-500/40 bg-amber-950/40 items-center justify-center shadow-xl"
-            borderRadius={24}
-          >
-            <Flame size={32} color="#f59e0b" />
-          </GlassView>
+        <View className="mb-8 flex-col items-center gap-3">
+          <View className="size-24 items-center justify-center overflow-hidden rounded-3xl border border-border shadow-md bg-card">
+            <Image
+              contentFit="cover"
+              source={brandIcon}
+              style={{ height: 96, width: 96 }}
+            />
+          </View>
 
-          <Text className="text-3xl font-black text-foreground tracking-tight mt-2">
-            Welcome to Chewbuu
+          <Text className="mt-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+            Real People, Real Dates, Real Results.
           </Text>
-          <Text className="text-xs text-muted-foreground text-center max-w-xs leading-relaxed">
-            Real dinner dates, curated spots, and verified video singles.
+          <Text className="text-center text-4xl font-semibold leading-tight text-foreground">
+            Meet for something worth showing up for.
+          </Text>
+          <Text className="max-w-xs text-center text-sm leading-relaxed text-muted-foreground">
+            Chewbuu helps singles, friends, couples, and circles plan real dates
+            around food, drinks, games, events, and quick video-first intros.
           </Text>
         </View>
 
-        {/* Login Form Card */}
-        <Card className="p-6 border-border/80 flex-col gap-4 shadow-xl">
-          {errorMessage && (
-            <View className="p-3 rounded-2xl bg-red-500/10 border border-red-500/30">
+        <Card className="flex-col gap-4 border-border bg-card p-5 shadow-xl">
+          <Text className="text-xl font-bold text-foreground">Sign In</Text>
+          {errorMessage ? (
+            <View className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3">
               <Text className="text-xs font-semibold text-red-400">
                 {errorMessage}
               </Text>
             </View>
-          )}
+          ) : null}
 
           <View className="flex-col gap-1.5">
-            <Text className="text-xs font-bold text-foreground">Email</Text>
+            <Text className="ml-1 text-xs font-semibold text-foreground">
+              Email or username
+            </Text>
             <Input
-              placeholder="you@domain.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
               autoCapitalize="none"
+              autoComplete="username"
+              keyboardType="default"
+              onChangeText={setIdentifier}
+              placeholder="you@example.com or @username"
+              value={identifier}
               startIcon={<Mail size={16} color="#888888" />}
             />
           </View>
 
           <View className="flex-col gap-1.5">
-            <Text className="text-xs font-bold text-foreground">Password</Text>
+            <Text className="ml-1 text-xs font-semibold text-foreground">
+              Password
+            </Text>
             <Input
-              placeholder="••••••••"
-              value={password}
+              autoComplete="password"
               onChangeText={setPassword}
+              onSubmitEditing={() => void handleSignIn()}
+              placeholder="••••••••"
+              returnKeyType="go"
               secureTextEntry
+              value={password}
               startIcon={<Lock size={16} color="#888888" />}
             />
           </View>
 
           <Button
-            variant="sugar"
-            size="lg"
-            className="w-full mt-2 h-12 gap-2 shadow-lg"
-            onPress={handleSignIn}
+            className="mt-2 h-10 w-full gap-2"
             disabled={loading}
+            onPress={() => void handleSignIn()}
+            size="lg"
+            variant="default"
           >
             {loading ? (
-              <ActivityIndicator size="small" color="#000000" />
+              <ActivityIndicator size="small" color="#1c1206" />
             ) : (
               <>
-                <Text className="text-sm font-black text-black">Sign In</Text>
-                <ArrowRight size={16} color="#000000" />
+                <Text className="text-sm font-bold text-primary-foreground">
+                  Sign In
+                </Text>
+                <ArrowRight size={16} color="#1c1206" />
               </>
             )}
           </Button>
 
-          {/* Guest Explore Action */}
           <Button
-            variant="glass"
-            size="sm"
-            className="w-full h-10 gap-1.5"
+            className="h-10 w-full gap-1.5"
             onPress={handleGuestExplore}
+            size="sm"
+            variant="outline"
           >
-            <Sparkles size={14} color="#f59e0b" />
-            <Text className="text-xs font-bold text-amber-400">
+            <Sparkles size={14} color="#e6c46a" />
+            <Text className="text-xs font-bold text-primary">
               Explore Chewbuu as Guest
             </Text>
           </Button>
 
-          <View className="flex-row items-center justify-center gap-1 pt-2 border-t border-border/40 mt-2">
-            <Text className="text-xs text-muted-foreground">
-              Don't have an account?
-            </Text>
+          <View className="mt-2 flex-col items-center gap-2">
             <Link href="/auth/sign-up" asChild>
               <Pressable>
-                <Text className="text-xs font-bold text-amber-400">
-                  Create One
+                <Text className="text-sm text-foreground">
+                  Forgot password?
                 </Text>
               </Pressable>
             </Link>
+            <View className="flex-row items-center gap-1">
+              <Text className="text-xs text-muted-foreground">
+                Need to create an account?
+              </Text>
+              <Link href="/auth/sign-up" asChild>
+                <Pressable>
+                  <Text className="text-xs font-semibold text-foreground underline">
+                    Sign Up
+                  </Text>
+                </Pressable>
+              </Link>
+            </View>
           </View>
         </Card>
       </ScrollView>
