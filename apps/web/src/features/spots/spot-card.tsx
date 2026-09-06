@@ -38,6 +38,12 @@ export function SpotCard({ spot }: { spot: DatePlace }) {
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                {spot.spotlighted ? (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-600">
+                    <Sparkles aria-hidden="true" className="size-2.5" />
+                    Spotlight
+                  </span>
+                ) : null}
                 {isSync ? "Sync verified" : "Google discovery"}
                 {!isSync ? (
                   <Sparkles aria-hidden="true" className="size-3" />

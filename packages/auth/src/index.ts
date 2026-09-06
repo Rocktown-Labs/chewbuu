@@ -18,6 +18,19 @@ import {
 } from "./membership";
 
 const RESERVED_USERNAMES = new Set(["chewbuu", "chewbuusync"]);
+const SUBSCRIPTION_MANAGER_ROLES = new Set([
+  "admin",
+  "lead",
+  "manager",
+  "owner",
+]);
+
+type SubscriptionReferenceAction =
+  | "billing-portal"
+  | "cancel-subscription"
+  | "list-subscription"
+  | "restore-subscription"
+  | "upgrade-subscription";
 
 export const isReservedUsername = (value: string) =>
   RESERVED_USERNAMES.has(value.trim().replace(/^@/, "").toLowerCase());
@@ -51,18 +64,45 @@ export const buildStripePlans = async (db?: ReturnType<typeof createDb>) => {
       .selectAll()
       .where("active", "=", true)
       .execute();
-    let syncPlan:
-      | { max_staff: number; monthly_stripe_price_id: string | null }
-      | undefined;
+    let syncPlans: {
+      annual_price_cents: number;
+      annual_stripe_price_id: string | null;
+      code: string;
+      max_staff: number;
+      monthly_stripe_price_id: string | null;
+    }[] = [];
     try {
-      syncPlan = await executor
+      syncPlans = await executor
         .selectFrom("sync_plan")
-        .select(["max_staff", "monthly_stripe_price_id"])
+        .select([
+          "annual_price_cents",
+          "annual_stripe_price_id",
+          "code",
+          "max_staff",
+          "monthly_stripe_price_id",
+        ])
         .where("active", "=", true)
-        .where("code", "=", "sync_50")
-        .executeTakeFirst();
+        .orderBy("monthly_price_cents", "asc")
+        .execute();
     } catch {
-      // The Sync plan table is introduced after the legacy membership tables.
+      // The Sync plan table and its annual fields are introduced after the
+      // legacy membership tables. Keep the monthly catalog usable while an
+      // additive migration is rolling out.
+      try {
+        const legacySyncPlans = await executor
+          .selectFrom("sync_plan")
+          .select(["code", "max_staff", "monthly_stripe_price_id"])
+          .where("active", "=", true)
+          .orderBy("monthly_price_cents", "asc")
+          .execute();
+        syncPlans = legacySyncPlans.map((plan) => ({
+          ...plan,
+          annual_price_cents: 0,
+          annual_stripe_price_id: null,
+        }));
+      } catch {
+        // The Sync plan table is not available yet.
+      }
     }
 
     const planByTier = new Map(plans.map((plan) => [plan.tier, plan]));
@@ -93,16 +133,20 @@ export const buildStripePlans = async (db?: ReturnType<typeof createDb>) => {
         name: MEMBERSHIP_TIERS.sugar.name,
         priceId: sugarPlan?.stripe_price_id || env.STRIPE_SUGAR_PRICE_ID,
       },
-      ...(syncPlan?.monthly_stripe_price_id
-        ? [
-            {
-              group: "sync",
-              limits: { maxStaff: syncPlan.max_staff },
-              name: "sync",
-              priceId: syncPlan.monthly_stripe_price_id,
-            },
-          ]
-        : []),
+      ...syncPlans.flatMap((syncPlan) =>
+        syncPlan.monthly_stripe_price_id
+          ? [
+              {
+                annualDiscountPriceId:
+                  syncPlan.annual_stripe_price_id ?? undefined,
+                group: "sync",
+                limits: { maxStaff: syncPlan.max_staff },
+                name: syncPlan.code,
+                priceId: syncPlan.monthly_stripe_price_id,
+              },
+            ]
+          : []
+      ),
     ];
   } catch {
     return [
@@ -335,6 +379,30 @@ export const createAuth = () => {
                   },
                   name: organization.name,
                 }),
+              },
+              authorizeReference: async ({
+                action,
+                referenceId,
+                user,
+              }: {
+                action: SubscriptionReferenceAction;
+                referenceId: string;
+                user: { id: string; role?: string | null };
+              }) => {
+                if (user.role === "admin" || referenceId === user.id) {
+                  return true;
+                }
+                if (!referenceId) return false;
+
+                const member = await db
+                  .selectFrom("venue_member")
+                  .select(["role", "status"])
+                  .where("organization_id", "=", referenceId)
+                  .where("user_id", "=", user.id)
+                  .executeTakeFirst();
+                if (!member || member.status !== "active") return false;
+                if (action === "list-subscription") return true;
+                return SUBSCRIPTION_MANAGER_ROLES.has(member.role);
               },
               stripeClient: createStripeClient(env.STRIPE_SECRET_KEY as string),
               stripeWebhookSecret: stripeWebhookSecret as string,

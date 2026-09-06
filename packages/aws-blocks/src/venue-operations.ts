@@ -806,6 +806,12 @@ export const updateVenueStaff = async (
       .where("location_id", "=", body.locationId)
       .where("user_id", "=", body.userId)
       .execute();
+    await tx
+      .updateTable("venue_member")
+      .set({ role: nextRole, status: nextStatus, updated_at: new Date() })
+      .where("organization_id", "=", access.organizationId)
+      .where("user_id", "=", body.userId)
+      .execute();
     if (nextStatus === "removed") {
       const remainingAssignment = await tx
         .selectFrom("venue_member_location")

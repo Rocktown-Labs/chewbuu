@@ -240,8 +240,8 @@ function CommunitiesPage() {
               </CardTitle>
               <CardDescription>
                 {entitlements?.isAdmin
-                  ? "Admin test access: Sugar + Sync are active. Reserved Chewbuu handles are available to you."
-                  : "Mingle or Sugar membership is required to create a community."}
+                  ? "Admin test access: Host + Sync are active. Reserved Chewbuu handles are available to you."
+                  : "Mingle or Host membership is required to create a community."}
               </CardDescription>
             </CardHeader>
             <CardContent>

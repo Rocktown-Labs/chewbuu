@@ -23,7 +23,7 @@ export default function Header() {
 
   const publicLinks = [
     { href: "/#how-it-works", label: "How it works" },
-    { href: "/#pricing", label: "Pricing" },
+    { label: "Pricing", to: "/pricing" },
     { href: "/#faq", label: "FAQ" },
     { label: "For venues", to: "/sync-platform" },
   ] as const;

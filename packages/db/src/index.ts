@@ -54,6 +54,8 @@ export interface SyncPlanTable {
   description: string;
   id: string;
   max_staff: number;
+  annual_price_cents: number;
+  annual_stripe_price_id: string | null;
   monthly_price_cents: number;
   monthly_stripe_price_id: string | null;
   name: string;
@@ -76,10 +78,30 @@ export interface OrganizationTable {
   stripe_customer_id: string | null;
 }
 
+export interface MemberTable {
+  created_at: Timestamp;
+  id: string;
+  organization_id: string;
+  role: string;
+  user_id: string;
+}
+
+export interface VenueMemberTable {
+  created_at: Timestamp;
+  id: string;
+  organization_id: string;
+  role: string;
+  status: string;
+  updated_at: Timestamp;
+  user_id: string;
+}
+
 export interface Database {
   membership_plan: MembershipPlanTable;
+  member: MemberTable;
   organization: OrganizationTable;
   sync_plan: SyncPlanTable;
+  venue_member: VenueMemberTable;
   user: AuthUserTable;
 }
 

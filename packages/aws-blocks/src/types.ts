@@ -311,12 +311,42 @@ export interface VenueSpecial {
   endsAt?: string;
   featured: boolean;
   id: string;
+  locationAddress?: string;
+  locationDiscoveryPlaceId?: string;
   locationId: string;
+  locationLatitude?: number;
+  locationLongitude?: number;
+  locationName?: string;
+  locationWebsiteUrl?: string;
   priceText?: string;
   publishedAt?: string;
   startsAt: string;
   status: "archived" | "draft" | "published";
   title: string;
+}
+
+export interface VenueSpotlight {
+  createdAt: string;
+  description?: string;
+  endsAt: string;
+  id: string;
+  isFree: boolean;
+  kind: "event" | "special" | "venue";
+  locationId: string;
+  locationName?: string;
+  paymentStatus: string;
+  priceCents: number;
+  specialId?: string;
+  startsAt: string;
+  status: "active" | "cancelled" | "completed" | "draft" | "pending";
+  title: string;
+}
+
+export interface VenueSpotlightCheckoutResponse {
+  checkoutSessionId?: string;
+  checkoutUrl?: string;
+  free: boolean;
+  spotlight: VenueSpotlight;
 }
 
 export interface VenueAnalytics {
@@ -369,6 +399,13 @@ export interface PublicSpotSearchInput {
   query?: string;
 }
 
+export interface PublicVenueDiscoveryInput {
+  area?: string;
+  latitude?: number;
+  longitude?: number;
+  radiusMiles?: number;
+}
+
 export interface PublicSpotDetails {
   place: PlaceSuggestion;
   source: SpotDataSource;
@@ -409,6 +446,7 @@ export interface VenueEvent {
 
 export interface VenueWorkspace {
   analytics: VenueAnalytics;
+  canManagePromotions: boolean;
   events: VenueOperationalEvent[];
   location: VenueLocation;
   orders: VenueOrder[];
@@ -416,6 +454,7 @@ export interface VenueWorkspace {
   sessions: VenueDiningSession[];
   shifts: VenueShift[];
   specials: VenueSpecial[];
+  spotlights: VenueSpotlight[];
   tables: VenueTable[];
 }
 
@@ -945,9 +984,16 @@ export interface AwsBlocksApi {
     locations: PublicVenueLocation[];
   }>;
   listPublicVenueSpecials: (input?: {
+    area?: string;
     category?: string;
+    latitude?: number;
     locationId?: string;
+    longitude?: number;
+    radiusMiles?: number;
   }) => Promise<{ specials: VenueSpecial[] }>;
+  listPublicVenueSpotlights: (input?: PublicVenueDiscoveryInput) => Promise<{
+    spotlights: VenueSpotlight[];
+  }>;
   listVenueSpecials: (locationId: string) => Promise<{
     specials: VenueSpecial[];
   }>;
@@ -957,6 +1003,21 @@ export interface AwsBlocksApi {
   updateVenueSpecial: (input: unknown) => Promise<{
     special: VenueSpecial;
   }>;
+  listVenueSpotlights: (locationId: string) => Promise<{
+    canManagePromotions: boolean;
+    spotlights: VenueSpotlight[];
+  }>;
+  createVenueSpotlightCheckout: (input: {
+    cancelUrl: string;
+    description?: string;
+    endsAt?: string;
+    kind: "event" | "special" | "venue";
+    locationId: string;
+    specialId?: string;
+    startsAt?: string;
+    successUrl: string;
+    title?: string;
+  }) => Promise<VenueSpotlightCheckoutResponse>;
   setVenuePublicAnalytics: (input: {
     enabled: boolean;
     locationId: string;
@@ -1108,6 +1169,7 @@ export interface PlaceSuggestion {
   syncLocationId?: string;
   types: string[];
   userRatingCount?: number;
+  spotlighted?: boolean;
   websiteUri?: string;
 }
 

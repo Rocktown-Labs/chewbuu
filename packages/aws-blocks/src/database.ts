@@ -134,6 +134,8 @@ export interface SyncPlanTable {
   description: string;
   id: string;
   max_staff: number;
+  annual_price_cents: number;
+  annual_stripe_price_id: string | null;
   monthly_price_cents: number;
   monthly_stripe_price_id: string | null;
   name: string;
@@ -143,6 +145,28 @@ export interface SyncPlanTable {
   stripe_product_id: string | null;
   stripe_sync_status: ColumnType<string, string | undefined, string>;
   stripe_synced_at: Timestamp | null;
+  updated_at: Timestamp;
+}
+
+export interface VenueSpotlightTable {
+  created_at: Timestamp;
+  description: string | null;
+  ends_at: Timestamp;
+  free_entitlement_month: string | null;
+  id: string;
+  is_free: boolean;
+  kind: "event" | "special" | "venue";
+  location_id: string;
+  organization_id: string;
+  payment_status: string;
+  price_cents: number;
+  special_id: string | null;
+  starts_at: Timestamp;
+  status: "active" | "cancelled" | "completed" | "draft" | "pending";
+  stripe_checkout_session_id: string | null;
+  stripe_payment_id: string | null;
+  stripe_payment_intent_id: string | null;
+  title: string;
   updated_at: Timestamp;
 }
 
@@ -1015,6 +1039,7 @@ export interface BlocksDatabase {
   venue_shift_attendance: VenueShiftAttendanceTable;
   venue_shift_swap: VenueShiftSwapTable;
   venue_special: VenueSpecialTable;
+  venue_spotlight: VenueSpotlightTable;
   venue_sync_channel: VenueSyncChannelTable;
   venue_table: VenueTableTable;
   venue_job_listing: VenueJobListingTable;

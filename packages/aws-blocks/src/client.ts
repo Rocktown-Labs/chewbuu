@@ -108,6 +108,8 @@ export type {
   VenueStaffStatus,
   VenueSyncChannel,
   VenueSpecial,
+  VenueSpotlight,
+  VenueSpotlightCheckoutResponse,
   VenueTable,
   VenueWorkspace,
 } from "./types";

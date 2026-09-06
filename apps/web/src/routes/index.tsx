@@ -69,7 +69,7 @@ const REASONS = [
   {
     icon: Video,
     title: "Video-First Matching",
-    text: "No catfish, no fake profiles. Matches exchange short video intros before text chat unlocks.",
+    text: "Live intro videos and photos make profiles harder to fake before text chat unlocks.",
   },
   {
     icon: MapPin,
@@ -113,11 +113,11 @@ const FAQS = [
   },
   {
     q: "How much does Chewbuu cost?",
-    a: "Chewbuu is free forever under the Social tier. You can create solo date requests, view verified profiles, and book up to 2 dates per day. Upgrade to Mingle or Sugar for double dates, covering date costs, and more bookings.",
+    a: "Chewbuu is free forever under the Social tier. You can create solo date requests, view verified profiles, and book up to 2 dates per day. Upgrade to Mingle or Host for double dates, dining-check coverage, and more bookings.",
   },
   {
     q: "How does video-first verification work?",
-    a: "During onboarding, every user records a live intro video and snaps a live photo. To start texting a match, you exchange quick video replies. This guarantees that you only date 100% verified, real people.",
+    a: "Onboarding includes a live intro video and live photo step. Depending on account status, matches exchange quick video replies before text chat unlocks; these checks are designed to make profiles harder to fake.",
   },
   {
     q: "What is the Chewbuu rating & score?",
@@ -441,39 +441,6 @@ const HomeComponent = () => {
           </div>
         </div>
       </section>
-      <footer className="border-t border-border px-5 py-10 md:px-12">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="font-extrabold text-foreground">Chewbuu</p>
-            <p className="mt-1 text-muted-foreground text-sm">
-              Dates, matches, chats, circles, and recaps in one place.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-4 text-muted-foreground text-sm">
-            <a className="hover:text-foreground" href="/#how-it-works">
-              How it works
-            </a>
-            <a className="hover:text-foreground" href="/#pricing">
-              Pricing
-            </a>
-            <Link className="hover:text-foreground" to="/sync-platform">
-              For venues
-            </Link>
-            <Link className="hover:text-foreground" to="/specials">
-              Specials
-            </Link>
-            <Link className="hover:text-foreground" to="/privacy">
-              Privacy
-            </Link>
-            <Link className="hover:text-foreground" to="/terms">
-              Terms
-            </Link>
-            <Link className="hover:text-foreground" to="/auth/sign-in">
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </footer>
     </main>
   );
 };

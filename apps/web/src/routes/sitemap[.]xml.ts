@@ -2,7 +2,19 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { getCanonicalUrl } from "@/lib/seo";
 
-const PUBLIC_ROUTES = ["/", "/spots", "/privacy", "/terms"] as const;
+const PUBLIC_ROUTES = [
+  "/",
+  "/spots",
+  "/specials",
+  "/pricing",
+  "/sync-platform",
+  "/terms",
+  "/acceptable-use",
+  "/refund-policy",
+  "/law-enforcement",
+  "/privacy",
+  "/contact",
+] as const;
 
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

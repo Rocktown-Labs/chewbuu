@@ -3,7 +3,9 @@ import type Stripe from "stripe";
 import { z } from "zod";
 
 import { getDb, jsonb } from "./database";
+import { processSpotlightPayment } from "./spotlight";
 import { calculateSettlement } from "./stripe-settlement";
+import { SYNC_PLAN_CODES } from "./sync-plans";
 
 const experienceKindSchema = z.enum(["date", "dine_in", "pickup"]);
 const tipBeneficiaryKindSchema = z.enum(["cook", "house", "server"]);
@@ -52,6 +54,7 @@ const stripeWebhookDefinitions = [
       "checkout.session.async_payment_failed",
       "checkout.session.async_payment_succeeded",
       "checkout.session.completed",
+      "checkout.session.expired",
       "payment_intent.payment_failed",
       "payment_intent.succeeded",
     ] as Stripe.WebhookEndpointCreateParams.EnabledEvent[],
@@ -1191,7 +1194,7 @@ export const settleSyncReferralReward = async (event: Stripe.Event) => {
         .selectFrom("subscription")
         .select(["reference_id"])
         .where("stripe_subscription_id", "=", stripeSubscriptionId)
-        .where("plan", "=", "sync")
+        .where("plan", "in", ["sync", ...SYNC_PLAN_CODES])
         .executeTakeFirst()
     : undefined;
   if (!subscription && stripeCustomerId) {
@@ -1199,7 +1202,7 @@ export const settleSyncReferralReward = async (event: Stripe.Event) => {
       .selectFrom("subscription")
       .select(["reference_id"])
       .where("stripe_customer_id", "=", stripeCustomerId)
-      .where("plan", "=", "sync")
+      .where("plan", "in", ["sync", ...SYNC_PLAN_CODES])
       .executeTakeFirst();
   }
   if (!subscription) return;
@@ -1558,11 +1561,36 @@ export const processStripeWebhookEvent = async (eventId: string) => {
       await settleSyncReferralReward(event);
     }
     if (stored.webhook_kind === "commerce") {
+      const metadata = object.metadata ? asRecord(object.metadata) : {};
+      const spotlightId = getStripeString(metadata.spotlight_id);
+      const spotlightPaymentIntentId =
+        getStripeString(object.payment_intent) ??
+        (event.type === "payment_intent.succeeded"
+          ? getStripeString(object.id)
+          : undefined);
+      if (spotlightId) {
+        const spotlightPaid =
+          event.type === "payment_intent.succeeded" ||
+          event.type === "checkout.session.async_payment_succeeded" ||
+          (event.type === "checkout.session.completed" &&
+            getStripeString(object.payment_status) === "paid");
+        const spotlightFailed =
+          event.type === "payment_intent.payment_failed" ||
+          event.type === "checkout.session.async_payment_failed" ||
+          event.type === "checkout.session.expired";
+        if (spotlightPaid || spotlightFailed) {
+          await processSpotlightPayment({
+            failed: spotlightFailed,
+            ...(spotlightPaymentIntentId
+              ? { paymentIntentId: spotlightPaymentIntentId }
+              : {}),
+            spotlightId,
+          });
+        }
+      }
       const paymentId =
         getStripeString(object.payment_id) ??
-        getStripeString(
-          object.metadata && asRecord(object.metadata).payment_id
-        );
+        getStripeString(metadata.payment_id);
       if (
         paymentId &&
         [

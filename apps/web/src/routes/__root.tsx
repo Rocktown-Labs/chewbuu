@@ -25,6 +25,7 @@ import {
   getCanonicalUrl,
 } from "@/lib/seo";
 
+import Footer from "../components/footer";
 import Header from "../components/header";
 
 import appCss from "../index.css?url";
@@ -73,9 +74,10 @@ const RootDocument = () => {
             redirectTo="/me"
             socialProviders={["google"]}
           >
-            <div className="grid min-h-svh grid-rows-[auto_1fr]">
+            <div className="flex min-h-svh flex-col">
               <Header />
               <Outlet />
+              <Footer />
             </div>
           </AuthProvider>
           <Toaster richColors />

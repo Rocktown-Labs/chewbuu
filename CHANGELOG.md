@@ -8,7 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Added a conversion-focused Chewbuu Sync venue product page, homepage CTA section, public header navigation, free-to-start $60/month/50-seat positioning, and auth intent handoff into venue onboarding.
+- Added a dedicated 'Specials' filter tab to the Spots exploration view with active daily specials, search filtering, and quick date-planning actions.
+- Added headcount-based Chewbuu Sync tiers (Sync 50 at $69/mo, Sync 100 at $139/mo, Sync Enterprise at $249/mo) with interactive billing toggles, dynamic staff limits, the Chewbuu Spotlight promotional advertising suite ($49/wk venue spotlight, $29/event spotlight, $19/3-day special boost), and a transparent 5% F&B transaction fee breakdown.
+- Added comprehensive public compliance page implementations for card network and Stripe underwriting review: updated Terms & Conditions with explicit prohibitions against human trafficking, sexual exploitation, and abuse; added dedicated Acceptable Use Policy (/acceptable-use), Refund & Cancellation Policy (/refund-policy), Protocols for Law Enforcement (/law-enforcement), Contact Directory (/contact), and public Pricing (/pricing). Renamed the VIP consumer membership tier from 'Sugar' to 'Host'.
+
+- Added a conversion-focused Chewbuu Sync venue product page, homepage CTA section, public header navigation, free-to-start $69/month/50-seat positioning, and auth intent handoff into venue onboarding.
 - Added automatic local environment loading and TLS-enabled PostgreSQL setup for Blocks development, including local-only auth/database defaults and strict production certificate verification.
 - Added pinned Portless development routing for the web, dating Expo, Sync Expo, and email preview apps with named URLs and a Vite proxy to the fixed Blocks API.
 - Added explicit dating availability with two-minute incoming request windows, onboarding-gated date planning, mobile parity, and robust place selection persistence.
@@ -16,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added responsive web date-planning accordions, date-folder recap galleries, and authenticated spot/menu capture offers with admin-configurable pending Chewbuu credit.
 - Added API-backed mobile dating parity across Home, Dates, Google Maps spots, chats, profile, onboarding media, reviews, and Recaps; calendar is now a secondary Dates view and Recaps is the primary recap destination.
 - Added server support for image-only recaps with attached date media and idempotent pending spot/menu contribution submissions.
-- Added server-only Stripe billing and marketplace foundations: Better Auth organization subscriptions with the Chewbuu Sync $60/50-seat plan, idempotent catalog and webhook reconciliation, Connect onboarding for venues/workers/referrers, platform Checkout, multi-recipient tip settlement, refund/dispute reversal ledgers, admin Stripe health visibility, and hosted iPad checkout handoff.
+- Added server-only Stripe billing and marketplace foundations: Better Auth organization subscriptions with the Chewbuu Sync $69/50-seat plan, idempotent catalog and webhook reconciliation, Connect onboarding for venues/workers/referrers, platform Checkout, multi-recipient tip settlement, refund/dispute reversal ledgers, admin Stripe health visibility, and hosted iPad checkout handoff.
 - Added the authenticated Expo Sync mobile workspace under `apps/sync` with grouped Operations, People, Business, and Account navigation; mobile Overview, Tables, Orders, Shifts, Tips, Reservations, Kitchen, Clock In, Guests, Work Chat, Menu, Specials, Jobs, Settings, and detail/create workflows.
 - Refined the native Sync iPad workspace with a burgundy-first theme, direct order taking, multi-guest parties, sectioned table picking, adaptive panes, simple creation sheets, menu-linked specials, job applicants, and expanded venue settings.
 - Refined the native Sync iPad cockpit with Chewbuu burgundy/yellow branding, a quiet overview, grouped operations navigation, reservations, closable inspectors, table-state filters, guest contact capture, menu item metadata editing, and explicit close-out confirmation.
@@ -24,7 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added venue operational timeline events for arrival, cooking start, food served, date ended, order/reservation stages, deterministic venue analytics, public aggregate metrics with sample gating, filterable specials, public spot detail pages, and native specials discovery.
 - Added Better Auth Organizations as the canonical venue organization boundary with a non-destructive bridge from existing venue memberships.
 - Added deployment-managed Stripe Connect health, recipient onboarding, multi-recipient settlement, refund/dispute handling, and webhook reconciliation; raw Stripe credentials are not accepted from browser forms.
-- Added branded Chewbuu Sync venue and Crew workflows with admin Sugar/Sync test entitlements, reserved brand handles, styled community metadata, people invitations, venue staff invitations, lifecycle emails, venue operations pages, and the branded-community migration.
+- Added branded Chewbuu Sync venue and Crew workflows with admin Host/Sync test entitlements, reserved brand handles, styled community metadata, people invitations, venue staff invitations, lifecycle emails, venue operations pages, and the branded-community migration.
 - Added debounced Google venue lookup with Place ID retention, editable prefill, Chewbuu-hosted menu planning, and public Sync-verified spot listings and detail pages.
 - Added standalone `/spots` discovery with verified Sync venue merging, Google Places fallback, lazy Google photos, and optional Firecrawl menu previews.
 - Added the platform-neutral Sync service operations API for location-scoped staff assignments, shift attendance, breaks/lunches, daily-code and optional geofence clock-in, late/ETA reporting, service boards, tables, service customers, staff orders with modifiers, kitchen/payment state, shared Sync channels, staff removal, and location job listings.
@@ -56,6 +60,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Added self-serve cancellation for consumer and organization subscriptions, with manager-only organization billing authorization and cancellation-period access preservation.
+- Corrected annual pricing disclosures to show the monthly equivalent and exact annual total, routed legal-process contact inquiries to the dedicated inbox, and made policy links available through the global footer.
+- Replaced unsupported compliance and support guarantees with the implemented cancellation, refund-review, reporting, privacy, and law-enforcement commitments.
+- Completed Sync tier-specific monthly and annual checkout handoff, paid and expiring Spotlight checkout/webhook entitlements, Spotlight serving and manager controls, coordinate-aware Specials discovery, venue-preserving date planning, and strict Sync subscription authorization.
 - Fixed AWS Blocks Better Auth session resolution across deployed ESM/CommonJS module shapes so authenticated API calls no longer fail while reading `auth.api`.
 - Removed date planning and dating-readiness widgets from the authenticated Spots view; nearby spots now use the selected or device location before dating onboarding is complete.
 - Slimmed authenticated and public Spot cards to compact image placeholders with clear `View menu` and `Get info` actions, while keeping authenticated discovery gated by onboarding and nearby location data.

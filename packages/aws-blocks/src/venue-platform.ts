@@ -6,6 +6,7 @@ import { z } from "zod";
 import { isReservedBrandHandle, isReservedBrandName } from "./brand-handles";
 import { getDb, jsonb } from "./database";
 import type { BlocksDatabase } from "./database";
+import { getSyncPlanEntitlement } from "./sync-plans";
 import type {
   BrandStyle,
   CommunityInviteResponse,
@@ -505,38 +506,23 @@ export const inviteVenueMembers = async (
     .where("id", "=", body.locationId)
     .executeTakeFirst();
   if (!location) throw new Error("Venue not found.");
-  const [syncPlan, organizationSubscription, legacySubscription, activeStaff] =
-    await Promise.all([
-      db
-        .selectFrom("sync_plan")
-        .select("max_staff")
-        .where("code", "=", "sync_50")
-        .executeTakeFirst(),
-      db
-        .selectFrom("subscription")
-        .select("status")
-        .where("reference_id", "=", location.organization_id)
-        .where("plan", "=", "sync")
-        .where("status", "in", ["active", "trialing"])
-        .executeTakeFirst(),
-      db
-        .selectFrom("sync_subscription")
-        .select("status")
-        .where("organization_id", "=", location.organization_id)
-        .where("status", "in", ["active", "trialing"])
-        .executeTakeFirst(),
-      db
-        .selectFrom("venue_member")
-        .select("id")
-        .where("organization_id", "=", location.organization_id)
-        .where("status", "=", "active")
-        .execute(),
-    ]);
-  if (!organizationSubscription && !legacySubscription) {
+  const [syncPlan, activeStaff] = await Promise.all([
+    getSyncPlanEntitlement(db, location.organization_id),
+    db
+      .selectFrom("venue_member")
+      .select("id")
+      .where("organization_id", "=", location.organization_id)
+      .where("status", "=", "active")
+      .execute(),
+  ]);
+  if (!syncPlan) {
     throw new Error("An active Chewbuu Sync subscription is required.");
   }
-  const maxStaff = syncPlan?.max_staff ?? 50;
-  if (activeStaff.length + body.members.length > maxStaff) {
+  const { maxStaff } = syncPlan;
+  if (
+    maxStaff < 999_999 &&
+    activeStaff.length + body.members.length > maxStaff
+  ) {
     throw new Error(
       `This Sync plan supports up to ${maxStaff} active staff members.`
     );
@@ -1121,6 +1107,7 @@ export const getVenueWorkspace = async (
       tipCents: 0,
       totalCovers: reservations.reduce((sum, item) => sum + item.party_size, 0),
     },
+    canManagePromotions: false,
     events: [],
     location: toVenueLocation(location),
     orders: orders.map(toVenueOrder),
@@ -1152,6 +1139,7 @@ export const getVenueWorkspace = async (
       })
     ),
     specials: [],
+    spotlights: [],
     tables: [],
   };
 };

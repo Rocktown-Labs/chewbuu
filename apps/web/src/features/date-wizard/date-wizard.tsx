@@ -1100,7 +1100,7 @@ function PlanStep({
                   <FieldDescription>
                     {isSugar
                       ? "Choose whether to split the bill or cover the whole date."
-                      : "Dutch is the default. Go Sugar to cover the date yourself."}
+                      : "Dutch is the default. Go Host to cover the date yourself."}
                   </FieldDescription>
                   <div className="sr-only">
                     <Checkbox
@@ -1559,6 +1559,14 @@ function PlacesStep({
                       type="button"
                     >
                       <div className="flex items-center gap-2">
+                        {place.spotlighted && (
+                          <Badge
+                            className="flex items-center gap-0.5 border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold text-amber-600"
+                            variant="outline"
+                          >
+                            <Sparkles className="size-2.5" /> Spotlight
+                          </Badge>
+                        )}
                         {isHighRating && (
                           <Badge className="bg-amber-500 text-white border-none flex items-center gap-0.5 text-[9px] font-semibold px-2 py-0.5">
                             <Star className="size-2.5 fill-white text-white" />{" "}

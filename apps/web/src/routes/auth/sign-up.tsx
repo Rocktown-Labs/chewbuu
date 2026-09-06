@@ -21,7 +21,7 @@ const RouteComponent = () => (
             Start with two real date plans a day.
           </h1>
           <p className="max-w-lg text-lg text-muted-foreground">
-            Upgrade later to Mingle or Sugar for bigger parties, more matching
+            Upgrade later to Mingle or Host for bigger parties, more matching
             power, and premium date options.
           </p>
         </div>

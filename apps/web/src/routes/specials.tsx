@@ -26,14 +26,38 @@ function SpecialsPage() {
   const [category, setCategory] = useState(initialCategory ?? "");
   const [specials, setSpecials] = useState<VenueSpecial[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [coordinates, setCoordinates] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        setCoordinates({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }),
+      () => setCoordinates(null),
+      { timeout: 5000 }
+    );
+  }, []);
 
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
       try {
-        const result = await venueApi.getPublicSpecials(
-          category ? { category } : undefined
-        );
+        const result = await venueApi.getPublicSpecials({
+          ...(category ? { category } : {}),
+          ...(coordinates
+            ? {
+                latitude: coordinates.latitude,
+                longitude: coordinates.longitude,
+                radiusMiles: 25,
+              }
+            : {}),
+        });
         setSpecials(result.specials);
       } catch {
         setSpecials([]);
@@ -42,7 +66,7 @@ function SpecialsPage() {
       }
     };
     void load();
-  }, [category]);
+  }, [category, coordinates]);
 
   const categories = Array.from(
     new Set(specials.map((special) => special.category))
@@ -66,8 +90,9 @@ function SpecialsPage() {
               Specials worth making a plan for.
             </h1>
             <p className="mt-2 max-w-2xl text-muted-foreground">
-              Venue-published offers are available while they are active. Find a
-              special, then pick the spot for your next date.
+              {coordinates
+                ? "Showing active venue offers within 25 miles of you."
+                : "Venue-published offers are available while they are active. Share your location to narrow them to nearby spots."}
             </p>
           </div>
           <Input

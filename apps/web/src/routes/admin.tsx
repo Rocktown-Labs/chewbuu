@@ -84,7 +84,7 @@ const ADMIN_SECTIONS = [
   {
     icon: Crown,
     label: "Membership & Billing",
-    text: "Mingle and Sugar tiers are synced directly with Stripe products and prices.",
+    text: "Mingle and Host tiers are synced directly with Stripe products and prices.",
   },
   {
     icon: UsersRound,

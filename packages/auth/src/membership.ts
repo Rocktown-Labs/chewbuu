@@ -17,7 +17,7 @@ export const MEMBERSHIP_TIERS = {
     canCoverDutchDates: true,
     dailyDateLimit: 24,
     id: "sugar",
-    name: "Sugar",
+    name: "Host",
     partyLimit: 4,
   },
 } as const;

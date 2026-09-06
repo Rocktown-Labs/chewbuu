@@ -30,7 +30,7 @@ import type { SyntheticEvent } from "react";
 
 import { authClient } from "@/lib/auth-client";
 import { trackMarketingEvent } from "@/lib/marketing-events";
-import { consumeSyncOnboardingIntent } from "@/lib/venue-onboarding-intent";
+import { hasSyncOnboardingIntent } from "@/lib/venue-onboarding-intent";
 
 import { ProviderButtons } from "./provider-buttons";
 import type { SocialLayout } from "./provider-buttons";
@@ -76,7 +76,7 @@ export function SignIn({
 
   const navigateAfterSignIn = async () => {
     const session = await authClient.getSession();
-    if (consumeSyncOnboardingIntent()) {
+    if (hasSyncOnboardingIntent()) {
       trackMarketingEvent("auth_completed", {
         method: "email",
         product: "sync",
