@@ -2,6 +2,12 @@ import type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middlew
 
 export type ChatMessageKind = "photo" | "system" | "text" | "video" | "voice";
 
+export type DateSafetyAction =
+  | "call_authorities"
+  | "contact_emergency_contact"
+  | "contact_venue"
+  | "start_recording";
+
 export interface ApiChatMessage {
   createdAt: string;
   durationSec?: number;
@@ -11,7 +17,14 @@ export interface ApiChatMessage {
   mediaUrl?: string;
   roomId: string;
   senderId: string;
-  systemIcon?: "user" | "check" | "calendar" | "branch" | "heart" | "block";
+  systemIcon?:
+    | "user"
+    | "check"
+    | "calendar"
+    | "branch"
+    | "heart"
+    | "block"
+    | "safety";
   text?: string;
 }
 
@@ -22,7 +35,18 @@ export interface ApiChatParticipant {
   userId?: string;
 }
 
+export interface ApiActiveDate {
+  dateId: string;
+  places: { address?: string; name: string; placeId: string }[];
+  role: "receiver" | "sender";
+  scheduledAt: string;
+  searchArea: string;
+  status: "confirmed" | "live" | "matching" | "pending_confirm";
+  title: string;
+}
+
 export interface ApiChatRoom {
+  activeDate?: ApiActiveDate;
   activeDateId?: string;
   id: string;
   kind: string;
@@ -61,6 +85,8 @@ export interface SendChatMessageResponse {
 
 export interface DateRequestPlaceInput {
   address?: string;
+  latitude?: number;
+  longitude?: number;
   name: string;
   placeId: string;
   rating?: string;
@@ -671,6 +697,15 @@ export interface AwsBlocksApi {
   getPublicSpotMenu: (placeId: string) => Promise<PublicSpotMenuResponse>;
   getPlacePhoto: (photoName: string) => Promise<PlacePhotoResponse>;
   checkIn: (input: CheckInInput) => Promise<CheckInResponse>;
+  getDateSafetyStatus: (
+    input: DateSafetyLocationInput
+  ) => Promise<DateSafetyStatusResponse>;
+  requestDateSafetyAction: (
+    input: DateSafetyActionInput
+  ) => Promise<DateSafetyActionResponse>;
+  completeDateSafetyRecording: (
+    input: CompleteDateSafetyRecordingInput
+  ) => Promise<{ recordingId: string }>;
   startDate: (dateRequestId: string) => Promise<{
     actualStartAt: string;
     dateRequestId: string;
@@ -1115,7 +1150,7 @@ export interface AiMessage {
 export interface MediaUploadInput {
   contentType: string;
   fileName: string;
-  slot: "intro_video" | "photo" | "profile_photo";
+  slot: "intro_video" | "photo" | "profile_photo" | "safety_recording";
 }
 
 export interface MediaUploadResponse {
@@ -1188,6 +1223,52 @@ export interface CheckInResponse {
   dateRequestId: string;
   message: string;
   success: boolean;
+}
+
+export interface DateSafetyLocationInput {
+  dateRequestId: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface DateSafetyActionInput extends DateSafetyLocationInput {
+  action: DateSafetyAction;
+  confirmed: true;
+}
+
+export interface DateSafetyVenue {
+  address?: string;
+  name: string;
+  phone?: string;
+  placeId: string;
+}
+
+export interface DateSafetyStatusResponse {
+  distanceMiles: number | null;
+  geofenceRadiusMiles: number;
+  eligible: boolean;
+  message: string;
+  recordingNotice: string;
+  trustedContactCount: number;
+  venue: DateSafetyVenue | null;
+}
+
+export interface DateSafetyActionResponse {
+  action: DateSafetyAction;
+  authorityPhone?: string;
+  incidentId: string;
+  message: string;
+  phoneNumbers?: string[];
+  recordingNotice?: string;
+  venuePhone?: string;
+}
+
+export interface CompleteDateSafetyRecordingInput {
+  contentType: string;
+  dateRequestId: string;
+  incidentId: string;
+  startedAt: string;
+  url: string;
 }
 
 export interface ReviewInput {
@@ -1485,6 +1566,8 @@ export interface DatingRequestResponse {
   paymentMode: string;
   places: {
     address?: string;
+    latitude?: number;
+    longitude?: number;
     name: string;
     placeId: string;
     rating?: string;

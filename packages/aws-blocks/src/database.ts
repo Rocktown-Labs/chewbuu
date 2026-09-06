@@ -64,6 +64,32 @@ export interface ChatReadStateTable {
   user_id: string;
 }
 
+export interface DateSafetyEventTable {
+  action: string;
+  confirmed: boolean;
+  created_at: Timestamp;
+  date_request_id: string;
+  distance_miles: number | null;
+  id: string;
+  initiated_by_user_id: string;
+  status: string;
+  updated_at: Timestamp;
+  venue_name: string;
+  venue_place_id: string;
+}
+
+export interface DateSafetyRecordingTable {
+  content_type: string;
+  created_at: Timestamp;
+  date_request_id: string;
+  ended_at: Timestamp | null;
+  id: string;
+  recorded_by_user_id: string;
+  safety_event_id: string;
+  started_at: Timestamp;
+  url: string;
+}
+
 export interface UserTable {
   daily_date_limit: number;
   identity_status: string;
@@ -237,6 +263,7 @@ export interface ProfileMediaTable {
 }
 
 export interface TrustedContactTable {
+  created_at: Timestamp;
   email: string | null;
   id: string;
   name: string;
@@ -324,6 +351,8 @@ export interface DateRequestPartyMemberTable {
 export interface DateRequestPlaceTable {
   address: string | null;
   id: string;
+  latitude: number | null;
+  longitude: number | null;
   name: string;
   place_id: string;
   rating: string | null;
@@ -990,6 +1019,8 @@ export interface BlocksDatabase {
   chat_participant: ChatParticipantTable;
   chat_read_state: ChatReadStateTable;
   chat_room: ChatRoomTable;
+  date_safety_event: DateSafetyEventTable;
+  date_safety_recording: DateSafetyRecordingTable;
   date_match: DateMatchTable;
   date_media: DateMediaTable;
   date_request: DateRequestTable;

@@ -47,6 +47,11 @@ import { getDatabaseUrl, getDb, jsonb } from "./database";
 import type { BlocksDatabase } from "./database";
 import { nextDateLifecycleStatus } from "./date-lifecycle";
 import {
+  DATE_SAFETY_GEOFENCE_MILES,
+  isWithinDateSafetyGeofence,
+  roundSafetyDistance,
+} from "./date-safety";
+import {
   createIdentityVerificationSession,
   getIdentityVerificationStatus,
 } from "./identity";
@@ -77,6 +82,7 @@ import {
   syncStripeWebhookEndpoints,
 } from "./stripe-marketplace";
 import type {
+  ApiActiveDate,
   ApiChatMessage,
   ApiChatParticipant,
   AccountEntitlementsResponse,
@@ -89,6 +95,11 @@ import type {
   BrandStyle,
   CheckInResponse,
   ChimeMeetingResponse,
+  CompleteDateSafetyRecordingInput,
+  DateSafetyActionInput,
+  DateSafetyActionResponse,
+  DateSafetyLocationInput,
+  DateSafetyStatusResponse,
   CreateCommunityInput,
   DateMediaResponse,
   DatingMatchResponse,
@@ -624,6 +635,7 @@ const mediaLimits = {
   intro_video: { accept: "video/", maxBytes: 250 * 1024 * 1024 },
   photo: { accept: "image/", maxBytes: 12 * 1024 * 1024 },
   profile_photo: { accept: "image/", maxBytes: 12 * 1024 * 1024 },
+  safety_recording: { accept: "video/", maxBytes: 500 * 1024 * 1024 },
 } as const;
 
 const cleanMediaFileName = (name: string) =>
@@ -673,7 +685,7 @@ const chatMessageSchema = z.object({
   roomId: z.string(),
   senderId: z.string(),
   systemIcon: z
-    .enum(["user", "check", "calendar", "branch", "heart", "block"])
+    .enum(["user", "check", "calendar", "branch", "heart", "block", "safety"])
     .optional(),
   text: z.string().optional(),
 });
@@ -1825,6 +1837,8 @@ const loadDatingSummary = async (
         .filter((place) => place.request_id === request.id)
         .map((place) => ({
           address: place.address ?? undefined,
+          ...(place.latitude !== null ? { latitude: place.latitude } : {}),
+          ...(place.longitude !== null ? { longitude: place.longitude } : {}),
           name: place.name,
           placeId: place.place_id,
           rating: place.rating ?? undefined,
@@ -1915,7 +1929,16 @@ const profileInputSchema = z.object({
   safetyOptIn: z.boolean().default(false),
   sex: z.string().trim().min(1),
   sexuality: z.string().trim().min(1),
-  trustedContacts: z.array(z.record(z.string(), z.unknown())).default([]),
+  trustedContacts: z
+    .array(
+      z.object({
+        email: z.union([z.string().email(), z.literal("")]).optional(),
+        name: z.string().trim().min(1),
+        phone: z.string().trim().optional(),
+      })
+    )
+    .max(2)
+    .default([]),
   username: z.string().optional(),
   weight: z.string().optional(),
   wantsKids: z.string().optional(),
@@ -1952,7 +1975,16 @@ const profileDraftInputSchema = z.object({
   safetyOptIn: z.boolean().default(false),
   sex: z.string().trim().optional().nullable(),
   sexuality: z.string().trim().optional().nullable(),
-  trustedContacts: z.array(z.record(z.string(), z.unknown())).default([]),
+  trustedContacts: z
+    .array(
+      z.object({
+        email: z.union([z.string().email(), z.literal("")]).optional(),
+        name: z.string().trim().min(1),
+        phone: z.string().trim().optional(),
+      })
+    )
+    .max(2)
+    .default([]),
   username: z.string().optional().nullable(),
   weight: z.string().optional().nullable(),
   wantsKids: z.string().optional().nullable(),
@@ -1977,6 +2009,8 @@ const dateRequestInputSchema = z.object({
     .array(
       z.object({
         address: z.string().optional(),
+        latitude: z.number().finite().optional(),
+        longitude: z.number().finite().optional(),
         name: z.string().min(1),
         placeId: z.string().min(1),
         rating: z.string().optional(),
@@ -2170,6 +2204,26 @@ const saveProfile = async (
             kind: item.kind,
             sort_order: item.sortOrder,
             url: item.url,
+            user_id: sessionUser.id,
+          }))
+        )
+        .execute();
+    }
+
+    await tx
+      .deleteFrom("trusted_contact")
+      .where("user_id", "=", sessionUser.id)
+      .execute();
+    if (body.trustedContacts.length > 0) {
+      await tx
+        .insertInto("trusted_contact")
+        .values(
+          body.trustedContacts.map((contact) => ({
+            created_at: now,
+            email: contact.email ?? null,
+            id: crypto.randomUUID(),
+            name: contact.name,
+            phone: contact.phone ?? null,
             user_id: sessionUser.id,
           }))
         )
@@ -2510,6 +2564,8 @@ const createDateRequest = async (
         body.places.map((place) => ({
           address: place.address ?? null,
           id: crypto.randomUUID(),
+          latitude: place.latitude ?? null,
+          longitude: place.longitude ?? null,
           name: place.name,
           place_id: place.placeId,
           rating: place.rating ?? null,
@@ -2702,6 +2758,77 @@ const toMessage = async (message: {
 
 const toParticipant = (participant: ApiChatParticipant) => participant;
 
+const toActiveDateStatus = (status: string): ApiActiveDate["status"] => {
+  if (["active", "checked_in"].includes(status)) {
+    return "live";
+  }
+  if (status === "matching") return "matching";
+  if (["pending", "pending_confirm"].includes(status)) {
+    return "pending_confirm";
+  }
+  return "confirmed";
+};
+
+const loadActiveDateContexts = async (
+  db: BlocksDbExecutor,
+  rooms: { active_date_id: string | null; id: string }[],
+  userId: string
+) => {
+  const dateIds = rooms.flatMap((room) =>
+    room.active_date_id ? [room.active_date_id] : []
+  );
+  if (dateIds.length === 0) return new Map<string, ApiActiveDate>();
+
+  const [requests, places] = await Promise.all([
+    db
+      .selectFrom("date_request")
+      .select(["id", "scheduled_at", "search_area", "status", "user_id"])
+      .where("id", "in", dateIds)
+      .execute(),
+    db
+      .selectFrom("date_request_place")
+      .select([
+        "address",
+        "latitude",
+        "longitude",
+        "name",
+        "place_id",
+        "request_id",
+      ])
+      .where("request_id", "in", dateIds)
+      .orderBy("selected", "desc")
+      .execute(),
+  ]);
+
+  return new Map(
+    requests.map((request) => {
+      const requestPlaces = places.filter(
+        (place) => place.request_id === request.id
+      );
+      const [firstPlace] = requestPlaces;
+      const placeName = firstPlace?.name ?? request.search_area;
+      return [
+        request.id,
+        {
+          dateId: request.id,
+          places: requestPlaces.map((place) => ({
+            ...(place.address ? { address: place.address } : {}),
+            ...(place.latitude !== null ? { latitude: place.latitude } : {}),
+            ...(place.longitude !== null ? { longitude: place.longitude } : {}),
+            name: place.name,
+            placeId: place.place_id,
+          })),
+          role: request.user_id === userId ? "sender" : "receiver",
+          scheduledAt: new Date(request.scheduled_at).toISOString(),
+          searchArea: request.search_area,
+          status: toActiveDateStatus(request.status),
+          title: `Date at ${placeName}`,
+        } satisfies ApiActiveDate,
+      ];
+    })
+  );
+};
+
 const toRoom = async (
   room: {
     active_date_id: string | null;
@@ -2712,10 +2839,12 @@ const toRoom = async (
     title: string;
     updated_at: Date;
   },
+  activeDate: ApiActiveDate | undefined,
   participants: ApiChatParticipant[],
   messages: ApiChatMessage[],
   unreadCount: number
 ): Promise<ApiChatRoom> => ({
+  ...(activeDate ? { activeDate } : {}),
   activeDateId: room.active_date_id ?? undefined,
   id: room.id,
   kind: room.kind,
@@ -2759,6 +2888,7 @@ const loadRoomsFromDatabase = async (userId: string, roomIds?: string[]) => {
   const rooms = await roomQuery.execute();
   if (rooms.length === 0) return [];
   const ids = rooms.map((room) => room.id);
+  const activeDateContexts = await loadActiveDateContexts(db, rooms, userId);
 
   const [participants, messages, readStates] = await Promise.all([
     db
@@ -2793,6 +2923,9 @@ const loadRoomsFromDatabase = async (userId: string, roomIds?: string[]) => {
       ).length;
       return toRoom(
         room,
+        room.active_date_id
+          ? activeDateContexts.get(room.active_date_id)
+          : undefined,
         participants
           .filter((participant) => participant.room_id === room.id)
           .map((participant) => ({
@@ -2921,6 +3054,30 @@ const checkInSchema = z.object({
   code: z.string().optional(),
   dateRequestId: z.string().min(1),
   partnerId: z.string().optional(),
+});
+
+const dateSafetyLocationSchema = z.object({
+  dateRequestId: z.string().min(1),
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+});
+
+const dateSafetyActionSchema = dateSafetyLocationSchema.extend({
+  action: z.enum([
+    "call_authorities",
+    "contact_emergency_contact",
+    "contact_venue",
+    "start_recording",
+  ]),
+  confirmed: z.literal(true),
+});
+
+const completeDateSafetyRecordingSchema = z.object({
+  contentType: z.string().trim().startsWith("video/"),
+  dateRequestId: z.string().min(1),
+  incidentId: z.string().min(1),
+  startedAt: z.iso.datetime(),
+  url: z.string().trim().min(1),
 });
 
 const spotCaptureOfferSchema = z.object({
@@ -3122,9 +3279,12 @@ const getGooglePlaceDetails = async (
   placeId: string
 ): Promise<PlaceSuggestion | null> => {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
-  if (!apiKey || !/^places\/[^/]+$/.test(placeId)) return null;
+  if (!apiKey || !placeId.trim()) return null;
 
-  const resourceName = `places/${encodeURIComponent(placeId.slice("places/".length))}`;
+  const normalizedPlaceId = placeId.startsWith("places/")
+    ? placeId.slice("places/".length)
+    : placeId;
+  const resourceName = `places/${encodeURIComponent(normalizedPlaceId)}`;
   try {
     const response = await fetch(
       `https://places.googleapis.com/v1/${resourceName}`,
@@ -4120,6 +4280,8 @@ const getReviewPrompt = async (
     })),
     places: places.map((place) => ({
       address: place.address ?? undefined,
+      ...(place.latitude !== null ? { latitude: place.latitude } : {}),
+      ...(place.longitude !== null ? { longitude: place.longitude } : {}),
       name: place.name,
       placeId: place.place_id,
       rating: place.rating ?? undefined,
@@ -4979,6 +5141,351 @@ const checkIn = async (
     message: "Check-in confirmed! Enjoy your date.",
     success: true,
   };
+};
+
+const loadDateSafetyContext = async (
+  sessionUser: SessionUser,
+  input: DateSafetyLocationInput
+) => {
+  const request = await getParticipantRequest(
+    input.dateRequestId,
+    sessionUser.id
+  );
+  if (!["active", "checked_in"].includes(request.status)) {
+    throw new Error("Safety help is available only during an active date.");
+  }
+
+  const db = await getDb();
+  const place = await db
+    .selectFrom("date_request_place")
+    .select(["address", "latitude", "longitude", "name", "place_id"])
+    .where("request_id", "=", request.id)
+    .orderBy("selected", "desc")
+    .executeTakeFirst();
+  if (!place) throw new Error("The active date venue could not be found.");
+
+  const details = await getGooglePlaceDetails(place.place_id);
+  const syncLocation = await db
+    .selectFrom("venue_location")
+    .select(["id", "name", "organization_id", "phone"])
+    .where("discovery_place_id", "=", place.place_id)
+    .executeTakeFirst();
+  const latitude = details?.latitude ?? place.latitude ?? undefined;
+  const longitude = details?.longitude ?? place.longitude ?? undefined;
+  const distanceMiles =
+    latitude !== undefined && longitude !== undefined
+      ? distanceBetweenMiles(
+          String(input.latitude),
+          String(input.longitude),
+          String(latitude),
+          String(longitude)
+        )
+      : null;
+  const contacts = await db
+    .selectFrom("trusted_contact")
+    .select(["email", "name", "phone"])
+    .where("user_id", "=", sessionUser.id)
+    .execute();
+
+  const venue = {
+    address: details?.address ?? place.address ?? undefined,
+    name: details?.name ?? syncLocation?.name ?? place.name,
+    phone: details?.phone ?? syncLocation?.phone ?? undefined,
+    placeId: place.place_id,
+  };
+
+  return {
+    contacts,
+    distanceMiles,
+    eligible: isWithinDateSafetyGeofence(distanceMiles),
+    request,
+    syncLocation,
+    venue,
+  };
+};
+
+const getDateSafetyStatus = async (
+  sessionUser: SessionUser,
+  input: unknown
+): Promise<DateSafetyStatusResponse> => {
+  const body = dateSafetyLocationSchema.parse(input);
+  const context = await loadDateSafetyContext(sessionUser, body);
+  const distanceMiles =
+    context.distanceMiles === null
+      ? null
+      : roundSafetyDistance(context.distanceMiles);
+  return {
+    distanceMiles,
+    geofenceRadiusMiles: DATE_SAFETY_GEOFENCE_MILES,
+    eligible: context.eligible,
+    message: context.eligible
+      ? "Safety help is available at this venue."
+      : "Move within the venue safety area to activate Chewbuu assistance. No continuous location tracking is used.",
+    recordingNotice:
+      "Recording requires participant consent and camera/microphone permission on each device. The other participant must start recording on their own device.",
+    trustedContactCount: context.contacts.length,
+    venue: context.eligible ? context.venue : null,
+  };
+};
+
+const publishSafetyChatMessage = async (
+  dateRequestId: string,
+  userId: string,
+  text: string
+) => {
+  const db = await getDb();
+  const room = await db
+    .selectFrom("chat_room")
+    .select("id")
+    .where("active_date_id", "=", dateRequestId)
+    .where("kind", "=", "date_room")
+    .executeTakeFirst();
+  if (!room) return;
+
+  const now = new Date();
+  const [created] = await db
+    .insertInto("chat_message")
+    .values({
+      created_at: now,
+      duration_sec: null,
+      id: crypto.randomUUID(),
+      kind: "system",
+      media_thumb_url: null,
+      media_url: null,
+      room_id: room.id,
+      sender_id: userId,
+      system_icon: "safety",
+      text,
+    })
+    .returningAll()
+    .execute();
+  if (!created) return;
+
+  await db
+    .updateTable("chat_room")
+    .set({ updated_at: now })
+    .where("id", "=", room.id)
+    .execute();
+  const message = await toMessage(created);
+  try {
+    await realtime.publish("messages", room.id, message);
+  } catch (error) {
+    logger.warn("safety chat notice realtime publish failed", {
+      ...errorFields(error),
+      operation: "publishSafetyChatMessage",
+      traceId: tracer.getTraceId(),
+    });
+  }
+};
+
+const updateDateSafetyEvent = async (eventId: string, status: string) => {
+  const db = await getDb();
+  await db
+    .updateTable("date_safety_event")
+    .set({ status, updated_at: new Date() })
+    .where("id", "=", eventId)
+    .execute();
+};
+
+const requestDateSafetyAction = async (
+  sessionUser: SessionUser,
+  input: unknown
+): Promise<DateSafetyActionResponse> => {
+  const body = dateSafetyActionSchema.parse(input);
+  const context = await loadDateSafetyContext(sessionUser, body);
+  if (!context.eligible || context.distanceMiles === null) {
+    throw new Error(
+      "Safety assistance is only available after the active date is detected at the venue."
+    );
+  }
+
+  const db = await getDb();
+  const incidentId = crypto.randomUUID();
+  await db
+    .insertInto("date_safety_event")
+    .values({
+      action: body.action,
+      confirmed: body.confirmed,
+      created_at: new Date(),
+      date_request_id: body.dateRequestId,
+      distance_miles: context.distanceMiles,
+      id: incidentId,
+      initiated_by_user_id: sessionUser.id,
+      status: "requested",
+      updated_at: new Date(),
+      venue_name: context.venue.name,
+      venue_place_id: context.venue.placeId,
+    })
+    .execute();
+
+  try {
+    if (body.action === "contact_emergency_contact") {
+      const emailContacts = context.contacts.filter((contact) => contact.email);
+      if (emailContacts.length === 0 && context.contacts.length === 0) {
+        throw new Error("Add an emergency contact before requesting help.");
+      }
+      await Promise.all(
+        emailContacts.map((contact) =>
+          venueEmailJob.submit({
+            body: `${sessionUser.name} requested a safety check-in during an active Chewbuu date at ${context.venue.name}. Please contact them and local emergency services if needed.`,
+            html: `<h2>Chewbuu safety check-in</h2><p>${escapeHtml(sessionUser.name)} requested a safety check-in during an active date at <strong>${escapeHtml(context.venue.name)}</strong>.</p><p>Please contact them and local emergency services if needed.</p>`,
+            subject: `Chewbuu safety check-in at ${context.venue.name}`,
+            to: contact.email as string,
+          })
+        )
+      );
+      await updateDateSafetyEvent(incidentId, "completed");
+      await publishSafetyChatMessage(
+        body.dateRequestId,
+        sessionUser.id,
+        "A trusted contact was asked to check in."
+      );
+      return {
+        action: body.action,
+        incidentId,
+        message:
+          emailContacts.length > 0
+            ? "Your emergency contact was notified by email."
+            : "Your emergency contact has no email address saved. Use the phone option below.",
+        phoneNumbers: context.contacts.flatMap((contact) =>
+          contact.phone ? [contact.phone] : []
+        ),
+      };
+    }
+
+    if (body.action === "contact_venue") {
+      const staff = context.syncLocation
+        ? await db
+            .selectFrom("venue_member")
+            .innerJoin("user", "user.id", "venue_member.user_id")
+            .select(["user.email", "user.id"])
+            .where(
+              "venue_member.organization_id",
+              "=",
+              context.syncLocation.organization_id
+            )
+            .where("venue_member.status", "=", "active")
+            .execute()
+        : [];
+      await Promise.all(
+        staff.map((member) =>
+          venueEmailJob.submit({
+            body: `A Chewbuu diner requested safety assistance at ${context.venue.name}. Please check on the active date at the venue. If there is immediate danger, contact local emergency services.`,
+            html: `<h2>Chewbuu safety assistance requested</h2><p>A diner requested assistance at <strong>${escapeHtml(context.venue.name)}</strong>. Please check on the active date at the venue.</p><p>If there is immediate danger, contact local emergency services.</p>`,
+            subject: `Safety assistance requested at ${context.venue.name}`,
+            to: member.email,
+          })
+        )
+      );
+      await updateDateSafetyEvent(incidentId, "completed");
+      await publishSafetyChatMessage(
+        body.dateRequestId,
+        sessionUser.id,
+        "The venue was asked to provide safety assistance."
+      );
+      return {
+        action: body.action,
+        incidentId,
+        message:
+          staff.length > 0
+            ? "The connected venue team was notified."
+            : context.venue.phone
+              ? "Call the venue using the button below."
+              : "The venue does not have a callable number or connected team.",
+        venuePhone: context.venue.phone,
+      };
+    }
+
+    if (body.action === "start_recording") {
+      await updateDateSafetyEvent(incidentId, "awaiting_recordings");
+      await publishSafetyChatMessage(
+        body.dateRequestId,
+        sessionUser.id,
+        "A safety recording was requested. Each participant must explicitly start recording on their own device."
+      );
+      return {
+        action: body.action,
+        incidentId,
+        message:
+          "Recording is ready. Confirm participant consent, allow camera and microphone access, then keep the other participant informed.",
+        recordingNotice:
+          "The other participant must tap Help and start recording on their own device too.",
+      };
+    }
+
+    await updateDateSafetyEvent(incidentId, "completed");
+    await publishSafetyChatMessage(
+      body.dateRequestId,
+      sessionUser.id,
+      "Emergency services were selected from the active date safety menu."
+    );
+    return {
+      action: body.action,
+      authorityPhone: "911",
+      incidentId,
+      message:
+        "Use the next confirmation to open your phone’s emergency dialer.",
+    };
+  } catch (error) {
+    await updateDateSafetyEvent(incidentId, "failed");
+    throw error;
+  }
+};
+
+const completeDateSafetyRecording = async (
+  sessionUser: SessionUser,
+  input: unknown
+) => {
+  const body = completeDateSafetyRecordingSchema.parse(input);
+  const request = await getParticipantRequest(
+    body.dateRequestId,
+    sessionUser.id
+  );
+  if (!["active", "checked_in"].includes(request.status)) {
+    throw new Error(
+      "Safety recording is available only during an active date."
+    );
+  }
+  const db = await getDb();
+  const event = await db
+    .selectFrom("date_safety_event")
+    .select(["action", "date_request_id", "id"])
+    .where("id", "=", body.incidentId)
+    .where("date_request_id", "=", body.dateRequestId)
+    .where("initiated_by_user_id", "=", sessionUser.id)
+    .executeTakeFirst();
+  if (!event || event.action !== "start_recording") {
+    throw new Error("Safety recording request not found.");
+  }
+  const pathname = mediaPathFromStoredValue(body.url);
+  if (
+    !pathname ||
+    !pathname.startsWith(`profiles/${sessionUser.id}/safety_recording/`) ||
+    !mediaPathIsValid(pathname)
+  ) {
+    throw new Error("Safety recording path is invalid.");
+  }
+  const startedAt = new Date(body.startedAt);
+  if (Number.isNaN(startedAt.getTime())) {
+    throw new TypeError("Safety recording start time is invalid.");
+  }
+  const recordingId = crypto.randomUUID();
+  await db
+    .insertInto("date_safety_recording")
+    .values({
+      content_type: body.contentType,
+      created_at: new Date(),
+      date_request_id: body.dateRequestId,
+      ended_at: new Date(),
+      id: recordingId,
+      recorded_by_user_id: sessionUser.id,
+      safety_event_id: body.incidentId,
+      started_at: startedAt,
+      url: pathname,
+    })
+    .execute();
+  await updateDateSafetyEvent(body.incidentId, "recorded");
+  return { recordingId };
 };
 
 const startDate = async (sessionUser: SessionUser, requestId: string) => {
@@ -6948,6 +7455,27 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
     });
   },
 
+  async getDateSafetyStatus(input: DateSafetyLocationInput) {
+    return observeOperation("getDateSafetyStatus", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return getDateSafetyStatus(sessionUser, input);
+    });
+  },
+
+  async requestDateSafetyAction(input: DateSafetyActionInput) {
+    return observeOperation("requestDateSafetyAction", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return requestDateSafetyAction(sessionUser, input);
+    });
+  },
+
+  async completeDateSafetyRecording(input: CompleteDateSafetyRecordingInput) {
+    return observeOperation("completeDateSafetyRecording", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return completeDateSafetyRecording(sessionUser, input);
+    });
+  },
+
   async startDate(dateRequestId: string) {
     return observeOperation("startDate", async () => {
       const sessionUser = await requireSession(context.request.headers);
@@ -7391,7 +7919,12 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         .object({
           contentType: z.string().trim().min(1),
           fileName: z.string().trim().min(1).max(255),
-          slot: z.enum(["intro_video", "photo", "profile_photo"]),
+          slot: z.enum([
+            "intro_video",
+            "photo",
+            "profile_photo",
+            "safety_recording",
+          ]),
         })
         .parse(input);
       const limit = mediaLimits[body.slot];

@@ -66,6 +66,7 @@ export const toChatThread = (
   const lastMessage = messages.at(-1);
 
   return {
+    ...(room.activeDate ? { activeDate: room.activeDate } : {}),
     id: room.id,
     lastActivityAt: new Date(room.updatedAt).getTime(),
     kind: room.kind === "date_room" ? "date_room" : "friend",

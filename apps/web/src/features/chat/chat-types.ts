@@ -39,13 +39,20 @@ export interface ChatMessage {
   mediaUrl?: string;
   reaction?: string;
   senderId: "me" | string;
-  systemIcon?: "branch" | "check" | "heart" | "user" | "block" | "calendar";
+  systemIcon?:
+    | "branch"
+    | "check"
+    | "heart"
+    | "user"
+    | "block"
+    | "calendar"
+    | "safety";
   text?: string;
 }
 
 export interface ActiveDateContext {
   dateId: string;
-  places: { address: string; name: string; placeId: string }[];
+  places: { address?: string; name: string; placeId: string }[];
   role: DateScenarioRole;
   scheduledAt: string;
   searchArea: string;
