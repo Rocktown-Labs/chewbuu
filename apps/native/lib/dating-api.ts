@@ -1,4 +1,3 @@
-import { api as blocksApi } from "@chewbuu/aws-blocks";
 import type {
   ApiChatMessage,
   ApiChatRoom,
@@ -16,6 +15,8 @@ import type {
   ReviewInput,
   VenueSpecial,
 } from "@chewbuu/aws-blocks";
+
+import { blocksApi } from "@/lib/blocks-client";
 
 export type NativeDateRequest = DatingSummaryResponse["requests"][number];
 export type NativeProfile = DatingProfileResponse;

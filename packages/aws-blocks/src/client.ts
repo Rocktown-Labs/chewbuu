@@ -3,6 +3,9 @@ import "@aws-blocks/bb-realtime/mock-middleware";
 
 import type { AwsBlocksApi } from "./types";
 
+export { registerMiddleware } from "@aws-blocks/blocks/client";
+export type { BlocksMiddleware } from "@aws-blocks/core/client";
+
 export type {
   ApiChatMessage,
   ApiChatParticipant,
