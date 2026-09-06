@@ -499,6 +499,7 @@ export const createAuth = () => {
     trustedOrigins: [
       env.CORS_ORIGIN,
       "chewbuu://",
+      "chewbuu-sync://",
       "exp://",
       "http://localhost:8081",
       "https://*.localhost",

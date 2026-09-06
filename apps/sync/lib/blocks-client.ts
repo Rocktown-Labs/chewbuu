@@ -10,7 +10,7 @@ import { authClient } from "@/lib/auth-client";
 // forwards the Better Auth session cookie on every Blocks request.
 registerMiddleware(
   createNativeBlocksAuthMiddleware(() => authClient.getCookie(), {
-    appName: "native",
+    appName: "sync",
   })
 );
 
