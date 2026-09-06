@@ -24,11 +24,11 @@ describe("venue onboarding intent", () => {
     expect(consumeSyncOnboardingIntent()).toBe(false);
   });
 
-  it("preserves the selected Sync tier and billing interval", () => {
-    markSyncOnboardingIntent({ billingInterval: "annual", plan: "sync_100" });
+  it("preserves the selected Sync tier and cadence", () => {
+    markSyncOnboardingIntent({ cadence: "annual", plan: "sync_100" });
 
     expect(consumeSyncOnboardingIntentDetails()).toEqual({
-      billingInterval: "annual",
+      cadence: "annual",
       plan: "sync_100",
     });
     expect(hasSyncOnboardingIntent()).toBe(false);

@@ -542,8 +542,7 @@ export function SyncWorkspace({
     try {
       const intent = getSyncOnboardingIntent();
       const plan: SyncPlanCode = intent?.plan ?? "sync_50";
-      const interval: SyncBillingInterval =
-        intent?.billingInterval ?? "monthly";
+      const interval: SyncBillingInterval = intent?.cadence ?? "monthly";
       const result = await syncBillingApi.upgrade(
         selectedLocation?.organizationId ?? "",
         plan,

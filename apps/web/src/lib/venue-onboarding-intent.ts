@@ -3,14 +3,14 @@ import type { SyncBillingInterval, SyncPlanCode } from "./sync-billing-api";
 const SYNC_ONBOARDING_INTENT_KEY = "chewbuu.sync.onboarding-intent";
 
 export interface SyncOnboardingIntent {
-  billingInterval?: SyncBillingInterval;
+  cadence?: SyncBillingInterval;
   plan?: SyncPlanCode;
 }
 
 const isSyncPlanCode = (value: unknown): value is SyncPlanCode =>
   value === "sync_50" || value === "sync_100" || value === "sync_enterprise";
 
-const isBillingInterval = (value: unknown): value is SyncBillingInterval =>
+const isCadence = (value: unknown): value is SyncBillingInterval =>
   value === "monthly" || value === "annual";
 
 export const markSyncOnboardingIntent = (intent: SyncOnboardingIntent = {}) => {
@@ -30,10 +30,9 @@ export const getSyncOnboardingIntent = (): SyncOnboardingIntent | null => {
     const parsed: unknown = JSON.parse(value);
     if (typeof parsed !== "object" || parsed === null) return {};
     const intent = parsed as Record<string, unknown>;
+    const cadence = intent.cadence ?? intent.billingInterval;
     return {
-      ...(isBillingInterval(intent.billingInterval)
-        ? { billingInterval: intent.billingInterval }
-        : {}),
+      ...(isCadence(cadence) ? { cadence } : {}),
       ...(isSyncPlanCode(intent.plan) ? { plan: intent.plan } : {}),
     };
   } catch {

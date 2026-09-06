@@ -239,7 +239,7 @@ const SyncCta = ({
   <Link
     className={buttonVariants({ size: "lg" })}
     onClick={() => {
-      markSyncOnboardingIntent({ billingInterval, plan });
+      markSyncOnboardingIntent({ cadence: billingInterval, plan });
       trackMarketingEvent("cta_clicked", {
         button_text: typeof children === "string" ? children : "Sync CTA",
         destination: "/venue-portal",
