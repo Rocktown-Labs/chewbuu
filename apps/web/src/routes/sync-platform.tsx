@@ -226,12 +226,12 @@ const SYNC_FAQS = [
 ] as const;
 
 const SyncCta = ({
-  billingInterval,
+  cadence,
   children,
   location,
   plan,
 }: {
-  billingInterval?: SyncBillingInterval;
+  cadence?: SyncBillingInterval;
   children: ReactNode;
   location: string;
   plan?: SyncPlanCode;
@@ -239,7 +239,7 @@ const SyncCta = ({
   <Link
     className={buttonVariants({ size: "lg" })}
     onClick={() => {
-      markSyncOnboardingIntent({ cadence: billingInterval, plan });
+      markSyncOnboardingIntent({ cadence, plan });
       trackMarketingEvent("cta_clicked", {
         button_text: typeof children === "string" ? children : "Sync CTA",
         destination: "/venue-portal",
@@ -255,9 +255,7 @@ const SyncCta = ({
 );
 
 function SyncPlatformPage() {
-  const [billingInterval, setBillingInterval] = useState<"monthly" | "annual">(
-    "monthly"
-  );
+  const [cadence, setCadence] = useState<"monthly" | "annual">("monthly");
 
   return (
     <main className="overflow-hidden bg-background text-foreground">
@@ -492,22 +490,22 @@ function SyncPlatformPage() {
             <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 p-1.5">
               <button
                 className={`rounded-full px-5 py-2 text-xs font-bold transition cursor-pointer ${
-                  billingInterval === "monthly"
+                  cadence === "monthly"
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
-                onClick={() => setBillingInterval("monthly")}
+                onClick={() => setCadence("monthly")}
                 type="button"
               >
                 Monthly billing
               </button>
               <button
                 className={`inline-flex items-center gap-1.5 rounded-full px-5 py-2 text-xs font-bold transition cursor-pointer ${
-                  billingInterval === "annual"
+                  cadence === "annual"
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
-                onClick={() => setBillingInterval("annual")}
+                onClick={() => setCadence("annual")}
                 type="button"
               >
                 <span>Annual billing</span>
@@ -521,9 +519,7 @@ function SyncPlatformPage() {
           <div className="mt-14 grid gap-6 lg:grid-cols-3">
             {SYNC_TIERS.map((tier) => {
               const price =
-                billingInterval === "annual"
-                  ? tier.priceAnnual
-                  : tier.priceMonthly;
+                cadence === "annual" ? tier.priceAnnual : tier.priceMonthly;
 
               return (
                 <Card
@@ -594,7 +590,7 @@ function SyncPlatformPage() {
                             : "text-muted-foreground"
                         }`}
                       >
-                        {billingInterval === "annual"
+                        {cadence === "annual"
                           ? "Billed annually"
                           : "Billed monthly"}
                       </p>
@@ -628,7 +624,7 @@ function SyncPlatformPage() {
 
                   <div className="p-6 pt-0 sm:p-8 sm:pt-0">
                     <SyncCta
-                      billingInterval={billingInterval}
+                      cadence={cadence}
                       location={`sync_tier_${tier.id}`}
                       plan={tier.id}
                     >

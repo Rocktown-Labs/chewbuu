@@ -30,9 +30,8 @@ export const getSyncOnboardingIntent = (): SyncOnboardingIntent | null => {
     const parsed: unknown = JSON.parse(value);
     if (typeof parsed !== "object" || parsed === null) return {};
     const intent = parsed as Record<string, unknown>;
-    const cadence = intent.cadence ?? intent.billingInterval;
     return {
-      ...(isCadence(cadence) ? { cadence } : {}),
+      ...(isCadence(intent.cadence) ? { cadence: intent.cadence } : {}),
       ...(isSyncPlanCode(intent.plan) ? { plan: intent.plan } : {}),
     };
   } catch {
