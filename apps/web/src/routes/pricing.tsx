@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import Footer from "@/components/footer";
 import { getCanonicalUrl } from "@/lib/seo";
 
 const CONSUMER_PLANS = [
@@ -34,7 +33,8 @@ const CONSUMER_PLANS = [
     id: "social",
     name: "Social",
     popular: false,
-    priceAnnual: 0,
+    annualEquivalent: 0,
+    annualTotal: 0,
     priceMonthly: 0,
     priceSuffix: "free",
     tagline: "Explore the dining scene",
@@ -54,7 +54,8 @@ const CONSUMER_PLANS = [
     id: "mingle",
     name: "Mingle",
     popular: true,
-    priceAnnual: 15,
+    annualEquivalent: 15.83,
+    annualTotal: 190,
     priceMonthly: 19,
     priceSuffix: "/mo",
     tagline: "Social dining with friend circles",
@@ -69,18 +70,25 @@ const CONSUMER_PLANS = [
       "Direct reservation locks at partner venues",
       "Plan up to 24 dates per day",
       "Distinctive VIP Host gold badge on profile",
-      "Priority concierge customer support",
+      "Customer support for billing and account questions",
       "Includes all Mingle & Social capabilities",
     ],
     id: "host",
     name: "Host",
     popular: false,
-    priceAnnual: 32,
+    annualEquivalent: 32.5,
+    annualTotal: 390,
     priceMonthly: 39,
     priceSuffix: "/mo",
     tagline: "Premier table hosting & invitations",
   },
 ];
+
+const getAnnualSavings = (monthlyPrice: number, annualTotal: number) =>
+  Math.round((1 - annualTotal / (monthlyPrice * 12)) * 100);
+
+const formatPrice = (price: number) =>
+  Number.isInteger(price) ? String(price) : price.toFixed(2);
 
 const VENUE_TIERS = [
   {
@@ -93,7 +101,8 @@ const VENUE_TIERS = [
       "Stripe Connect dining checkout & automated tip splits",
     ],
     name: "Sync 50",
-    priceAnnual: 59,
+    annualEquivalent: 59,
+    annualTotal: 708,
     priceMonthly: 69,
   },
   {
@@ -103,11 +112,12 @@ const VENUE_TIERS = [
       "Multi-station kitchen routing & expediter view",
       "Comprehensive table turnover & operational metrics",
       "1 free Chewbuu Spotlight promotion included monthly",
-      "Priority phone and chat operator support",
+      "Customer and operator support",
     ],
     name: "Sync 100",
     popular: true,
-    priceAnnual: 119,
+    annualEquivalent: 119,
+    annualTotal: 1428,
     priceMonthly: 139,
   },
   {
@@ -116,11 +126,12 @@ const VENUE_TIERS = [
       "Unlimited active staff members",
       "Multi-location restaurant group controls",
       "Centralized menu syndication and cross-unit analytics",
-      "Dedicated account manager & custom POS integration",
-      "Custom billing terms and SLA guarantees",
+      "Enterprise account support and integration planning",
+      "Enterprise billing review and account support",
     ],
     name: "Sync Enterprise",
-    priceAnnual: 219,
+    annualEquivalent: 219,
+    annualTotal: 2628,
     priceMonthly: 249,
   },
 ];
@@ -144,7 +155,8 @@ function PricingPage() {
           <p className="text-muted-foreground text-base sm:text-lg leading-relaxed">
             Whether you are discovering new spots for date night, dining with
             friend circles, or operating a busy restaurant with Chewbuu
-            Sync—everything is transparent, predictable, and easy to cancel.
+            Sync—pricing is published up front, with self-serve cancellation
+            controls for active subscriptions.
           </p>
 
           {/* Billing Cadence Toggle */}
@@ -172,7 +184,7 @@ function PricingPage() {
               >
                 <span>Annual billing</span>
                 <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-extrabold text-emerald-500 dark:text-emerald-400">
-                  Save ~20%
+                  Save 12–17%
                 </span>
               </button>
             </div>
@@ -198,10 +210,10 @@ function PricingPage() {
 
           <div className="mt-12 grid gap-6 lg:grid-cols-3">
             {CONSUMER_PLANS.map((plan) => {
-              const price =
-                billingInterval === "annual"
-                  ? plan.priceAnnual
-                  : plan.priceMonthly;
+              const isAnnual = billingInterval === "annual";
+              const price = isAnnual
+                ? plan.annualEquivalent
+                : plan.priceMonthly;
 
               return (
                 <Card
@@ -244,7 +256,7 @@ function PricingPage() {
 
                       <div className="mt-6 flex items-baseline gap-1">
                         <span className="font-black text-5xl tracking-tight">
-                          ${price}
+                          ${formatPrice(price)}
                         </span>
                         <span
                           className={`text-sm font-semibold ${
@@ -253,7 +265,7 @@ function PricingPage() {
                               : "text-muted-foreground"
                           }`}
                         >
-                          {plan.priceSuffix}
+                          {isAnnual ? "/mo equiv." : plan.priceSuffix}
                         </span>
                       </div>
                       <p
@@ -274,8 +286,8 @@ function PricingPage() {
                       >
                         {plan.priceMonthly === 0
                           ? "Free for all members"
-                          : billingInterval === "annual"
-                            ? "Billed annually"
+                          : isAnnual
+                            ? `Billed annually · $${plan.annualTotal}/yr total · Save ${getAnnualSavings(plan.priceMonthly, plan.annualTotal)}%`
                             : "Billed monthly"}
                       </p>
                     </div>
@@ -347,10 +359,10 @@ function PricingPage() {
 
           <div className="mt-12 grid gap-6 lg:grid-cols-3">
             {VENUE_TIERS.map((tier) => {
-              const price =
-                billingInterval === "annual"
-                  ? tier.priceAnnual
-                  : tier.priceMonthly;
+              const isAnnual = billingInterval === "annual";
+              const price = isAnnual
+                ? tier.annualEquivalent
+                : tier.priceMonthly;
 
               return (
                 <div
@@ -368,14 +380,16 @@ function PricingPage() {
                     </div>
 
                     <div className="mt-4 flex items-baseline gap-1">
-                      <span className="font-black text-4xl">${price}</span>
+                      <span className="font-black text-4xl">
+                        ${formatPrice(price)}
+                      </span>
                       <span className="text-sm font-semibold text-muted-foreground">
-                        /mo
+                        {isAnnual ? "/mo equiv." : "/mo"}
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {billingInterval === "annual"
-                        ? "Billed annually"
+                      {isAnnual
+                        ? `Billed annually · $${tier.annualTotal}/yr total · Save ${getAnnualSavings(tier.priceMonthly, tier.annualTotal)}%`
                         : "Billed monthly"}
                     </p>
 
@@ -497,7 +511,7 @@ function PricingPage() {
               Transparency
             </Badge>
             <h2 className="mt-3 font-extrabold text-2xl sm:text-3xl">
-              Billing guarantees and policies
+              Billing & policy information
             </h2>
           </div>
 
@@ -508,9 +522,9 @@ function PricingPage() {
                 Cancellation
               </span>
               <p className="text-muted-foreground leading-relaxed">
-                Cancel your subscription anytime in 1 click in Account Settings.
-                Access continues through the end of your prepaid period with no
-                fees.
+                Consumer members can cancel renewal in Account Settings. Venue
+                managers can cancel Sync from the Sync workspace. Access
+                continues through the end of the prepaid period.
               </p>
             </div>
             <div className="rounded-2xl border border-border bg-card p-5 space-y-2">
@@ -520,8 +534,7 @@ function PricingPage() {
               </span>
               <p className="text-muted-foreground leading-relaxed">
                 Accidental auto-renewal? Contact support@chewbuu.com within 72
-                hours for a full refund to your original payment method. Read
-                our{" "}
+                hours for a refund review. Read our{" "}
                 <Link className="text-primary underline" to="/refund-policy">
                   Refund Policy
                 </Link>
@@ -533,15 +546,13 @@ function PricingPage() {
                 <CreditCard className="size-4 text-primary" /> Clear Descriptors
               </span>
               <p className="text-muted-foreground leading-relaxed">
-                All transactions appear clearly on your statement as 'CHEWBUU*
-                APP', 'CHEWBUU* DINING', or 'CHEWBUU* SYNC' in USD.
+                Transactions are processed in USD through Stripe. The statement
+                descriptor depends on the merchant account and transaction.
               </p>
             </div>
           </div>
         </div>
       </section>
-
-      <Footer />
     </main>
   );
 }

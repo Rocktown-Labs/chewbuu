@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import Footer from "@/components/footer";
 import { authClient } from "@/lib/auth-client";
 import { pricingApi, type MembershipPlan } from "@/lib/dating-api";
 import { trackMarketingEvent } from "@/lib/marketing-events";
@@ -70,7 +69,7 @@ const REASONS = [
   {
     icon: Video,
     title: "Video-First Matching",
-    text: "No catfish, no fake profiles. Matches exchange short video intros before text chat unlocks.",
+    text: "Live intro videos and photos make profiles harder to fake before text chat unlocks.",
   },
   {
     icon: MapPin,
@@ -114,11 +113,11 @@ const FAQS = [
   },
   {
     q: "How much does Chewbuu cost?",
-    a: "Chewbuu is free forever under the Social tier. You can create solo date requests, view verified profiles, and book up to 2 dates per day. Upgrade to Mingle or Sugar for double dates, covering date costs, and more bookings.",
+    a: "Chewbuu is free forever under the Social tier. You can create solo date requests, view verified profiles, and book up to 2 dates per day. Upgrade to Mingle or Host for double dates, dining-check coverage, and more bookings.",
   },
   {
     q: "How does video-first verification work?",
-    a: "During onboarding, every user records a live intro video and snaps a live photo. To start texting a match, you exchange quick video replies. This guarantees that you only date 100% verified, real people.",
+    a: "Onboarding includes a live intro video and live photo step. Depending on account status, matches exchange quick video replies before text chat unlocks; these checks are designed to make profiles harder to fake.",
   },
   {
     q: "What is the Chewbuu rating & score?",
@@ -442,7 +441,6 @@ const HomeComponent = () => {
           </div>
         </div>
       </section>
-      <Footer />
     </main>
   );
 };

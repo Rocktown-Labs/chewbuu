@@ -96,6 +96,7 @@ import { z } from "zod";
 
 import { AnalyticsDrawer } from "@/components/analytics/analytics-drawer";
 import { PasskeysCard } from "@/components/auth/passkey";
+import { SubscriptionCancellationCard } from "@/components/billing/subscription-cancellation-card";
 import { NavigationBlocker } from "@/components/navigation-blocker";
 import {
   HorizontalStepper,
@@ -133,6 +134,8 @@ import {
   getLocationWeatherFromCityName,
   getLocationWeatherFromCoords,
 } from "@/lib/location-weather";
+import { subscriptionBillingApi } from "@/lib/subscription-billing-api";
+import type { SubscriptionSummary } from "@/lib/subscription-billing-api";
 import { useUsernameChecker } from "@/lib/use-username-checker";
 
 interface DateRecap {
@@ -3840,6 +3843,9 @@ function ProfileSettingsPanel({
   profile: DatingProfilePayload | null;
   tier: string;
 }) {
+  const [subscription, setSubscription] = useState<SubscriptionSummary | null>(
+    null
+  );
   const interestRows = [
     ["Looking for", profile?.lookingFor ?? []],
     ["Interests", profile?.interests ?? []],
@@ -3847,8 +3853,44 @@ function ProfileSettingsPanel({
     ["Dating modes", profile?.datingModes ?? []],
   ] as const;
 
+  useEffect(() => {
+    if (tier === "social") {
+      setSubscription(null);
+      return;
+    }
+
+    let isCurrent = true;
+    const loadSubscription = async () => {
+      try {
+        const subscriptions = await subscriptionBillingApi.list({
+          customerType: "user",
+        });
+        const activeSubscription = subscriptions.find((item) =>
+          ["active", "trialing"].includes(item.status)
+        );
+        if (isCurrent) setSubscription(activeSubscription ?? null);
+      } catch {
+        if (isCurrent) setSubscription(null);
+      }
+    };
+
+    void loadSubscription();
+    return () => {
+      isCurrent = false;
+    };
+  }, [tier]);
+
   return (
     <div className="grid gap-4 p-5">
+      {tier !== "social" ? (
+        <SubscriptionCancellationCard
+          cancelAtPeriodEnd={subscription?.cancelAtPeriodEnd}
+          customerType="user"
+          description="Cancel automatic renewal without losing access to your current paid period."
+          planName={tier === "sugar" ? "Host" : "Mingle"}
+          returnPath="/me?billing=cancelled"
+        />
+      ) : null}
       <ConnectedAccountsCard />
       <PasskeysCard />
 

@@ -16,13 +16,11 @@ import {
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import Footer from "@/components/footer";
-
 const departments = [
   {
     email: "support@chewbuu.com",
     icon: MessageSquare,
-    response: "Within 24–48 business hours",
+    response: "Response timing varies",
     title: "Customer & Member Support",
     description:
       "Help with your profile, date planning, app navigation, or general questions.",
@@ -30,7 +28,7 @@ const departments = [
   {
     email: "billing@chewbuu.com",
     icon: CreditCard,
-    response: "Within 24 business hours",
+    response: "Response timing varies",
     title: "Billing & Subscriptions",
     description:
       "Subscription cancellations, 72-hour renewal refunds, receipts, or statement inquiries.",
@@ -38,7 +36,7 @@ const departments = [
   {
     email: "safety@chewbuu.com",
     icon: ShieldCheck,
-    response: "Priority review within 24 hours",
+    response: "Review timing varies",
     title: "Trust & Safety / Abuse Reports",
     description:
       "Report fake accounts, harassment, policy violations, or safety concerns.",
@@ -46,7 +44,7 @@ const departments = [
   {
     email: "lawenforcement@chewbuu.com",
     icon: Gavel,
-    response: "Dedicated legal compliance team",
+    response: "For official legal process",
     title: "Law Enforcement & Legal Process",
     description:
       "Subpoenas, warrants, preservation letters, and emergency requests from sworn agencies.",
@@ -54,7 +52,7 @@ const departments = [
   {
     email: "venues@chewbuu.com",
     icon: Store,
-    response: "Within 1 business day",
+    response: "Response timing varies",
     title: "Venue & Restaurant Partners",
     description:
       "Chewbuu Sync operations, table management setup, specials promotions, and merchant payouts.",
@@ -67,6 +65,7 @@ function ContactRoute() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [submittedTo, setSubmittedTo] = useState("support@chewbuu.com");
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -83,7 +82,9 @@ function ContactRoute() {
           ? "safety@chewbuu.com"
           : topic === "venue"
             ? "venues@chewbuu.com"
-            : "support@chewbuu.com";
+            : topic === "legal"
+              ? "lawenforcement@chewbuu.com"
+              : "support@chewbuu.com";
 
     const subject = encodeURIComponent(
       `[Chewbuu Inquiry] ${topic.toUpperCase()} - from ${name || "Member"}`
@@ -93,6 +94,7 @@ function ContactRoute() {
     );
 
     window.location.href = `mailto:${targetEmail}?subject=${subject}&body=${body}`;
+    setSubmittedTo(targetEmail);
     setSubmitted(true);
     toast.success("Opening your email client to send your inquiry!");
   };
@@ -216,7 +218,7 @@ function ContactRoute() {
                   </option>
                   <option value="safety">Trust & Safety / Member Report</option>
                   <option value="venue">Venue Partner (Chewbuu Sync)</option>
-                  <option value="legal">Legal & Compliance</option>
+                  <option value="legal">Legal Process & Compliance</option>
                 </select>
               </div>
 
@@ -244,7 +246,7 @@ function ContactRoute() {
               {submitted && (
                 <p className="text-xs font-semibold text-emerald-600">
                   Thank you! If your email client didn't open automatically, you
-                  can always write to support@chewbuu.com directly.
+                  can always write to {submittedTo} directly.
                 </p>
               )}
             </form>
@@ -333,8 +335,6 @@ function ContactRoute() {
           </div>
         </div>
       </section>
-
-      <Footer />
     </main>
   );
 }

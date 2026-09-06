@@ -2,8 +2,6 @@ import { Badge } from "@chewbuu/ui/components/badge";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Building2, Gavel, Mail, Shield } from "lucide-react";
 
-import Footer from "@/components/footer";
-
 const protocols = [
   {
     title: "1. Overview & General Policy",
@@ -33,8 +31,8 @@ const protocols = [
   {
     title: "4. Data Preservation Requests (18 U.S.C. § 2703(f))",
     body: [
-      "Chewbuu complies with formal preservation requests submitted pursuant to 18 U.S.C. § 2703(f).",
-      "Upon receipt of an official written request, Chewbuu will preserve existing account records for a period of 90 days pending issuance of formal legal process (subpoena, court order, or warrant).",
+      "Chewbuu will evaluate formal preservation requests submitted pursuant to 18 U.S.C. § 2703(f) and respond as required by applicable law.",
+      "When a valid preservation request is accepted, records are preserved only to the extent they exist and for the period required by applicable law or a valid request.",
       "Preservation requests must specifically identify the account by email, account ID, or phone number, and must be submitted on official law enforcement agency letterhead.",
     ],
   },
@@ -43,7 +41,7 @@ const protocols = [
     highlight: true,
     body: [
       "Chewbuu maintains absolute zero tolerance for child sexual abuse material (CSAM), child sexual exploitation and abuse (CSAE), and human trafficking.",
-      "Pursuant to 18 U.S.C. § 2258A, Chewbuu proactively reports all suspected incidents of CSAM or child exploitation directly to the National Center for Missing & Exploited Children (NCMEC) CyberTipline, providing associated IP logs, account identifiers, and evidence.",
+      "Chewbuu will make reports to the National Center for Missing & Exploited Children (NCMEC) CyberTipline and relevant authorities when required by applicable law. Any disclosure is limited to information lawfully available and appropriate to the report.",
       "Law enforcement agencies investigating NCMEC reports involving Chewbuu accounts may reference the NCMEC CyberTipline report number in communications with our compliance team.",
     ],
   },
@@ -58,8 +56,8 @@ const protocols = [
   {
     title: "7. User Notice Policy",
     body: [
-      "Chewbuu's standard policy is to notify users of receipt of legal requests seeking their account information, providing them an opportunity to seek legal protective orders, prior to disclosing records.",
-      "Exceptions: Chewbuu does not provide notice to users where notice is expressly prohibited by a valid court non-disclosure order issued under 18 U.S.C. § 2705(b), or where Chewbuu determines in its sole discretion that providing notice would pose an imminent risk of physical harm, endanger minors, or impede an active investigation.",
+      "Where legally permitted and reasonably practicable, Chewbuu may notify users of requests seeking their account information before disclosure.",
+      "Chewbuu will not provide notice where notice is prohibited by valid legal process or where notice could create an imminent risk of physical harm, endanger minors, or impede an active investigation.",
     ],
   },
   {
@@ -115,8 +113,8 @@ function LawEnforcementRoute() {
                   <Mail className="size-4" /> lawenforcement@chewbuu.com
                 </a>
                 <span className="text-xs text-muted-foreground">
-                  Monitored for official .gov and law enforcement domain
-                  requests.
+                  Include your agency, case number, legal authority, and a
+                  specific account identifier.
                 </span>
               </div>
             </div>
@@ -204,8 +202,6 @@ function LawEnforcementRoute() {
           </div>
         </section>
       </section>
-
-      <Footer />
     </main>
   );
 }

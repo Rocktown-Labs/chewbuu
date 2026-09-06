@@ -47,8 +47,8 @@ These workflow inputs were not present in the GitHub `production` secret list wh
 | `STRIPE_PLATFORM_FEE_BPS` | Uses the default 5% platform fee when omitted |
 | `STRIPE_MINGLE_PRICE_ID` | Temporary legacy fallback before catalog sync |
 | `STRIPE_MINGLE_ANNUAL_PRICE_ID` | Temporary legacy fallback before catalog sync |
-| `STRIPE_SUGAR_PRICE_ID` | Temporary legacy fallback before catalog sync |
-| `STRIPE_SUGAR_ANNUAL_PRICE_ID` | Temporary legacy fallback before catalog sync |
+| `STRIPE_SUGAR_PRICE_ID` | Temporary legacy Host-price fallback before catalog sync |
+| `STRIPE_SUGAR_ANNUAL_PRICE_ID` | Temporary legacy Host annual-price fallback before catalog sync |
 
 These production variables are optional but should be deliberately reviewed:
 

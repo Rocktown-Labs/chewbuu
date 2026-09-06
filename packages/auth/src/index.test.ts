@@ -75,6 +75,10 @@ describe("buildStripePlans", () => {
     expect(mingle?.priceId).toBe("price_mingle_monthly_db");
     expect(mingle?.annualDiscountPriceId).toBe("price_mingle_annual_db");
 
+    const host = plans.find((p) => p.name === "Host");
+    expect(host?.priceId).toBe("price_sugar_monthly_db");
+    expect(host?.annualDiscountPriceId).toBe("price_sugar_annual_db");
+
     const sync100 = plans.find((p) => p.name === "sync_100");
     expect(sync100).toMatchObject({
       annualDiscountPriceId: "price_sync100_annual_db",

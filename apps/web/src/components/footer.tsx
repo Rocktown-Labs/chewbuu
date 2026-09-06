@@ -150,7 +150,7 @@ export default function Footer() {
                 Operating across verified local hospitality partners
               </li>
               <li className="text-xs text-muted-foreground">
-                Support SLA: Response within 24–48 hours
+                Support response timing varies by request
               </li>
             </ul>
           </div>

@@ -3611,9 +3611,9 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
                   </h3>
                   <p className="text-muted-foreground text-sm">
                     Invite up to three friends while you sign up. Mingle and
-                    Sugar members can add them to a named circle for group
-                    dates; Social members still get referral credit when friends
-                    join Chewbuu.
+                    Host members can add them to a named circle for group dates;
+                    Social members still get referral credit when friends join
+                    Chewbuu.
                   </p>
                 </div>
               </div>
@@ -3667,11 +3667,16 @@ function FriendsStep({ form }: { form: OnboardingFormApi }) {
 }
 
 interface StripeUpgradeActions {
-  stripe: {
+  subscription: {
     upgrade: (input: {
-      priceId: string;
-      callbackURL: string;
-    }) => Promise<{ error: { message: string } | null }>;
+      plan: string;
+      annual?: boolean;
+      cancelUrl: string;
+      successUrl: string;
+    }) => Promise<{
+      data?: { redirect?: boolean; url?: string };
+      error?: { message?: string } | null;
+    }>;
   };
 }
 
@@ -3707,7 +3712,7 @@ function PremiumStep({
       features: [
         "Create solo date requests (1 person)",
         "Max 2 booked dates per day",
-        "100% verified real video intros",
+        "Live intro video and photo checks",
         "Standard matchmaking pool",
         "Direct chat with confirmed matches",
       ],
@@ -3770,24 +3775,15 @@ function PremiumStep({
       return;
     }
 
-    const priceId =
-      billingPeriod === "monthly"
-        ? currentPlan.stripePriceId
-        : currentPlan.annualStripePriceId;
-
-    if (!priceId) {
-      toast.info(`Completing onboarding with ${currentPlan.name} tier.`);
-      void form.handleSubmit();
-      return;
-    }
-
     try {
       toast.loading("Redirecting to checkout...", { id: "checkout" });
       const res = await (
         authClient as unknown as StripeUpgradeActions
-      ).stripe.upgrade({
-        priceId,
-        callbackURL: `${window.location.origin}/me`,
+      ).subscription.upgrade({
+        annual: billingPeriod === "annual",
+        cancelUrl: `${window.location.origin}/onboarding?billing=cancelled`,
+        plan: selectedTier === "sugar" ? "Host" : "Mingle",
+        successUrl: `${window.location.origin}/me?billing=success`,
       });
       if (res.error) {
         toast.dismiss("checkout");
@@ -3810,7 +3806,7 @@ function PremiumStep({
         <StepIntro
           eyebrow="Upgrade Chewbuu"
           title="Pick your dating mode."
-          text="Social is completely free. Upgrade to Mingle for group dates and circles, or Sugar to cover dates and send direct requests."
+          text="Social is completely free. Upgrade to Mingle for group dates and circles, or Host to cover dining checks and send direct requests."
         />
 
         {/* Billing Period Toggle */}

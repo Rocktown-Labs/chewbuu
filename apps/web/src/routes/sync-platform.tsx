@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-import Footer from "@/components/footer";
 import { trackMarketingEvent } from "@/lib/marketing-events";
 import { OG_IMAGE_URL, getCanonicalUrl, SITE_NAME } from "@/lib/seo";
 import type { SyncBillingInterval, SyncPlanCode } from "@/lib/sync-billing-api";
@@ -94,7 +93,8 @@ const SYNC_TIERS = [
     maxStaffText: "Up to 50 active staff members",
     name: "Sync 50",
     popular: false,
-    priceAnnual: 59,
+    annualEquivalent: 59,
+    annualTotal: 708,
     priceMonthly: 69,
   },
   {
@@ -109,13 +109,14 @@ const SYNC_TIERS = [
       "Advanced operational bottleneck analytics & table turnover pacing",
       "1 free Chewbuu Spotlight promotion included per month ($49 value)",
       "In-app local job listings board & applicant review pipeline",
-      "Priority customer & technical support",
+      "Customer and technical support",
     ],
     id: "sync_100",
     maxStaffText: "Up to 100 active staff members",
     name: "Sync 100",
     popular: true,
-    priceAnnual: 119,
+    annualEquivalent: 119,
+    annualTotal: 1428,
     priceMonthly: 139,
   },
   {
@@ -130,17 +131,24 @@ const SYNC_TIERS = [
       "Distinct location menus, pricing overrides & operating schedules",
       "Cross-location staff borrowing and schedule transfers",
       "Enterprise payroll & tip pool export integrations",
-      "Guaranteed priority placement in Spots discovery & 99.9% uptime SLA",
-      "Dedicated hospitality account manager",
+      "Priority placement options in Spots discovery and enterprise support",
+      "Enterprise account support",
     ],
     id: "sync_enterprise",
     maxStaffText: "Unlimited active staff members",
     name: "Sync Enterprise",
     popular: false,
-    priceAnnual: 219,
+    annualEquivalent: 219,
+    annualTotal: 2628,
     priceMonthly: 249,
   },
 ] as const;
+
+const getAnnualSavings = (monthlyPrice: number, annualTotal: number) =>
+  Math.round((1 - annualTotal / (monthlyPrice * 12)) * 100);
+
+const formatPrice = (price: number) =>
+  Number.isInteger(price) ? String(price) : price.toFixed(2);
 
 const SPOTLIGHT_OFFERS = [
   {
@@ -149,10 +157,10 @@ const SPOTLIGHT_OFFERS = [
       "Pin your restaurant to the top of Explore Spots and Date Wizard recommendations for couples in your area.",
     duration: "7 days placement",
     features: [
-      "Pinned to #1 in local Spots feed within 10 miles",
+      "Priority placement in the local Spots feed",
       "Featured placement in Date Wizard venue suggestions",
       "Warm gold 'Spotlight Partner' glow badge on your spot card",
-      "Guaranteed visibility to couples planning upcoming date nights",
+      "Priority placement for couples planning upcoming date nights",
     ],
     icon: Flame,
     id: "spotlight_venue",
@@ -510,7 +518,7 @@ function SyncPlatformPage() {
               >
                 <span>Annual billing</span>
                 <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-extrabold text-emerald-400">
-                  Save ~15%
+                  Save 12–14%
                 </span>
               </button>
             </div>
@@ -518,8 +526,10 @@ function SyncPlatformPage() {
 
           <div className="mt-14 grid gap-6 lg:grid-cols-3">
             {SYNC_TIERS.map((tier) => {
-              const price =
-                cadence === "annual" ? tier.priceAnnual : tier.priceMonthly;
+              const isAnnual = cadence === "annual";
+              const price = isAnnual
+                ? tier.annualEquivalent
+                : tier.priceMonthly;
 
               return (
                 <Card
@@ -562,7 +572,7 @@ function SyncPlatformPage() {
 
                       <div className="mt-6 flex items-baseline gap-1">
                         <span className="font-black text-5xl tracking-tight">
-                          ${price}
+                          ${formatPrice(price)}
                         </span>
                         <span
                           className={`text-sm font-semibold ${
@@ -571,7 +581,7 @@ function SyncPlatformPage() {
                               : "text-muted-foreground"
                           }`}
                         >
-                          /mo
+                          {isAnnual ? "/mo equiv." : "/mo"}
                         </span>
                       </div>
                       <p
@@ -590,8 +600,8 @@ function SyncPlatformPage() {
                             : "text-muted-foreground"
                         }`}
                       >
-                        {cadence === "annual"
-                          ? "Billed annually"
+                        {isAnnual
+                          ? `Billed annually · $${tier.annualTotal}/yr total · Save ${getAnnualSavings(tier.priceMonthly, tier.annualTotal)}%`
                           : "Billed monthly"}
                       </p>
                     </div>
@@ -896,7 +906,6 @@ function SyncPlatformPage() {
           </div>
         </div>
       </section>
-      <Footer />
     </main>
   );
 }
@@ -939,7 +948,7 @@ export const Route = createFileRoute("/sync-platform")({
           offers: {
             "@type": "Offer",
             description:
-              "Free venue setup; plans start at $59 per month for up to 50 staff seats.",
+              "Free venue setup; plans start at $69 per month, or $59 per month equivalent when billed annually, for up to 50 staff seats.",
             price: "0",
             priceCurrency: "USD",
           },

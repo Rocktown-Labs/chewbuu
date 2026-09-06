@@ -10,15 +10,13 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import Footer from "@/components/footer";
-
 const termsOverview = [
   "You must be 18 or older, use your real account, keep credentials secure, and provide accurate profile, safety, and payment information.",
   "Zero tolerance for human trafficking, forced labor, prostitution, escort services, sexual exploitation, abuse, coercion, grooming, or commercial solicitation.",
   "No fake profiles, harassment, scams, threats, non-consensual content, illegal activity, or attempts to bypass safety and verification systems.",
   "Chewbuu connects adults for in-person dining and social dates at partner venues, but cannot guarantee chemistry, personal behavior, or venue table availability.",
-  "Subscriptions auto-renew monthly or annually and can be canceled anytime self-serve in Account Settings. Payments are processed in USD and billed under 'CHEWBUU* APP' or 'CHEWBUU* DINING'.",
-  "Safety tools can use location, reports, trusted contacts, venue alerts, and emergency escalation. Chewbuu cooperates fully with lawful law enforcement requests.",
+  "Subscriptions auto-renew monthly or annually until canceled. Consumer subscriptions can be canceled in Account Settings; venue managers can cancel Sync in the Sync workspace. Payments are processed in USD, and the final statement descriptor is shown by the payment processor.",
+  "Depending on availability, safety tools may use location, trusted contacts, venue alerts, and emergency escalation. Chewbuu cooperates with valid lawful law-enforcement requests.",
 ];
 
 const termsSections = [
@@ -38,7 +36,7 @@ const termsSections = [
       "Chewbuu strictly prohibits human trafficking, forced labor, sexual exploitation, prostitution, escort services, abuse, coercion, and the use of Chewbuu to recruit, solicit, arrange, facilitate, aid, abet, encourage, or profit from these activities.",
       "Users may not use the service to exploit, threaten, groom, or control another person, or to exchange money, financial compensation, gifts, or allowances for dates, companionship, or intimacy.",
       "Any profile, message, or activity suggesting, facilitating, or promoting sexual exploitation, non-consensual sexual content, or compensated dating arrangements will result in immediate permanent account termination.",
-      "We reserve the right to remove content, suspend or terminate accounts without prior notice, preserve relevant transaction and message information, and proactively cooperate with lawful criminal investigations, child protection agencies, and emergency law enforcement requests.",
+      "We reserve the right to remove content, suspend or terminate accounts without prior notice, preserve relevant information, and cooperate with valid lawful criminal investigations, child protection agencies, and emergency law-enforcement requests.",
     ],
   },
   {
@@ -47,7 +45,7 @@ const termsSections = [
       "Chewbuu is dedicated to real people planning authentic, in-person dining and social experiences. Impersonation, fake profiles, automated bots, romance scams, harassment, stalking, hate speech, and spam are strictly forbidden.",
       "Users must comply at all times with our Acceptable Use Policy (/acceptable-use), which governs permissible conduct on the platform.",
       "You may not upload or distribute content that is non-consensual, misleading, sexually explicit, hateful, defamatory, or infringing upon third-party rights.",
-      "Chewbuu employs verification systems, moderation filters, and user reporting tools to protect community integrity.",
+      "Chewbuu uses the verification checks and safety review processes described in the service and may restrict accounts or content that violate these Terms.",
     ],
   },
   {
@@ -63,8 +61,8 @@ const termsSections = [
     body: [
       "Chewbuu offers free access ('Social') and premium paid subscription tiers ('Mingle', 'Host') for consumers, as well as operational software tiers ('Chewbuu Sync') for restaurant venues.",
       "Recurring Billing: All paid subscriptions are billed automatically in advance on a recurring monthly or annual basis until canceled.",
-      "Statement Descriptor: Charges appear on your financial statement as 'CHEWBUU* APP', 'CHEWBUU* DINING', or 'CHEWBUU* SYNC' in USD.",
-      "Self-Serve Cancellation: You may cancel your subscription at any time with 1 click in your Account Settings, or by emailing support@chewbuu.com. Cancellation takes effect at the end of the current paid billing cycle. You will not be charged again.",
+      "Statement Descriptor: Charges are processed in USD through Stripe. The final descriptor shown on your statement depends on the merchant account and transaction.",
+      "Self-Serve Cancellation: Consumer subscribers can cancel renewal from Account Settings, and venue managers can cancel Sync from the Sync workspace. Cancellation takes effect at the end of the current paid billing cycle. If self-serve controls are unavailable, email support@chewbuu.com; a completed cancellation stops future renewal charges.",
       "Refund Policy: Subscriptions and payments are subject to our dedicated Refund Policy (/refund-policy), including a 72-hour grace period for accidental subscription renewals upon request.",
     ],
   },
@@ -294,8 +292,6 @@ function TermsRoute() {
           </div>
         </section>
       </section>
-
-      <Footer />
     </main>
   );
 }

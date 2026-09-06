@@ -18,6 +18,19 @@ import {
 } from "./membership";
 
 const RESERVED_USERNAMES = new Set(["chewbuu", "chewbuusync"]);
+const SUBSCRIPTION_MANAGER_ROLES = new Set([
+  "admin",
+  "lead",
+  "manager",
+  "owner",
+]);
+
+type SubscriptionReferenceAction =
+  | "billing-portal"
+  | "cancel-subscription"
+  | "list-subscription"
+  | "restore-subscription"
+  | "upgrade-subscription";
 
 export const isReservedUsername = (value: string) =>
   RESERVED_USERNAMES.has(value.trim().replace(/^@/, "").toLowerCase());
@@ -366,6 +379,30 @@ export const createAuth = () => {
                   },
                   name: organization.name,
                 }),
+              },
+              authorizeReference: async ({
+                action,
+                referenceId,
+                user,
+              }: {
+                action: SubscriptionReferenceAction;
+                referenceId: string;
+                user: { id: string; role?: string | null };
+              }) => {
+                if (user.role === "admin" || referenceId === user.id) {
+                  return true;
+                }
+                if (!referenceId) return false;
+
+                const member = await db
+                  .selectFrom("venue_member")
+                  .select(["role", "status"])
+                  .where("organization_id", "=", referenceId)
+                  .where("user_id", "=", user.id)
+                  .executeTakeFirst();
+                if (!member || member.status !== "active") return false;
+                if (action === "list-subscription") return true;
+                return SUBSCRIPTION_MANAGER_ROLES.has(member.role);
               },
               stripeClient: createStripeClient(env.STRIPE_SECRET_KEY as string),
               stripeWebhookSecret: stripeWebhookSecret as string,

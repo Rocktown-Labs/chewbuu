@@ -82,6 +82,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { SubscriptionCancellationCard } from "@/components/billing/subscription-cancellation-card";
 import { chatApi } from "@/lib/chat-api";
 import {
   connectApi,
@@ -90,6 +91,7 @@ import {
   type VenueLocation,
   type VenueMenuItem,
 } from "@/lib/dating-api";
+import type { SubscriptionSummary } from "@/lib/subscription-billing-api";
 import {
   syncBillingApi,
   type SyncBillingInterval,
@@ -208,6 +210,11 @@ export function SyncWorkspace({
   const [selectedLocationId, setSelectedLocationId] = useState(
     locations[0]?.id ?? ""
   );
+  const selectedOrganizationId =
+    locations.find((location) => location.id === selectedLocationId)
+      ?.organizationId ?? locations[0]?.organizationId;
+  const [syncSubscription, setSyncSubscription] =
+    useState<SubscriptionSummary | null>(null);
   const [board, setBoard] = useState<VenueServiceBoard | null>(null);
   const [config, setConfig] = useState<VenueServiceConfig | null>(null);
   const [staff, setStaff] = useState<VenueStaffStatus[]>([]);
@@ -268,6 +275,30 @@ export function SyncWorkspace({
     openTime: "09:00",
     override: "none" as VenueServiceMode | "none",
   });
+  useEffect(() => {
+    if (!selectedOrganizationId) {
+      setSyncSubscription(null);
+      return;
+    }
+
+    let isCurrent = true;
+    const loadSubscription = async () => {
+      try {
+        const subscription = await syncBillingApi.getSubscription(
+          selectedOrganizationId
+        );
+        if (isCurrent) setSyncSubscription(subscription);
+      } catch {
+        if (isCurrent) setSyncSubscription(null);
+      }
+    };
+
+    void loadSubscription();
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedOrganizationId]);
+
   const [jobForm, setJobForm] = useState({
     applicationUrl: "",
     description: "",
@@ -1308,10 +1339,13 @@ export function SyncWorkspace({
                 />
                 <ConnectSettings
                   billingPending={pendingAction === "sync-subscription"}
+                  hasActiveSubscription={syncSubscription !== null}
                   onSubscribe={() => void startSyncSubscription()}
+                  organizationId={selectedOrganizationId}
                   pending={pendingAction === "connect-venue"}
                   status={connectStatus}
                   onStart={() => void startVenueOnboarding()}
+                  subscription={syncSubscription}
                 />
                 <HiringPanel
                   form={jobForm}
@@ -2432,14 +2466,19 @@ function WorkChat({
 
 function ConnectSettings({
   billingPending,
+  hasActiveSubscription,
   onStart,
   onSubscribe,
+  organizationId,
   pending,
   status,
+  subscription,
 }: {
   billingPending: boolean;
+  hasActiveSubscription: boolean;
   onStart: () => void;
   onSubscribe: () => void;
+  organizationId?: string;
   pending: boolean;
   status: {
     accountId: string | null;
@@ -2447,6 +2486,7 @@ function ConnectSettings({
     requirements: Record<string, unknown>;
     transferCapabilityStatus: string;
   } | null;
+  subscription: SubscriptionSummary | null;
 }) {
   const ready = status?.transferCapabilityStatus === "active";
   return (
@@ -2494,6 +2534,16 @@ function ConnectSettings({
           <p className="text-xs text-muted-foreground">
             Stripe has outstanding onboarding requirements.
           </p>
+        ) : null}
+        {hasActiveSubscription && organizationId && subscription ? (
+          <SubscriptionCancellationCard
+            cancelAtPeriodEnd={subscription.cancelAtPeriodEnd}
+            customerType="organization"
+            description="Cancel automatic renewal for this venue without losing access to the current paid period."
+            planName="Chewbuu Sync"
+            referenceId={organizationId}
+            returnPath="/sync?billing=cancelled"
+          />
         ) : null}
       </CardContent>
     </Card>

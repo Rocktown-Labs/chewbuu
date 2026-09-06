@@ -8,8 +8,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import Footer from "@/components/footer";
-
 const aupRules = [
   {
     title: "1. Human Trafficking, Forced Labor, and Sexual Exploitation",
@@ -27,7 +25,7 @@ const aupRules = [
     rules: [
       "Chewbuu is strictly restricted to verified adults aged 18 and older. Minors are strictly prohibited from using the platform.",
       "Any account associated with a minor, attempting to contact a minor, or depicting child sexual abuse material (CSAM) or child sexual exploitation and abuse (CSAE) will be terminated immediately.",
-      "Chewbuu reports all instances of suspected child sexual exploitation directly to the National Center for Missing & Exploited Children (NCMEC) and relevant law enforcement agencies pursuant to federal law (18 U.S.C. § 2258A).",
+      "Chewbuu will make reports to the National Center for Missing & Exploited Children (NCMEC) and relevant law-enforcement agencies when required by applicable law, including 18 U.S.C. § 2258A.",
     ],
   },
   {
@@ -69,9 +67,9 @@ const aupRules = [
     title: "7. Moderation, Account Termination, and Evidence Preservation",
     critical: false,
     rules: [
-      "Chewbuu utilizes automated detection, human review, community reporting tools, and identity verification checks to identify violations.",
+      "Chewbuu may use automated checks, identity verification checks, and human review when available to identify violations.",
       "We reserve the right to remove any content, suspend features, or permanently terminate accounts immediately without prior notice or refund for violations of this Policy.",
-      "In cases involving human trafficking, sexual exploitation, physical threats, or fraud, Chewbuu preserves account logs, message metadata, and payment records to assist lawful police and judicial investigations.",
+      "Chewbuu may preserve account, message, and payment information and disclose it in response to valid legal process or an emergency request involving imminent harm.",
     ],
   },
 ];
@@ -116,9 +114,9 @@ function AcceptableUseRoute() {
                 exploitation, and compensated companionship. Any attempt to use
                 Chewbuu to solicit, recruit, arrange, facilitate, or profit from
                 commercial sexual services or exploitation will result in
-                immediate permanent account termination, forfeiture of
-                subscription access, preservation of evidence, and proactive
-                reporting to law enforcement authorities.
+                account restriction or termination, preservation of relevant
+                evidence, and reporting to law enforcement authorities when
+                required by law or appropriate for an emergency.
               </p>
             </div>
           </div>
@@ -205,26 +203,23 @@ function AcceptableUseRoute() {
               </h2>
               <p className="text-muted-foreground text-sm leading-relaxed">
                 If you encounter any profile, message, or activity that violates
-                this Acceptable Use Policy, please report it immediately using
-                the in-app reporting button on the user’s profile or by
-                contacting our Trust & Safety team directly at{" "}
+                this Acceptable Use Policy, contact our Trust & Safety team
+                directly at{" "}
                 <a
                   className="font-bold text-foreground hover:underline"
                   href="mailto:safety@chewbuu.com"
                 >
                   safety@chewbuu.com
                 </a>
-                . Reports are reviewed by human safety specialists within 24
-                hours. If there is immediate danger or risk of physical harm,
-                please call local emergency services (911 in the United States)
-                first.
+                . We review reports as soon as practicable, but do not promise a
+                fixed response time. If there is immediate danger or risk of
+                physical harm, please call local emergency services (911 in the
+                United States) first.
               </p>
             </div>
           </div>
         </section>
       </section>
-
-      <Footer />
     </main>
   );
 }

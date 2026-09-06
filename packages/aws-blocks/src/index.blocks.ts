@@ -2251,7 +2251,7 @@ const createDateRequest = async (
     body.paymentMode === "requester_covers" &&
     sessionUser.membershipTier !== "sugar"
   ) {
-    throw new Error("Upgrade to Sugar to cover the date.");
+    throw new Error("Upgrade to Host to cover the dining check.");
   }
 
   const directTarget = friendUserId
@@ -4332,13 +4332,13 @@ const defaultPlans = [
     active: true,
     annualPriceCents: 39_000,
     annualStripePriceId: "",
-    cta: "Go Sugar",
+    cta: "Unlock Host",
     description:
-      "Cover dates, request premium matches, and unlock every social mode.",
+      "Cover dining checks, request premium matches, and unlock every social mode.",
     features: ["Requester-covers dates", "All Mingle features"],
     id: "plan-sugar",
     monthlyPriceCents: 3900,
-    name: "Sugar",
+    name: "Host",
     sortOrder: 2,
     stats: ["Highest tier"],
     stripePriceId: "",

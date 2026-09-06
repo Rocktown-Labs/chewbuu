@@ -4,14 +4,12 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
 import { useState } from "react";
 
-import Footer from "@/components/footer";
-
 const privacyOverview = [
-  "We collect account, profile, media, date planning, location, chat, payment, support, device, and safety information.",
+  "We collect account, profile, media, date planning, location, chat, payment, support, device, and safety information that you provide or generate while using Chewbuu.",
   "We use it to run Chewbuu, verify people, suggest places, match users, manage dates, process subscriptions, prevent abuse, and support active-date safety.",
   "We do not plan to sell private dating data, exact active-date location, messages, sensitive profile details, or media to data brokers.",
   "We may share limited booking or safety details with service providers, venue partners, trusted contacts, emergency responders, or law enforcement when needed.",
-  "Important concerns: dating data is sensitive, location can reveal habits, safety recording tools require consent, and partner ads should stay coarse and privacy-protective.",
+  "Dating data is sensitive, location can reveal habits, and any future safety recording tool would require consent and a separate product disclosure.",
 ];
 
 const privacySections = [
@@ -29,7 +27,7 @@ const privacySections = [
     title: "How We Use Information",
     body: [
       "To create profiles, verify real people, suggest date spots, return matches, support chats, manage bookings, and let users post recaps.",
-      "To power safety features such as trusted contacts, active-date geofences, arrival and departure checks, escalation workflows, and incident review.",
+      "To support available safety features, including trusted contacts and location-aware venue or date workflows, and to respond to safety requests sent to our support channels.",
       "To help restaurants or venue partners confirm and manage Chewbuu bookings, understand who is attached to a reservation, and reduce dine-and-dash or safety issues.",
       "To process subscriptions, payments, refunds, support requests, product analytics, security monitoring, and legal compliance.",
       "To improve the app, including reliability, onboarding, matching, recommendations, fraud detection, and place quality.",
@@ -55,9 +53,9 @@ const privacySections = [
   {
     title: "Safety Recording And Active Date Tools",
     body: [
-      "Chewbuu may offer active-date tools that let users discreetly check in, contact safety support, notify a trusted contact, alert a venue, request help, or end a date.",
-      "If audio recording or similar emergency recording tools are enabled, users must consent before using those features. These tools are intended for safety, incident documentation, and abuse prevention, not routine monitoring.",
-      "Safety recordings, reports, and location pings may be reviewed by Chewbuu or trusted providers when a user requests help, reports an incident, or when we believe there is a risk of harm.",
+      "Chewbuu may offer active-date tools as they become available. The controls shown in the product, together with the permissions you grant, determine what data is collected.",
+      "If a future audio recording or similar emergency recording tool is enabled, users must consent before using it. Such a tool would be intended for safety and incident documentation, not routine monitoring.",
+      "Safety information submitted to Chewbuu may be reviewed by our support team or service providers when needed to respond to a request, prevent harm, or comply with law.",
     ],
   },
   {
@@ -92,16 +90,15 @@ function PrivacyRoute() {
           </Badge>
           <div className="space-y-3">
             <p className="font-semibold text-muted-foreground text-sm uppercase tracking-wider">
-              Last updated July 17, 2026
+              Last updated September 6, 2026
             </p>
             <h1 className="text-balance font-extrabold text-4xl md:text-6xl">
               Chewbuu Privacy Policy
             </h1>
             <p className="max-w-3xl text-muted-foreground text-sm/relaxed md:text-base/relaxed">
-              This is a launch draft for review by counsel. It explains how
-              Chewbuu expects to collect, use, and protect information while
-              helping people request dates, chat with matches, meet at real
-              places, and stay safer during active dates.
+              This Privacy Policy explains how Chewbuu collects, uses, shares,
+              and protects information while helping people request dates, chat
+              with matches, meet at real places, and use available safety tools.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -239,8 +236,6 @@ function PrivacyRoute() {
           </p>
         </section>
       </section>
-
-      <Footer />
     </main>
   );
 }

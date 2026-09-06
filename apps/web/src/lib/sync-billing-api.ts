@@ -1,4 +1,8 @@
 import { authClient } from "./auth-client";
+import {
+  subscriptionBillingApi,
+  type SubscriptionSummary,
+} from "./subscription-billing-api";
 
 export const SYNC_PLAN_CODES = [
   "sync_50",
@@ -26,6 +30,25 @@ interface OrganizationSubscriptionActions {
 }
 
 export const syncBillingApi = {
+  cancel: async (organizationId: string, returnPath = "/sync") =>
+    subscriptionBillingApi.cancel({
+      customerType: "organization",
+      referenceId: organizationId,
+      returnPath,
+    }),
+  getSubscription: async (
+    organizationId: string
+  ): Promise<SubscriptionSummary | null> => {
+    const subscriptions = await subscriptionBillingApi.list({
+      customerType: "organization",
+      referenceId: organizationId,
+    });
+    return (
+      subscriptions.find((subscription) =>
+        ["active", "trialing"].includes(subscription.status)
+      ) ?? null
+    );
+  },
   upgrade: async (
     organizationId: string,
     plan: SyncPlanCode = "sync_50",

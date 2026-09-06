@@ -139,7 +139,7 @@ Crews and Circles intentionally use the same lifecycle as a venue:
 Create → add metadata and style → invite people → operate the space
 ```
 
-The admin test account `camstewart7@gmail.com` is provisioned on first authenticated API use with an active Sugar test subscription and an active Sync test subscription. The grant has no Stripe IDs and is clearly a test entitlement; live billing still requires Stripe Checkout and webhook confirmation.
+The admin test account `camstewart7@gmail.com` is provisioned on first authenticated API use with an active Host test subscription and an active Sync test subscription. The grant has no Stripe IDs and is clearly a test entitlement; live billing still requires Stripe Checkout and webhook confirmation.
 
 The official brand handles are reserved:
 

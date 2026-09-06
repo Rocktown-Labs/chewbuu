@@ -9,26 +9,24 @@ import {
   Store,
 } from "lucide-react";
 
-import Footer from "@/components/footer";
-
 const refundHighlights = [
   {
     icon: RefreshCw,
-    title: "1-Click Self-Serve Cancellation",
+    title: "Self-Serve Cancellation",
     description:
-      "Cancel anytime directly from your Account Settings or by emailing support@chewbuu.com. No cancellation fees, phone calls, or hurdles.",
+      "Consumer members can cancel renewal from Account Settings; venue managers can cancel Sync from the Sync workspace. Support is available if a self-serve control is unavailable.",
   },
   {
     icon: Clock,
     title: "72-Hour Renewal Grace Period",
     description:
-      "If your recurring subscription renews accidentally, request a full refund within 72 hours of the charge date if premium features were not actively utilized.",
+      "If your recurring subscription renews accidentally, contact support within 72 hours. Eligibility is reviewed based on the transaction and use of premium features.",
   },
   {
     icon: CreditCard,
-    title: "Clear Statement Descriptors",
+    title: "Statement Descriptors",
     description:
-      "Charges appear clearly on credit card and bank statements as 'CHEWBUU* APP', 'CHEWBUU* DINING', or 'CHEWBUU* SYNC' in USD.",
+      "Charges are processed in USD through Stripe. The statement descriptor shown depends on the merchant account and transaction.",
   },
   {
     icon: Store,
@@ -44,9 +42,9 @@ const policySections = [
     body: [
       "Chewbuu consumer memberships ('Mingle' at $19/month, 'Host' at $39/month, or discounted annual options) are billed in advance on a recurring monthly or annual basis.",
       "Automatic Renewal: Your subscription automatically renews at the start of each billing period unless canceled prior to the renewal date.",
-      "How to Cancel: You can cancel auto-renewal at any time in 1 click by navigating to Account Settings → Membership, or by submitting a cancellation request to support@chewbuu.com.",
+      "How to Cancel: Cancel consumer auto-renewal from Account Settings, or contact support@chewbuu.com if the control is unavailable.",
       "Effect of Cancellation: Upon cancellation, auto-renewal is immediately halted. Your premium features remain fully active until the end of your prepaid billing period, with no subsequent charges.",
-      "72-Hour Renewal Grace Period: If an automatic renewal occurs and you did not intend to renew, contact support@chewbuu.com within 72 hours of the transaction date. We will issue a full refund to your original payment method, provided the account has not actively booked dates or used premium host tools during that renewed period.",
+      "72-Hour Renewal Review: If an automatic renewal occurs and you did not intend to renew, contact support@chewbuu.com within 72 hours of the transaction date. We review the request based on whether the renewed period was used and, when approved, refund the original payment method.",
     ],
   },
   {
@@ -54,7 +52,7 @@ const policySections = [
     body: [
       "Chewbuu Sync subscriptions ('Sync 50' at $69/mo, 'Sync 100' at $139/mo, and 'Sync Enterprise' at $249/mo) provide restaurant operational software for floor plans, KDS orders, table reservations, and staff shifts.",
       "Free Onboarding: Initial venue onboarding, menu configuration, and staff profile setup are free to explore. Paid subscription billing activates only when your venue enables live dining operations.",
-      "Cancellation: Venue operators can modify or cancel Sync subscriptions at any time through the Venue Portal. Cancellation becomes effective at the end of the current billing cycle.",
+      "Cancellation: Authorized venue operators can cancel Sync renewal from the Sync workspace. Cancellation becomes effective at the end of the current billing cycle.",
       "Proration and Upgrades: Plan tier upgrades take effect immediately with prorated billing adjustments applied to your next statement.",
     ],
   },
@@ -64,7 +62,7 @@ const policySections = [
       "Chewbuu operates as a technology marketplace facilitating food, beverage, and reservation transactions between diners and independent restaurant partners via Stripe Connect.",
       "Platform Fee: Chewbuu retains a 5% technology fee on food and beverage item subtotals. We do not assess platform fees on staff tips or local government taxes.",
       "Food Quality and Order Disputes: Because meals are prepared and served by independent restaurant partners, disputes regarding food preparation, incorrect items, or dining room service are handled directly by the venue or mediated by Chewbuu Support in accordance with the restaurant's policies.",
-      "Table Reservation Deposits: If a partner venue requires a reservation deposit or charges a no-show fee, the cancellation deadline (e.g., 24 hours prior to reservation) is clearly presented before confirmation. Timely cancellations receive an automatic refund to the original payment method.",
+      "Table Reservation Deposits: If a partner venue requires a reservation deposit or charges a no-show fee, the venue's cancellation terms apply and are shown when available. Contact the venue or support about an eligible refund.",
     ],
   },
   {
@@ -78,15 +76,15 @@ const policySections = [
     title: "5. Chargebacks, Inquiries, and Fair Resolution",
     body: [
       "If you notice an unexpected charge or have an issue with your billing, we strongly encourage you to contact support@chewbuu.com before initiating a dispute or chargeback with your card issuer.",
-      "Bank chargebacks can take 60 to 90 days to resolve through formal payment network arbitration. Our dedicated customer support team can investigate and process valid refund requests directly within 24–48 business hours.",
-      "Fraudulent chargebacks or disputes initiated in bad faith may result in account suspension and blacklisting across our payment infrastructure.",
+      "Chargeback timing is controlled by the card issuer and payment network. Support can investigate billing issues and process an approved refund through the original payment method.",
+      "Abusive or fraudulent payment activity may result in account restrictions and may be reported to the payment processor.",
     ],
   },
   {
     title: "6. Refund Processing Times and Method",
     body: [
       "All approved refunds are credited back to the original payment method used during purchase (credit card, debit card, or Apple Pay / Google Pay via Stripe).",
-      "Refunds are processed by our billing team within 1–2 business days. Depending on your financial institution or card issuer, the credited funds typically appear in your account within 5 to 10 business days.",
+      "Approved refunds are submitted through the original payment method. The time for credited funds to appear is controlled by Stripe, your financial institution, or your card issuer.",
       "Chewbuu does not issue cash or paper check refunds for card-based transactions.",
     ],
   },
@@ -211,14 +209,13 @@ function RefundPolicyRoute() {
                   support@chewbuu.com
                 </a>{" "}
                 with your account email and transaction details. We review and
-                resolve billing inquiries within 24 to 48 business hours.
+                review billing inquiries as soon as practicable; response timing
+                varies by request and payment processor.
               </p>
             </div>
           </div>
         </section>
       </section>
-
-      <Footer />
     </main>
   );
 }

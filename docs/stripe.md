@@ -2,7 +2,7 @@
 
 Chewbuu has two Stripe products with separate money flows:
 
-- **Platform subscriptions:** Mingle, Sugar, and Chewbuu Sync are Better Auth Stripe subscriptions. Sync provides headcount-based organization plans: `sync_50` ($69/month or $59/month annual for up to 50 active staff), `sync_100` ($139/month or $119/month annual for up to 100 active staff with 1 free monthly Spotlight), and `sync_enterprise` ($249/month or $219/month annual for unlimited active staff and multi-branch controls).
+- **Platform subscriptions:** Mingle, Host, and Chewbuu Sync are Better Auth Stripe subscriptions. Sync provides headcount-based organization plans: `sync_50` ($69/month or $59/month annual equivalent for up to 50 active staff), `sync_100` ($139/month or $119/month annual equivalent for up to 100 active staff with 1 free monthly Spotlight), and `sync_enterprise` ($249/month or $219/month annual equivalent for unlimited active staff and multi-branch controls). Annual plans are billed as the published annual total.
 - **Advertising & Promotions:** Chewbuu Spotlight provides venue promotional packages: Spotlight Venue ($49/week), Spotlight Event ($29/event), and Special Boost ($19/3 days).
 - **Venue commerce:** date, dine-in, and pickup payments are platform charges. Venues and eligible workers are Connect recipient accounts. The platform retains its configured 5% fee (`STRIPE_PLATFORM_FEE_BPS = 500`) solely on the food & beverage subtotal, and passes through 100% of tips and taxes fee-free. Separate transfers are created for the venue, house tip, cook tip, and server tip allocations.
 
