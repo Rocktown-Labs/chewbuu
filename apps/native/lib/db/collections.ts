@@ -1,3 +1,4 @@
+import "@/polyfills";
 import { queryCollectionOptions } from "@tanstack/query-db-collection";
 import { createCollection } from "@tanstack/react-db";
 import { z } from "zod";

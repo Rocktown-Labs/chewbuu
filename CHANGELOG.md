@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added headcount-based Chewbuu Sync tiers (Sync 50 at $69/mo, Sync 100 at $139/mo, Sync Enterprise at $249/mo) with interactive billing toggles, dynamic staff limits, the Chewbuu Spotlight promotional advertising suite ($49/wk venue spotlight, $29/event spotlight, $19/3-day special boost), and a transparent 5% F&B transaction fee breakdown.
 - Added comprehensive public compliance page implementations for card network and Stripe underwriting review: updated Terms & Conditions with explicit prohibitions against human trafficking, sexual exploitation, and abuse; added dedicated Acceptable Use Policy (/acceptable-use), Refund & Cancellation Policy (/refund-policy), Protocols for Law Enforcement (/law-enforcement), Contact Directory (/contact), and public Pricing (/pricing). Renamed the VIP consumer membership tier from 'Sugar' to 'Host'.
 
+### Fixed
+
+- Resolved mobile app runtime failure where missing cryptographic primitives (`crypto.randomUUID` and `crypto.getRandomValues`) caused TanStack DB collection initialization and dependent route modules to crash on boot. Added synchronous native crypto polyfills using `expo-crypto` via a dedicated entry point (`apps/native/index.js`), and updated Expo Router stack routes (`date/[date-id]`, `date/new`, `review/[request-id]`) in `apps/native/app/_layout.tsx` to eliminate route layout warnings.
+
 - Added a conversion-focused Chewbuu Sync venue product page, homepage CTA section, public header navigation, free-to-start $69/month/50-seat positioning, and auth intent handoff into venue onboarding.
 - Added automatic local environment loading and TLS-enabled PostgreSQL setup for Blocks development, including local-only auth/database defaults and strict production certificate verification.
 - Added pinned Portless development routing for the web, dating Expo, Sync Expo, and email preview apps with named URLs and a Vite proxy to the fixed Blocks API.
