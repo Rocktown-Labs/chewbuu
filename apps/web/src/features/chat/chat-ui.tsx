@@ -46,6 +46,7 @@ import {
   GitBranch,
   Heart,
   ImagePlus,
+  LifeBuoy,
   Mic,
   MoreHorizontal,
   Ban,
@@ -159,7 +160,9 @@ function SystemMarker({ message }: { message: ChatMessage }) {
             ? Ban
             : message.systemIcon === "calendar"
               ? CalendarHeart
-              : GitBranch;
+              : message.systemIcon === "safety"
+                ? LifeBuoy
+                : GitBranch;
 
   return (
     <Marker>

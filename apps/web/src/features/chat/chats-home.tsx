@@ -25,6 +25,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import { DateSafetyHelp } from "@/components/safety/date-safety-help";
 import { chatApi, toChatMessage, toChatThread } from "@/lib/chat-api";
 import type { ApiChatMessage, ApiChatRoom } from "@/lib/chat-api";
 import { insertRealtimeMessageToDb, syncRoomsToDb } from "@/lib/db";
@@ -613,20 +614,28 @@ export function DashboardChats({
                   }
                   title={selected.title}
                   trailing={
-                    selected.activeDate && onOpenDate ? (
-                      <Button
-                        className="hidden rounded-full text-[11px] sm:inline-flex"
-                        onClick={() => {
-                          const dateId = selected.activeDate?.dateId;
-                          if (dateId) onOpenDate(dateId);
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        Date page
-                      </Button>
-                    ) : null
+                    <>
+                      {selected.activeDate?.status === "live" ? (
+                        <DateSafetyHelp
+                          compact
+                          dateRequestId={selected.activeDate.dateId}
+                        />
+                      ) : null}
+                      {selected.activeDate && onOpenDate ? (
+                        <Button
+                          className="hidden rounded-full text-[11px] sm:inline-flex"
+                          onClick={() => {
+                            const dateId = selected.activeDate?.dateId;
+                            if (dateId) onOpenDate(dateId);
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          Date page
+                        </Button>
+                      ) : null}
+                    </>
                   }
                 />
                 {selected.activeDate ? (
