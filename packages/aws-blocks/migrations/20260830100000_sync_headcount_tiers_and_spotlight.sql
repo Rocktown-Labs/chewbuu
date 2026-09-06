@@ -4,6 +4,7 @@ SET "name" = 'Sync 50 (Independent)',
     "description" = 'Venue operations for up to 50 active staff members with full KDS, tables, and shifts.',
     "monthly_price_cents" = 6900
 WHERE "code" = 'sync_50';
+--> statement-breakpoint
 
 -- Add sync_100 and sync_enterprise
 INSERT INTO "sync_plan" (
@@ -17,6 +18,7 @@ ON CONFLICT ("code") DO UPDATE SET
   "description" = EXCLUDED."description",
   "max_staff" = EXCLUDED."max_staff",
   "monthly_price_cents" = EXCLUDED."monthly_price_cents";
+--> statement-breakpoint
 
 -- Create venue_spotlight table for advertising and promotion campaigns
 CREATE TABLE IF NOT EXISTS "venue_spotlight" (
@@ -35,8 +37,11 @@ CREATE TABLE IF NOT EXISTS "venue_spotlight" (
   "title" text NOT NULL,
   "updated_at" timestamp DEFAULT now() NOT NULL
 );
+--> statement-breakpoint
 
 CREATE INDEX IF NOT EXISTS "venue_spotlight_location_status_idx"
   ON "venue_spotlight" ("location_id", "status");
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "venue_spotlight_kind_time_idx"
   ON "venue_spotlight" ("kind", "starts_at", "ends_at");
+--> statement-breakpoint

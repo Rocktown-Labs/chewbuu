@@ -4,6 +4,8 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
 import { useState } from "react";
 
+import Footer from "@/components/footer";
+
 const privacyOverview = [
   "We collect account, profile, media, date planning, location, chat, payment, support, device, and safety information.",
   "We use it to run Chewbuu, verify people, suggest places, match users, manage dates, process subscriptions, prevent abuse, and support active-date safety.",
@@ -162,24 +164,83 @@ function PrivacyRoute() {
           ))}
         </div>
 
+        {/* Policy Cross-Links */}
+        <div className="flex flex-wrap gap-2 rounded-2xl border border-border bg-card p-4 text-xs font-semibold text-muted-foreground">
+          <span className="text-foreground">Related policies:</span>
+          <Link
+            className="hover:text-primary underline-offset-2 hover:underline"
+            to="/terms"
+          >
+            Terms & Conditions
+          </Link>
+          <span>•</span>
+          <Link
+            className="hover:text-primary underline-offset-2 hover:underline"
+            to="/acceptable-use"
+          >
+            Acceptable Use (AUP)
+          </Link>
+          <span>•</span>
+          <Link
+            className="hover:text-primary underline-offset-2 hover:underline"
+            to="/refund-policy"
+          >
+            Refund & Cancellation Policy
+          </Link>
+          <span>•</span>
+          <Link
+            className="hover:text-primary underline-offset-2 hover:underline"
+            to="/law-enforcement"
+          >
+            Law Enforcement Protocols
+          </Link>
+          <span>•</span>
+          <Link
+            className="hover:text-primary underline-offset-2 hover:underline"
+            to="/pricing"
+          >
+            Pricing & Plans
+          </Link>
+          <span>•</span>
+          <Link
+            className="hover:text-primary underline-offset-2 hover:underline"
+            to="/contact"
+          >
+            Contact Support
+          </Link>
+        </div>
+
         <section className="rounded-2xl border border-primary/30 bg-primary/10 p-6">
-          <h2 className="font-extrabold text-xl">Contact</h2>
+          <h2 className="font-extrabold text-xl">Contact & Privacy Requests</h2>
           <p className="mt-3 text-muted-foreground text-sm/relaxed">
-            Questions or privacy requests can be sent to{" "}
+            Questions, data export, or account deletion requests can be sent
+            directly to{" "}
             <a
-              className="font-semibold text-foreground"
+              className="font-semibold text-foreground hover:underline"
               href="mailto:support@chewbuu.com"
             >
               support@chewbuu.com
             </a>
-            . For related rules, read the{" "}
-            <Link className="font-semibold text-foreground" to="/terms">
+            . For related rules, review our{" "}
+            <Link
+              className="font-semibold text-foreground hover:underline"
+              to="/terms"
+            >
               Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link
+              className="font-semibold text-foreground hover:underline"
+              to="/acceptable-use"
+            >
+              Acceptable Use Policy
             </Link>
             .
           </p>
         </section>
       </section>
+
+      <Footer />
     </main>
   );
 }

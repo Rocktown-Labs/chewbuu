@@ -72,6 +72,11 @@ function VenueWorkspacePage() {
     priceText: "",
     title: "",
   });
+  const [spotlightForm, setSpotlightForm] = useState({
+    endsAt: "",
+    startsAt: "",
+    title: "",
+  });
 
   const refresh = useCallback(
     async (showSpinner = false) => {
@@ -236,14 +241,66 @@ function VenueWorkspacePage() {
     }
   };
 
+  const startSpotlightCheckout = async (input: {
+    endsAt?: string;
+    kind: "event" | "special" | "venue";
+    specialId?: string;
+    startsAt?: string;
+    title?: string;
+  }) => {
+    const result = await venueApi.createSpotlightCheckout({
+      cancelUrl: window.location.href,
+      ...input,
+      locationId: venueId,
+      successUrl: window.location.href,
+    });
+    if (result.checkoutUrl) {
+      window.location.assign(result.checkoutUrl);
+      return false;
+    }
+    await refresh();
+    return true;
+  };
+
   const boostSpecial = async (id: string) => {
     try {
-      await venueApi.updateSpecial({ featured: true, id });
-      toast.success("Special boosted to Spotlight!");
-      await refresh();
+      const completed = await startSpotlightCheckout({
+        kind: "special",
+        specialId: id,
+      });
+      if (completed) toast.success("Special boosted to Spotlight!");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not boost special."
+      );
+    }
+  };
+
+  const spotlightVenue = async () => {
+    try {
+      const completed = await startSpotlightCheckout({ kind: "venue" });
+      if (completed) toast.success("Venue boosted to Spotlight!");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not spotlight venue."
+      );
+    }
+  };
+
+  const spotlightEvent = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      const completed = await startSpotlightCheckout({
+        endsAt: new Date(spotlightForm.endsAt).toISOString(),
+        kind: "event",
+        startsAt: new Date(spotlightForm.startsAt).toISOString(),
+        title: spotlightForm.title,
+      });
+      if (completed) toast.success("Event added to Spotlight!");
+      setSpotlightForm({ endsAt: "", startsAt: "", title: "" });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not spotlight event."
       );
     }
   };
@@ -639,6 +696,88 @@ function VenueWorkspacePage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
+                {workspace.canManagePromotions ? (
+                  <div className="grid gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                    <div>
+                      <p className="font-semibold text-sm">Chewbuu Spotlight</p>
+                      <p className="text-xs text-muted-foreground">
+                        Paid promotions activate after Stripe confirms payment
+                        and expire automatically.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => void spotlightVenue()}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        <Sparkles className="mr-1 size-3 text-amber-500" />
+                        Spotlight venue · $49 / 7 days
+                      </Button>
+                    </div>
+                    <form
+                      className="grid gap-2 sm:grid-cols-3"
+                      onSubmit={spotlightEvent}
+                    >
+                      <Input
+                        aria-label="Spotlight event title"
+                        onChange={(event) =>
+                          setSpotlightForm((current) => ({
+                            ...current,
+                            title: event.target.value,
+                          }))
+                        }
+                        placeholder="Event title"
+                        required
+                        value={spotlightForm.title}
+                      />
+                      <Input
+                        aria-label="Spotlight event starts"
+                        onChange={(event) =>
+                          setSpotlightForm((current) => ({
+                            ...current,
+                            startsAt: event.target.value,
+                          }))
+                        }
+                        required
+                        type="datetime-local"
+                        value={spotlightForm.startsAt}
+                      />
+                      <div className="flex gap-2">
+                        <Input
+                          aria-label="Spotlight event ends"
+                          className="min-w-0"
+                          onChange={(event) =>
+                            setSpotlightForm((current) => ({
+                              ...current,
+                              endsAt: event.target.value,
+                            }))
+                          }
+                          required
+                          type="datetime-local"
+                          value={spotlightForm.endsAt}
+                        />
+                        <Button size="sm" type="submit">
+                          Event · $29
+                        </Button>
+                      </div>
+                    </form>
+                    {workspace.spotlights.length > 0 ? (
+                      <div className="grid gap-1 text-xs text-muted-foreground">
+                        {workspace.spotlights.map((spotlight) => (
+                          <p key={spotlight.id}>
+                            <span className="font-semibold text-foreground">
+                              {spotlight.title}
+                            </span>{" "}
+                            · {spotlight.kind} · {spotlight.status} until{" "}
+                            {new Date(spotlight.endsAt).toLocaleDateString()}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <form
                   className="grid gap-2 rounded-xl border bg-muted/20 p-3"
                   onSubmit={createSpecial}

@@ -44,7 +44,7 @@ import {
 } from "@/lib/dating-api";
 import { trackMarketingEvent } from "@/lib/marketing-events";
 import {
-  consumeSyncOnboardingIntent,
+  getSyncOnboardingIntent,
   hasSyncOnboardingIntent,
   markSyncOnboardingIntent,
 } from "@/lib/venue-onboarding-intent";
@@ -85,7 +85,6 @@ function VenuePortalPage() {
     const loadSession = async () => {
       const session = await authClient.getSession();
       if (session.data && hasSyncOnboardingIntent()) {
-        consumeSyncOnboardingIntent();
         trackMarketingEvent("auth_completed", {
           method: "social",
           product: "sync",
@@ -271,7 +270,7 @@ function VenuePortalPage() {
               <Link
                 className={buttonVariants()}
                 onClick={() => {
-                  markSyncOnboardingIntent();
+                  markSyncOnboardingIntent(getSyncOnboardingIntent() ?? {});
                   trackMarketingEvent("cta_clicked", {
                     button_text: "Create free Sync account",
                     destination: "/auth/sign-up",
@@ -286,7 +285,7 @@ function VenuePortalPage() {
               <Link
                 className={buttonVariants({ variant: "outline" })}
                 onClick={() => {
-                  markSyncOnboardingIntent();
+                  markSyncOnboardingIntent(getSyncOnboardingIntent() ?? {});
                   trackMarketingEvent("cta_clicked", {
                     button_text: "Sign in to continue",
                     destination: "/auth/sign-in",

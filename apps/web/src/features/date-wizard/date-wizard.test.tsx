@@ -69,11 +69,11 @@ describe("DateWizard", () => {
     expect(dutch).toBeChecked();
     expect(dutch).toHaveAttribute("aria-disabled", "true");
     expect(
-      screen.getByText(/go sugar to cover the date yourself/i)
+      screen.getByText(/go host to cover the date yourself/i)
     ).toBeInTheDocument();
   });
 
-  it("lets sugar members uncheck dutch to cover the date", async () => {
+  it("lets host members uncheck dutch to cover the date", async () => {
     const user = userEvent.setup();
 
     render(<DateWizard membershipTier="sugar" />);

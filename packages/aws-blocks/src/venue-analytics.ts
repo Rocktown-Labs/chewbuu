@@ -5,6 +5,8 @@ import { z } from "zod";
 
 import { getDb, jsonb } from "./database";
 import type { BlocksDatabase } from "./database";
+import { distanceBetweenMiles } from "./matching";
+import { expireSpotlights, listActiveSpotlightSpecialIds } from "./spotlight";
 import type {
   VenueAnalytics,
   VenueJobListing,
@@ -60,7 +62,6 @@ const specialInputSchema = z.object({
   description: z.string().trim().max(1000).optional(),
   displayOrder: z.number().int().min(0).max(10_000).default(0),
   endsAt: z.iso.datetime().optional().nullable(),
-  featured: z.boolean().default(false),
   locationId: z.string().min(1),
   priceText: z.string().trim().max(120).optional(),
   startsAt: z.iso.datetime().optional(),
@@ -119,7 +120,13 @@ const toSpecial = (special: {
   ends_at: Date | string | null;
   featured: boolean;
   id: string;
+  location_address?: string | null;
+  location_discovery_place_id?: string | null;
   location_id: string;
+  location_latitude?: number | null;
+  location_longitude?: number | null;
+  location_name?: string | null;
+  location_website_url?: string | null;
   price_text: string | null;
   published_at: Date | string | null;
   starts_at: Date | string;
@@ -132,7 +139,25 @@ const toSpecial = (special: {
   ...(toIso(special.ends_at) ? { endsAt: toIso(special.ends_at) } : {}),
   featured: special.featured,
   id: special.id,
+  ...(special.location_address
+    ? { locationAddress: special.location_address }
+    : {}),
+  ...(special.location_discovery_place_id
+    ? { locationDiscoveryPlaceId: special.location_discovery_place_id }
+    : {}),
   locationId: special.location_id,
+  ...(special.location_latitude !== null &&
+  special.location_latitude !== undefined
+    ? { locationLatitude: special.location_latitude }
+    : {}),
+  ...(special.location_longitude !== null &&
+  special.location_longitude !== undefined
+    ? { locationLongitude: special.location_longitude }
+    : {}),
+  ...(special.location_name ? { locationName: special.location_name } : {}),
+  ...(special.location_website_url
+    ? { locationWebsiteUrl: special.location_website_url }
+    : {}),
   ...(special.price_text ? { priceText: special.price_text } : {}),
   ...(toIso(special.published_at)
     ? { publishedAt: toIso(special.published_at) }
@@ -463,6 +488,8 @@ export const listVenueSpecials = async (
     throw new Error("Venue access required");
   }
   const db = await getDb();
+  await expireSpotlights(db);
+  const activeSpotlightIds = await listActiveSpotlightSpecialIds(db);
   const specials = await db
     .selectFrom("venue_special")
     .selectAll()
@@ -471,18 +498,38 @@ export const listVenueSpecials = async (
     .orderBy("starts_at", "desc")
     .limit(250)
     .execute();
-  return { specials: specials.map(toSpecial) };
+  return {
+    specials: specials
+      .map((special) =>
+        toSpecial({
+          ...special,
+          featured: special.featured || activeSpotlightIds.has(special.id),
+        })
+      )
+      .toSorted((first, second) => {
+        if (first.featured !== second.featured) {
+          return first.featured ? -1 : 1;
+        }
+        return first.displayOrder - second.displayOrder;
+      }),
+  };
 };
 
 export const listPublicVenueSpecials = async (input?: unknown) => {
   const body = z
     .object({
+      area: z.string().trim().max(160).optional(),
       category: z.string().trim().max(80).optional(),
+      latitude: z.number().finite().min(-90).max(90).optional(),
       locationId: z.string().min(1).optional(),
+      longitude: z.number().finite().min(-180).max(180).optional(),
+      radiusMiles: z.number().int().min(1).max(250).default(25),
     })
     .parse(input ?? {});
   const db = await getDb();
   const now = new Date();
+  await expireSpotlights(db, now);
+  const activeSpotlightIds = await listActiveSpotlightSpecialIds(db, now);
   let query = db
     .selectFrom("venue_special")
     .innerJoin(
@@ -491,27 +538,83 @@ export const listPublicVenueSpecials = async (input?: unknown) => {
       "venue_special.location_id"
     )
     .selectAll("venue_special")
+    .select([
+      "venue_location.address as location_address",
+      "venue_location.discovery_place_id as location_discovery_place_id",
+      "venue_location.latitude as location_latitude",
+      "venue_location.longitude as location_longitude",
+      "venue_location.name as location_name",
+      "venue_location.website_url as location_website_url",
+    ])
     .where("venue_special.status", "=", "published")
     .where("venue_location.status", "in", ["claimed", "live", "verified"])
     .where("venue_location.stripe_identity_status", "=", "verified")
-    .where("starts_at", "<=", now)
+    .where("venue_special.starts_at", "<=", now)
     .where((expression) =>
       expression.or([
-        expression("ends_at", "is", null),
-        expression("ends_at", ">", now),
+        expression("venue_special.ends_at", "is", null),
+        expression("venue_special.ends_at", ">", now),
       ])
     );
-  if (body.locationId)
+  if (body.locationId) {
     query = query.where("venue_special.location_id", "=", body.locationId);
-  if (body.category)
+  }
+  if (body.category) {
     query = query.where("venue_special.category", "=", body.category);
-  const specials = await query
-    .orderBy("featured", "desc")
-    .orderBy("display_order", "asc")
-    .orderBy("starts_at", "desc")
-    .limit(100)
-    .execute();
-  return { specials: specials.map(toSpecial) };
+  }
+
+  const { latitude } = body;
+  const { longitude } = body;
+  const hasCoordinates = latitude !== undefined && longitude !== undefined;
+  if (hasCoordinates) {
+    const latitudeDelta = body.radiusMiles / 69;
+    const longitudeDelta =
+      body.radiusMiles / Math.max(1, 69 * Math.cos((latitude * Math.PI) / 180));
+    query = query
+      .where("venue_location.latitude", ">=", latitude - latitudeDelta)
+      .where("venue_location.latitude", "<=", latitude + latitudeDelta)
+      .where("venue_location.longitude", ">=", longitude - longitudeDelta)
+      .where("venue_location.longitude", "<=", longitude + longitudeDelta);
+  } else if (body.area && !body.locationId) {
+    const city = body.area.split(",")[0]?.trim() ?? body.area;
+    query = query.where((expression) =>
+      expression.or([
+        expression("venue_location.name", "ilike", `%${city}%`),
+        expression("venue_location.address", "ilike", `%${city}%`),
+      ])
+    );
+  }
+
+  const rows = await query.limit(500).execute();
+  const filtered = hasCoordinates
+    ? rows.filter((row) => {
+        if (row.location_latitude === null || row.location_longitude === null) {
+          return false;
+        }
+        const distance = distanceBetweenMiles(
+          String(latitude),
+          String(longitude),
+          String(row.location_latitude),
+          String(row.location_longitude)
+        );
+        return distance !== null && distance <= body.radiusMiles;
+      })
+    : rows;
+  const specials = filtered
+    .map((special) =>
+      toSpecial({
+        ...special,
+        featured: special.featured || activeSpotlightIds.has(special.id),
+      })
+    )
+    .toSorted((first, second) => {
+      if (first.featured !== second.featured) return first.featured ? -1 : 1;
+      if (first.startsAt !== second.startsAt) {
+        return second.startsAt.localeCompare(first.startsAt);
+      }
+      return first.displayOrder - second.displayOrder;
+    });
+  return { specials };
 };
 
 export const createVenueSpecial = async (
@@ -535,7 +638,7 @@ export const createVenueSpecial = async (
       description: body.description ?? null,
       display_order: body.displayOrder,
       ends_at: body.endsAt ? new Date(body.endsAt) : null,
-      featured: body.featured,
+      featured: false,
       id: randomUUID(),
       location_id: body.locationId,
       price_text: body.priceText ?? null,
@@ -586,7 +689,6 @@ export const updateVenueSpecial = async (
       ...(body.endsAt !== undefined
         ? { ends_at: body.endsAt ? new Date(body.endsAt) : null }
         : {}),
-      ...(body.featured !== undefined ? { featured: body.featured } : {}),
       ...(body.priceText !== undefined
         ? { price_text: body.priceText ?? null }
         : {}),

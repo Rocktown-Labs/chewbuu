@@ -54,6 +54,8 @@ export interface SyncPlanTable {
   description: string;
   id: string;
   max_staff: number;
+  annual_price_cents: number;
+  annual_stripe_price_id: string | null;
   monthly_price_cents: number;
   monthly_stripe_price_id: string | null;
   name: string;

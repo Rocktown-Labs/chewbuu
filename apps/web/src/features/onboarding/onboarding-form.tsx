@@ -3725,15 +3725,15 @@ function PremiumStep({
       ],
     },
     sugar: {
-      tagline: "Cover dates and direct match requests",
+      tagline: "Host dates, cover dinner tabs, and reserve premier tables",
       highlight: false,
-      badge: "VIP Premium",
+      badge: "VIP Host",
       features: [
-        "Send direct requests to specific people",
-        "Pay & cover date costs (Dutch optional)",
-        "Bypass public search/fan-out pool",
+        "Send direct date invitations to specific people",
+        "Host & cover the dining check (Dutch optional)",
+        "Direct reservation lock at partner venues",
         "Book up to 24 dates per day",
-        "Includes all Mingle features + VIP badge",
+        "Includes all Mingle features + VIP Host badge",
       ],
     },
   };
@@ -3892,7 +3892,7 @@ function PremiumStep({
               ? "Social"
               : tier === "mingle"
                 ? "Mingle"
-                : "Sugar";
+                : "Host";
           const priceStr = getPriceDisplay(tier);
 
           return (

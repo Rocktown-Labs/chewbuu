@@ -148,6 +148,7 @@ export interface DatePlace {
   placeId: string;
   priceLevel?: string;
   rating?: string;
+  spotlighted?: boolean;
   syncLocationId?: string;
   types: string[];
   userRatingCount?: number;
@@ -322,11 +323,34 @@ export interface VenueSpecial {
   endsAt?: string;
   featured: boolean;
   id: string;
+  locationAddress?: string;
+  locationDiscoveryPlaceId?: string;
   locationId: string;
+  locationLatitude?: number;
+  locationLongitude?: number;
+  locationName?: string;
+  locationWebsiteUrl?: string;
   priceText?: string;
   publishedAt?: string;
   startsAt: string;
   status: "archived" | "draft" | "published";
+  title: string;
+}
+
+export interface VenueSpotlight {
+  createdAt: string;
+  description?: string;
+  endsAt: string;
+  id: string;
+  isFree: boolean;
+  kind: "event" | "special" | "venue";
+  locationId: string;
+  locationName?: string;
+  paymentStatus: string;
+  priceCents: number;
+  specialId?: string;
+  startsAt: string;
+  status: "active" | "cancelled" | "completed" | "pending";
   title: string;
 }
 
@@ -388,6 +412,7 @@ export interface VenueDiningSession {
 
 export interface VenueWorkspace {
   analytics: VenueAnalytics;
+  canManagePromotions: boolean;
   events: VenueOperationalEvent[];
   location: VenueLocation;
   orders: VenueOrder[];
@@ -395,6 +420,7 @@ export interface VenueWorkspace {
   sessions: VenueDiningSession[];
   shifts: VenueShift[];
   specials: VenueSpecial[];
+  spotlights: VenueSpotlight[];
   tables: VenueTable[];
 }
 
@@ -901,9 +927,25 @@ export const venueApi = {
     blocksApi.listPublicVenueLocations() as Promise<{
       locations: PublicVenueLocation[];
     }>,
-  getPublicSpecials: (input?: { category?: string; locationId?: string }) =>
+  getPublicSpecials: (input?: {
+    area?: string;
+    category?: string;
+    latitude?: number;
+    locationId?: string;
+    longitude?: number;
+    radiusMiles?: number;
+  }) =>
     blocksApi.listPublicVenueSpecials(input) as Promise<{
       specials: VenueSpecial[];
+    }>,
+  getPublicSpotlights: (input?: {
+    area?: string;
+    latitude?: number;
+    longitude?: number;
+    radiusMiles?: number;
+  }) =>
+    blocksApi.listPublicVenueSpotlights(input) as Promise<{
+      spotlights: VenueSpotlight[];
     }>,
   getSpecials: (locationId: string) =>
     blocksApi.listVenueSpecials(locationId) as Promise<{
@@ -913,6 +955,23 @@ export const venueApi = {
     blocksApi.createVenueSpecial(input) as Promise<{ special: VenueSpecial }>,
   updateSpecial: (input: unknown) =>
     blocksApi.updateVenueSpecial(input) as Promise<{ special: VenueSpecial }>,
+  createSpotlightCheckout: (input: {
+    cancelUrl: string;
+    description?: string;
+    endsAt?: string;
+    kind: "event" | "special" | "venue";
+    locationId: string;
+    specialId?: string;
+    startsAt?: string;
+    successUrl: string;
+    title?: string;
+  }) =>
+    blocksApi.createVenueSpotlightCheckout(input) as Promise<{
+      checkoutSessionId?: string;
+      checkoutUrl?: string;
+      free: boolean;
+      spotlight: VenueSpotlight;
+    }>,
   setPublicAnalytics: (input: {
     enabled: boolean;
     locationId: string;

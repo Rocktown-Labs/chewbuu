@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   consumeSyncOnboardingIntent,
+  consumeSyncOnboardingIntentDetails,
   getAuthCallbackUrl,
   hasSyncOnboardingIntent,
   markSyncOnboardingIntent,
@@ -21,6 +22,16 @@ describe("venue onboarding intent", () => {
     expect(consumeSyncOnboardingIntent()).toBe(true);
     expect(hasSyncOnboardingIntent()).toBe(false);
     expect(consumeSyncOnboardingIntent()).toBe(false);
+  });
+
+  it("preserves the selected Sync tier and billing interval", () => {
+    markSyncOnboardingIntent({ billingInterval: "annual", plan: "sync_100" });
+
+    expect(consumeSyncOnboardingIntentDetails()).toEqual({
+      billingInterval: "annual",
+      plan: "sync_100",
+    });
+    expect(hasSyncOnboardingIntent()).toBe(false);
   });
 
   it("uses the venue portal as the auth callback while the intent is active", () => {

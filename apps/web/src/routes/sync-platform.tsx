@@ -21,8 +21,10 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import Footer from "@/components/footer";
 import { trackMarketingEvent } from "@/lib/marketing-events";
 import { OG_IMAGE_URL, getCanonicalUrl, SITE_NAME } from "@/lib/seo";
+import type { SyncBillingInterval, SyncPlanCode } from "@/lib/sync-billing-api";
 import { markSyncOnboardingIntent } from "@/lib/venue-onboarding-intent";
 
 const SYNC_FEATURES = [
@@ -162,12 +164,12 @@ const SPOTLIGHT_OFFERS = [
     badge: "Event & Entertainment Booster",
     description:
       "Drive daters to high-energy happenings: live jazz, trivia nights, wine pairings, and chef tastings.",
-    duration: "Single event or 4-pack",
+    duration: "Single event promotion",
     features: [
       "Featured on dater home screen & 'What's Happening This Weekend'",
       "Prioritized in Date Wizard 'Play & Drink' date activity pickers",
       "Custom date tag (e.g. 'Live Jazz Tonight', 'Trivia Thursday')",
-      "Bundle: $29 for single event or $89 for a monthly 4-event series",
+      "One-time checkout with automatic event start and end times",
     ],
     icon: CalendarHeart,
     id: "spotlight_event",
@@ -224,16 +226,20 @@ const SYNC_FAQS = [
 ] as const;
 
 const SyncCta = ({
+  billingInterval,
   children,
   location,
+  plan,
 }: {
+  billingInterval?: SyncBillingInterval;
   children: ReactNode;
   location: string;
+  plan?: SyncPlanCode;
 }) => (
   <Link
     className={buttonVariants({ size: "lg" })}
     onClick={() => {
-      markSyncOnboardingIntent();
+      markSyncOnboardingIntent({ billingInterval, plan });
       trackMarketingEvent("cta_clicked", {
         button_text: typeof children === "string" ? children : "Sync CTA",
         destination: "/venue-portal",
@@ -621,7 +627,11 @@ function SyncPlatformPage() {
                   </div>
 
                   <div className="p-6 pt-0 sm:p-8 sm:pt-0">
-                    <SyncCta location={`sync_tier_${tier.id}`}>
+                    <SyncCta
+                      billingInterval={billingInterval}
+                      location={`sync_tier_${tier.id}`}
+                      plan={tier.id}
+                    >
                       {tier.buttonText}
                     </SyncCta>
                   </div>
@@ -890,6 +900,7 @@ function SyncPlatformPage() {
           </div>
         </div>
       </section>
+      <Footer />
     </main>
   );
 }

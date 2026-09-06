@@ -1614,7 +1614,7 @@ export function MePage({
     });
   };
 
-  const openPlanDateDrawer = (date?: Date) => {
+  const openPlanDateDrawer = (date?: Date, place?: DatePlace) => {
     if (!canDate) {
       if (summary?.readiness.onboarded) {
         if (summary.readiness.pendingReviews > 0) {
@@ -1629,9 +1629,20 @@ export function MePage({
     }
 
     setPresetDateForWizard(date);
-    setPresetPlaceForWizard(undefined);
+    setPresetPlaceForWizard(place);
     setIsPlanDateDrawerOpen(true);
   };
+
+  const specialToDatePlace = (special: VenueSpecial): DatePlace => ({
+    address: special.locationAddress,
+    latitude: special.locationLatitude,
+    longitude: special.locationLongitude,
+    name: special.locationName ?? special.title,
+    placeId: special.locationDiscoveryPlaceId ?? `sync:${special.locationId}`,
+    syncLocationId: special.locationId,
+    types: ["restaurant", "special"],
+    websiteUri: special.locationWebsiteUrl,
+  });
 
   const setDashboardTab = (tab: DashboardTab) => {
     setActiveTab(tab);
@@ -1746,25 +1757,59 @@ export function MePage({
     toast.success("Date recap uploaded to your feed!");
   };
 
+  const spotsSearchArea = getNearbySpotsArea(userCity, profile?.area);
+  const profileLatitude = profile?.latitude
+    ? Number(profile.latitude)
+    : undefined;
+  const profileLongitude = profile?.longitude
+    ? Number(profile.longitude)
+    : undefined;
+  const hasProfileCoordinates =
+    profileLatitude !== undefined &&
+    profileLongitude !== undefined &&
+    Number.isFinite(profileLatitude) &&
+    Number.isFinite(profileLongitude);
+
   useEffect(() => {
     if (activeTab !== "spots") return;
+    if (!spotsSearchArea && !hasProfileCoordinates) {
+      setPublicSpecials([]);
+      setIsLoadingSpots(false);
+      return;
+    }
     const loadSpecials = async () => {
+      if (spotsCategory === "specials") setIsLoadingSpots(true);
       try {
-        const result = await venueApi.getPublicSpecials();
+        const result = await venueApi.getPublicSpecials({
+          ...(spotsSearchArea ? { area: spotsSearchArea } : {}),
+          ...(hasProfileCoordinates
+            ? {
+                latitude: profileLatitude,
+                longitude: profileLongitude,
+                radiusMiles: 25,
+              }
+            : {}),
+        });
         setPublicSpecials(result.specials);
       } catch {
         setPublicSpecials([]);
+      } finally {
+        if (spotsCategory === "specials") setIsLoadingSpots(false);
       }
     };
     void loadSpecials();
-  }, [activeTab]);
-
-  const spotsSearchArea = getNearbySpotsArea(userCity, profile?.area);
+  }, [
+    activeTab,
+    hasProfileCoordinates,
+    profileLatitude,
+    profileLongitude,
+    spotsCategory,
+    spotsSearchArea,
+  ]);
 
   useEffect(() => {
     if (activeTab !== "spots") return;
     if (spotsCategory === "specials") {
-      setIsLoadingSpots(false);
       return;
     }
     if (!summary?.readiness.onboarded || !spotsSearchArea) {
@@ -1779,8 +1824,8 @@ export function MePage({
         const result = await spotsApi.search({
           area: spotsSearchArea,
           category: spotsCategory,
-          latitude: profile?.latitude ? Number(profile.latitude) : undefined,
-          longitude: profile?.longitude ? Number(profile.longitude) : undefined,
+          latitude: hasProfileCoordinates ? profileLatitude : undefined,
+          longitude: hasProfileCoordinates ? profileLongitude : undefined,
           ...(spotsQuery.trim() ? { query: spotsQuery.trim() } : {}),
         });
         setSpots(result.places);
@@ -1803,8 +1848,9 @@ export function MePage({
     return () => window.clearTimeout(timeout);
   }, [
     activeTab,
-    profile?.latitude,
-    profile?.longitude,
+    hasProfileCoordinates,
+    profileLatitude,
+    profileLongitude,
     spotsCategory,
     summary?.readiness.onboarded,
     spotsQuery,
@@ -2560,7 +2606,10 @@ export function MePage({
                           <SpecialCard
                             key={special.id}
                             onPlanDate={() => {
-                              setIsPlanDateDrawerOpen(true);
+                              openPlanDateDrawer(
+                                undefined,
+                                specialToDatePlace(special)
+                              );
                             }}
                             special={special}
                           />
@@ -2592,7 +2641,10 @@ export function MePage({
                             <SpecialCard
                               key={special.id}
                               onPlanDate={() => {
-                                setIsPlanDateDrawerOpen(true);
+                                openPlanDateDrawer(
+                                  undefined,
+                                  specialToDatePlace(special)
+                                );
                               }}
                               special={special}
                             />

@@ -1,11 +1,21 @@
 import { authClient } from "./auth-client";
 
+export const SYNC_PLAN_CODES = [
+  "sync_50",
+  "sync_100",
+  "sync_enterprise",
+] as const;
+
+export type SyncPlanCode = (typeof SYNC_PLAN_CODES)[number];
+export type SyncBillingInterval = "annual" | "monthly";
+
 interface OrganizationSubscriptionActions {
   subscription: {
     upgrade: (input: {
+      annual?: boolean;
       cancelUrl: string;
       customerType: "organization";
-      plan: string;
+      plan: SyncPlanCode;
       referenceId: string;
       successUrl: string;
     }) => Promise<{
@@ -16,14 +26,21 @@ interface OrganizationSubscriptionActions {
 }
 
 export const syncBillingApi = {
-  upgrade: async (organizationId: string) => {
+  upgrade: async (
+    organizationId: string,
+    plan: SyncPlanCode = "sync_50",
+    interval: SyncBillingInterval = "monthly",
+    returnPath = "/sync"
+  ) => {
     const client = authClient as unknown as OrganizationSubscriptionActions;
+    const encodedReturnPath = returnPath.startsWith("/") ? returnPath : "/sync";
     return client.subscription.upgrade({
-      cancelUrl: `${window.location.origin}/sync?billing=cancelled`,
+      annual: interval === "annual",
+      cancelUrl: `${window.location.origin}${encodedReturnPath}?billing=cancelled`,
       customerType: "organization",
-      plan: "sync",
+      plan,
       referenceId: organizationId,
-      successUrl: `${window.location.origin}/sync?billing=success`,
+      successUrl: `${window.location.origin}${encodedReturnPath}?billing=success`,
     });
   },
 };

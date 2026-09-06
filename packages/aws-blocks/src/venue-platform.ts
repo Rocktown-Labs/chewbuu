@@ -6,6 +6,7 @@ import { z } from "zod";
 import { isReservedBrandHandle, isReservedBrandName } from "./brand-handles";
 import { getDb, jsonb } from "./database";
 import type { BlocksDatabase } from "./database";
+import { getSyncPlanEntitlement } from "./sync-plans";
 import type {
   BrandStyle,
   CommunityInviteResponse,
@@ -505,43 +506,19 @@ export const inviteVenueMembers = async (
     .where("id", "=", body.locationId)
     .executeTakeFirst();
   if (!location) throw new Error("Venue not found.");
-  const [syncPlans, organizationSubscription, legacySubscription, activeStaff] =
-    await Promise.all([
-      db
-        .selectFrom("sync_plan")
-        .select(["code", "max_staff"])
-        .where("active", "=", true)
-        .execute(),
-      db
-        .selectFrom("subscription")
-        .select(["plan", "status"])
-        .where("reference_id", "=", location.organization_id)
-        .where("status", "in", ["active", "trialing"])
-        .executeTakeFirst(),
-      db
-        .selectFrom("sync_subscription")
-        .select(["plan", "status"])
-        .where("organization_id", "=", location.organization_id)
-        .where("status", "in", ["active", "trialing"])
-        .executeTakeFirst(),
-      db
-        .selectFrom("venue_member")
-        .select("id")
-        .where("organization_id", "=", location.organization_id)
-        .where("status", "=", "active")
-        .execute(),
-    ]);
-  if (!organizationSubscription && !legacySubscription) {
+  const [syncPlan, activeStaff] = await Promise.all([
+    getSyncPlanEntitlement(db, location.organization_id),
+    db
+      .selectFrom("venue_member")
+      .select("id")
+      .where("organization_id", "=", location.organization_id)
+      .where("status", "=", "active")
+      .execute(),
+  ]);
+  if (!syncPlan) {
     throw new Error("An active Chewbuu Sync subscription is required.");
   }
-  const subscribedPlanCode =
-    organizationSubscription?.plan ?? legacySubscription?.plan ?? "sync_50";
-  const matchedPlan = syncPlans.find(
-    (p) =>
-      p.code === subscribedPlanCode ||
-      (subscribedPlanCode === "sync" && p.code === "sync_50")
-  );
-  const maxStaff = matchedPlan?.max_staff ?? 50;
+  const { maxStaff } = syncPlan;
   if (
     maxStaff < 999_999 &&
     activeStaff.length + body.members.length > maxStaff
@@ -1130,6 +1107,7 @@ export const getVenueWorkspace = async (
       tipCents: 0,
       totalCovers: reservations.reduce((sum, item) => sum + item.party_size, 0),
     },
+    canManagePromotions: false,
     events: [],
     location: toVenueLocation(location),
     orders: orders.map(toVenueOrder),
@@ -1161,6 +1139,7 @@ export const getVenueWorkspace = async (
       })
     ),
     specials: [],
+    spotlights: [],
     tables: [],
   };
 };

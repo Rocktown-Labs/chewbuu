@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import Footer from "@/components/footer";
 import { authClient } from "@/lib/auth-client";
 import { pricingApi, type MembershipPlan } from "@/lib/dating-api";
 import { trackMarketingEvent } from "@/lib/marketing-events";
@@ -441,39 +442,7 @@ const HomeComponent = () => {
           </div>
         </div>
       </section>
-      <footer className="border-t border-border px-5 py-10 md:px-12">
-        <div className="mx-auto flex max-w-6xl flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="font-extrabold text-foreground">Chewbuu</p>
-            <p className="mt-1 text-muted-foreground text-sm">
-              Dates, matches, chats, circles, and recaps in one place.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-4 text-muted-foreground text-sm">
-            <a className="hover:text-foreground" href="/#how-it-works">
-              How it works
-            </a>
-            <a className="hover:text-foreground" href="/#pricing">
-              Pricing
-            </a>
-            <Link className="hover:text-foreground" to="/sync-platform">
-              For venues
-            </Link>
-            <Link className="hover:text-foreground" to="/specials">
-              Specials
-            </Link>
-            <Link className="hover:text-foreground" to="/privacy">
-              Privacy
-            </Link>
-            <Link className="hover:text-foreground" to="/terms">
-              Terms
-            </Link>
-            <Link className="hover:text-foreground" to="/auth/sign-in">
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </main>
   );
 };

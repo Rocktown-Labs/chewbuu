@@ -90,7 +90,15 @@ import {
   type VenueLocation,
   type VenueMenuItem,
 } from "@/lib/dating-api";
-import { syncBillingApi } from "@/lib/sync-billing-api";
+import {
+  syncBillingApi,
+  type SyncBillingInterval,
+  type SyncPlanCode,
+} from "@/lib/sync-billing-api";
+import {
+  clearSyncOnboardingIntent,
+  getSyncOnboardingIntent,
+} from "@/lib/venue-onboarding-intent";
 
 const MANAGER_ROLES = new Set<VenueStaffRole>([
   "admin",
@@ -532,10 +540,17 @@ export function SyncWorkspace({
   const startSyncSubscription = async () => {
     setPendingAction("sync-subscription");
     try {
+      const intent = getSyncOnboardingIntent();
+      const plan: SyncPlanCode = intent?.plan ?? "sync_50";
+      const interval: SyncBillingInterval =
+        intent?.billingInterval ?? "monthly";
       const result = await syncBillingApi.upgrade(
-        selectedLocation?.organizationId ?? ""
+        selectedLocation?.organizationId ?? "",
+        plan,
+        interval
       );
       if (result.error) throw new Error(result.error.message);
+      clearSyncOnboardingIntent();
       if (result.data?.url) window.location.assign(result.data.url);
     } catch (error) {
       toast.error(getErrorMessage(error, "Could not start Sync billing."));

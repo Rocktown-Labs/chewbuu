@@ -57,6 +57,13 @@ import {
   hasLocation,
 } from "./matching";
 import {
+  createVenueSpotlightCheckout,
+  expireSpotlights,
+  listActiveSpotlightLocationIds,
+  listPublicVenueSpotlights,
+  listVenueSpotlights,
+} from "./spotlight";
+import {
   createReferrerConnectOnboarding,
   createVenueCheckoutSession,
   createVenueConnectOnboarding,
@@ -766,6 +773,7 @@ const placeSuggestionSchema = z.object({
   placeId: z.string(),
   priceLevel: z.string().optional(),
   rating: z.string().optional(),
+  spotlighted: z.boolean().optional(),
   syncLocationId: z.string().optional(),
   types: z.array(z.string()),
   userRatingCount: z.number().optional(),
@@ -1270,6 +1278,7 @@ const runDateLifecycleInternal = async (at?: string) => {
   const now = at ? new Date(at) : new Date();
   if (Number.isNaN(now.getTime())) throw new Error("Lifecycle time is invalid");
   const db = await getDb();
+  await expireSpotlights(db, now);
   const requests = await db
     .selectFrom("date_request")
     .selectAll()
@@ -3240,6 +3249,12 @@ const suggestPlaces = async (userId: string, input: unknown) => {
   const longitudeNumber = Number(longitude);
   const hasCoordinates =
     Number.isFinite(latitudeNumber) && Number.isFinite(longitudeNumber);
+  const syncPlaces = await listPublicSyncPlaces(db, {
+    area,
+    ...(hasCoordinates
+      ? { latitude: latitudeNumber, longitude: longitudeNumber }
+      : {}),
+  });
 
   await acquirePlaceSearchRateLimit(userId);
   const cacheKey = JSON.stringify({
@@ -3253,13 +3268,21 @@ const suggestPlaces = async (userId: string, input: unknown) => {
   });
   const cached = await placeSearchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
+    const syncPlaceIds = new Set(syncPlaces.map((place) => place.placeId));
+    const cachedPlaces = [
+      ...syncPlaces,
+      ...cached.places.filter((place) => !syncPlaceIds.has(place.placeId)),
+    ];
     return {
-      places: await enrichPlacesWithApprovedSpotMedia(db, cached.places),
+      places: await enrichPlacesWithApprovedSpotMedia(db, cachedPlaces),
     };
   }
 
   const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
   if (!apiKey) {
+    if (syncPlaces.length > 0) {
+      return { places: syncPlaces };
+    }
     if (body.searchKind === "venue" || body.searchKind === "place") {
       return { places: [], reason: "google_not_configured" as const };
     }
@@ -3382,11 +3405,32 @@ const suggestPlaces = async (userId: string, input: unknown) => {
       ];
     });
 
+    const mergedPlaces = new Map<string, PlaceSuggestion>();
+    for (const place of syncPlaces) {
+      mergedPlaces.set(place.placeId, place);
+    }
+    for (const place of places) {
+      const syncPlace = syncPlaces.find(
+        (candidate) => candidate.placeId === place.placeId
+      );
+      mergedPlaces.set(
+        place.placeId,
+        syncPlace
+          ? {
+              ...place,
+              dataSource: "sync",
+              syncLocationId: syncPlace.syncLocationId,
+              ...(syncPlace.spotlighted ? { spotlighted: true } : {}),
+            }
+          : place
+      );
+    }
+    const mergedPlaceList = Array.from(mergedPlaces.values());
     const resultPlaces =
-      places.length > 0 ||
+      mergedPlaceList.length > 0 ||
       body.searchKind === "venue" ||
       body.searchKind === "place"
-        ? places
+        ? mergedPlaceList
         : generateFallbackPlaces(area, body.what, body.filters);
     const enrichedPlaces = await enrichPlacesWithApprovedSpotMedia(
       db,
@@ -3460,6 +3504,7 @@ const listPublicSyncPlaces = async (
     query?: string;
   } = {}
 ) => {
+  const spotlightLocationIds = await listActiveSpotlightLocationIds(db);
   const normalizedArea = input.area?.trim();
   const normalizedQuery = input.query?.trim();
   let locationQuery = db
@@ -3504,19 +3549,31 @@ const listPublicSyncPlaces = async (
     .limit(100)
     .execute();
 
-  return locations.map((location) =>
-    toPublicSyncPlace({
-      address: location.address,
-      discovery_place_id: location.discovery_place_id,
-      handle: location.handle,
-      id: location.id,
-      latitude: location.latitude,
-      longitude: location.longitude,
-      name: location.name,
-      phone: location.phone,
-      website_url: location.website_url,
+  return locations
+    .map((location) => ({
+      location,
+      spotlighted: spotlightLocationIds.has(location.id),
+    }))
+    .toSorted((first, second) => {
+      if (first.spotlighted !== second.spotlighted) {
+        return first.spotlighted ? -1 : 1;
+      }
+      return first.location.name.localeCompare(second.location.name);
     })
-  );
+    .map(({ location, spotlighted }) => ({
+      ...toPublicSyncPlace({
+        address: location.address,
+        discovery_place_id: location.discovery_place_id,
+        handle: location.handle,
+        id: location.id,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        name: location.name,
+        phone: location.phone,
+        website_url: location.website_url,
+      }),
+      ...(spotlighted ? { spotlighted: true } : {}),
+    }));
 };
 
 const searchPublicSpots = async (input: unknown) => {
@@ -3530,6 +3587,7 @@ const searchPublicSpots = async (input: unknown) => {
     longitude: body.longitude,
     query,
   });
+  const activeSpotlightLocationIds = await listActiveSpotlightLocationIds(db);
   const hasCoordinates =
     body.latitude !== undefined && body.longitude !== undefined;
   const cacheKey = JSON.stringify({
@@ -3542,8 +3600,25 @@ const searchPublicSpots = async (input: unknown) => {
   });
   const cached = await placeSearchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
+    const refreshedCachedPlaces = cached.places
+      .map((place) => ({
+        ...place,
+        ...(place.syncLocationId &&
+        activeSpotlightLocationIds.has(place.syncLocationId)
+          ? { spotlighted: true }
+          : {}),
+      }))
+      .toSorted((first, second) => {
+        if (first.spotlighted !== second.spotlighted) {
+          return first.spotlighted ? -1 : 1;
+        }
+        return 0;
+      });
     return {
-      places: await enrichPlacesWithApprovedSpotMedia(db, cached.places),
+      places: await enrichPlacesWithApprovedSpotMedia(
+        db,
+        refreshedCachedPlaces
+      ),
     };
   }
 
@@ -3582,6 +3657,7 @@ const searchPublicSpots = async (input: unknown) => {
             ...place,
             dataSource: "sync",
             syncLocationId: syncPlace.syncLocationId,
+            ...(syncPlace.spotlighted ? { spotlighted: true } : {}),
           }
         : place
     );
@@ -3623,6 +3699,7 @@ const getPublicSpotDetails = async (
     .executeTakeFirst();
 
   if (location) {
+    const spotlightLocationIds = await listActiveSpotlightLocationIds(db);
     const syncSummary = await getVenuePublicSummary(location.id);
     const googlePlace = location.discovery_place_id
       ? await getGooglePlaceDetails(location.discovery_place_id)
@@ -3631,19 +3708,27 @@ const getPublicSpotDetails = async (
       ? {
           ...googlePlace,
           dataSource: "sync" as const,
+          ...(spotlightLocationIds.has(location.id)
+            ? { spotlighted: true }
+            : {}),
           syncLocationId: location.id,
         }
-      : toPublicSyncPlace({
-          address: location.address,
-          discovery_place_id: location.discovery_place_id,
-          handle: location.handle,
-          id: location.id,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          name: location.name,
-          phone: location.phone,
-          website_url: location.website_url,
-        });
+      : {
+          ...toPublicSyncPlace({
+            address: location.address,
+            discovery_place_id: location.discovery_place_id,
+            handle: location.handle,
+            id: location.id,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            name: location.name,
+            phone: location.phone,
+            website_url: location.website_url,
+          }),
+          ...(spotlightLocationIds.has(location.id)
+            ? { spotlighted: true }
+            : {}),
+        };
     return { place, source: "sync", syncSummary };
   }
 
@@ -4828,9 +4913,24 @@ const syncPricingPlans = async (
       stripe,
       tier: syncPlan.code,
     });
+    const annualPrice =
+      syncPlan.annual_price_cents > 0
+        ? await reconcileRecurringPrice({
+            currency: syncPlan.stripe_currency,
+            existingPrices,
+            interval: "year",
+            lookupKey: `chewbuu_${syncPlan.code}_annual_${stripeMode}`,
+            planId: syncPlan.id,
+            priceCents: syncPlan.annual_price_cents,
+            productId: product.id,
+            stripe,
+            tier: syncPlan.code,
+          })
+        : null;
     await db
       .updateTable("sync_plan")
       .set({
+        annual_stripe_price_id: annualPrice?.id ?? null,
         monthly_stripe_price_id: monthlyPrice.id,
         stripe_mode: stripeMode,
         stripe_product_id: product.id,
@@ -6423,19 +6523,22 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
       const sessionUser = await requireSession(context.request.headers);
       const normalizedLocationId = z.string().min(1).parse(locationId);
       const isAdmin = isConfiguredAdmin(sessionUser);
-      const [workspace, analytics, timeline, specials, tables] =
+      const [workspace, analytics, timeline, specials, tables, spotlights] =
         await Promise.all([
           getVenueWorkspace(sessionUser.id, normalizedLocationId, isAdmin),
           getVenueAnalytics(sessionUser.id, normalizedLocationId, isAdmin),
           getVenueTimeline(sessionUser.id, normalizedLocationId, isAdmin),
           listVenueSpecials(sessionUser.id, normalizedLocationId, isAdmin),
           listVenueTables(sessionUser.id, normalizedLocationId, isAdmin),
+          listVenueSpotlights(sessionUser.id, normalizedLocationId, isAdmin),
         ]);
       return {
         ...workspace,
         analytics,
+        canManagePromotions: spotlights.canManagePromotions,
         events: timeline.events,
         specials: specials.specials,
+        spotlights: spotlights.spotlights,
         tables: tables.tables,
       };
     });
@@ -6480,11 +6583,26 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   },
 
   async listPublicVenueSpecials(input?: {
+    area?: string;
     category?: string;
+    latitude?: number;
     locationId?: string;
+    longitude?: number;
+    radiusMiles?: number;
   }) {
     return observeOperation("listPublicVenueSpecials", () =>
       listPublicVenueSpecials(input)
+    );
+  },
+
+  async listPublicVenueSpotlights(input?: {
+    area?: string;
+    latitude?: number;
+    longitude?: number;
+    radiusMiles?: number;
+  }) {
+    return observeOperation("listPublicVenueSpotlights", () =>
+      listPublicVenueSpotlights(input)
     );
   },
 
@@ -6496,6 +6614,39 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         z.string().min(1).parse(locationId),
         isConfiguredAdmin(sessionUser)
       );
+    });
+  },
+
+  async listVenueSpotlights(locationId: string) {
+    return observeOperation("listVenueSpotlights", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return listVenueSpotlights(
+        sessionUser.id,
+        z.string().min(1).parse(locationId),
+        isConfiguredAdmin(sessionUser)
+      );
+    });
+  },
+
+  async createVenueSpotlightCheckout(input: {
+    cancelUrl: string;
+    description?: string;
+    endsAt?: string;
+    kind: "event" | "special" | "venue";
+    locationId: string;
+    specialId?: string;
+    startsAt?: string;
+    successUrl: string;
+    title?: string;
+  }) {
+    return observeOperation("createVenueSpotlightCheckout", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      return createVenueSpotlightCheckout({
+        ...input,
+        isAdmin: isConfiguredAdmin(sessionUser),
+        requestOrigin: new URL(context.request.url).origin,
+        userId: sessionUser.id,
+      });
     });
   },
 
