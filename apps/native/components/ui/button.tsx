@@ -66,7 +66,7 @@ export function Button({
         return "bg-white/10 dark:bg-white/5 border border-white/20 active:bg-white/20";
       }
       case "sugar": {
-        return "bg-amber-500 active:bg-amber-600 border border-amber-400/50 shadow-md";
+        return "bg-primary active:bg-primary/90 border border-primary/50 shadow-md";
       }
       case "success": {
         return "bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/40";
@@ -93,7 +93,7 @@ export function Button({
         return "text-foreground font-semibold";
       }
       case "sugar": {
-        return "text-black font-bold";
+        return "text-primary-foreground font-bold";
       }
       case "success": {
         return "text-emerald-400 font-bold";
@@ -154,7 +154,9 @@ export function Button({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === "default" ? "#000000" : "#ffffff"}
+          color={
+            variant === "default" || variant === "sugar" ? "#1c1206" : "#ffffff"
+          }
         />
       ) : typeof children === "string" ? (
         <Text

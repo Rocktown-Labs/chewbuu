@@ -1,17 +1,18 @@
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { MessageCircle, RefreshCw, Sparkles } from "lucide-react-native";
+import { MessageCircle, Sparkles } from "lucide-react-native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
+  RefreshControl,
   Text,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ScreenHeading } from "@/components/screen-heading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -26,7 +27,6 @@ const formatMessageTime = (value?: string) =>
     : "";
 
 export default function ChatsScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [rooms, setRooms] = useState<NativeRoom[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>();
@@ -80,32 +80,21 @@ export default function ChatsScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View
-        className="flex-row items-center justify-between px-5 pb-3 pt-2"
-        style={{ paddingTop: insets.top + 4 }}
-      >
-        <View className="flex-row items-center gap-2">
-          <View className="h-8 w-8 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
-            <MessageCircle color="#f59e0b" size={16} />
-          </View>
-          <Text className="text-xl font-extrabold tracking-tight text-foreground">
-            Chats
-          </Text>
-        </View>
-        <Pressable
-          accessibilityLabel="Refresh chats"
-          className="rounded-full p-2 active:bg-muted"
-          disabled={isRefreshing}
-          onPress={() => void loadRooms(true)}
-        >
-          <RefreshCw color="#f59e0b" size={18} />
-        </Pressable>
-      </View>
+      <ScreenHeading
+        subtitle="Friend DMs and date rooms. Video-first matching, then real plans."
+        title="Chats"
+      />
 
       <FlatList
         contentContainerStyle={{ paddingBottom: 110, paddingHorizontal: 16 }}
         data={rooms}
         keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl
+            onRefresh={() => void loadRooms(true)}
+            refreshing={isRefreshing}
+          />
+        }
         ListEmptyComponent={
           <Card className="mt-3 p-4">
             {isLoading ? (

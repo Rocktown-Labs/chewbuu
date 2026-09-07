@@ -1,4 +1,3 @@
-import { api as blocksApi } from "@chewbuu/aws-blocks";
 import type {
   ApiChatMessage,
   SendChatMessageInput,
@@ -14,6 +13,8 @@ import type {
   VenueSyncChannel,
   VenueWorkspace,
 } from "@chewbuu/aws-blocks";
+
+import { blocksApi } from "@/lib/blocks-client";
 
 export type {
   ApiChatMessage,

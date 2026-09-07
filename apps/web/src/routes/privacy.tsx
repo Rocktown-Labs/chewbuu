@@ -7,9 +7,10 @@ import { useState } from "react";
 const privacyOverview = [
   "We collect account, profile, media, date planning, location, chat, payment, support, device, and safety information that you provide or generate while using Chewbuu.",
   "We use it to run Chewbuu, verify people, suggest places, match users, manage dates, process subscriptions, prevent abuse, and support active-date safety.",
+  "When you submit an in-app report or appeal, we retain the case details, relevant content snapshot, reviewer actions, and—when configured—an AI-generated review aid for human moderation.",
   "We do not plan to sell private dating data, exact active-date location, messages, sensitive profile details, or media to data brokers.",
   "We may share limited booking or safety details with service providers, venue partners, trusted contacts, emergency responders, or law enforcement when needed.",
-  "Dating data is sensitive, location can reveal habits, and any future safety recording tool would require consent and a separate product disclosure.",
+  "Dating data is sensitive, location can reveal habits, and optional active-date safety recordings require participant consent, device permissions, and a separate incident record.",
 ];
 
 const privacySections = [
@@ -30,6 +31,7 @@ const privacySections = [
       "To support available safety features, including trusted contacts and location-aware venue or date workflows, and to respond to safety requests sent to our support channels.",
       "To help restaurants or venue partners confirm and manage Chewbuu bookings, understand who is attached to a reservation, and reduce dine-and-dash or safety issues.",
       "To process subscriptions, payments, refunds, support requests, product analytics, security monitoring, and legal compliance.",
+      "To review reports and appeals, preserve evidence, remove policy-violating content, and record human account actions. AI review aids do not make enforcement or appeal decisions.",
       "To improve the app, including reliability, onboarding, matching, recommendations, fraud detection, and place quality.",
     ],
   },
@@ -47,14 +49,15 @@ const privacySections = [
       "We share information with service providers that help us run Chewbuu, including hosting, authentication, payments, storage, messaging, analytics, security, email, SMS, chat, video, and support tools.",
       "We may share limited booking and safety information with date spots, restaurant partners, safety contacts, emergency responders, or law enforcement when needed to manage an active date, prevent harm, investigate abuse, or comply with law.",
       "We may share aggregated or de-identified trends with venue partners, such as booking volume, popular date categories, and review summaries.",
+      "When AI-assisted moderation is configured, limited report details and reported text may be processed by the configured model provider to produce a human-review summary and classification. If moderation Slack notifications are configured, limited case details and AI review aids are sent to a private reviewer channel; neither integration triggers enforcement.",
       "If Chewbuu adds partner dashboards or ads, we will provide controls and additional disclosures before expanding how partner data is used.",
     ],
   },
   {
     title: "Safety Recording And Active Date Tools",
     body: [
-      "Chewbuu may offer active-date tools as they become available. The controls shown in the product, together with the permissions you grant, determine what data is collected.",
-      "If a future audio recording or similar emergency recording tool is enabled, users must consent before using it. Such a tool would be intended for safety and incident documentation, not routine monitoring.",
+      "During an active date, the Help menu checks whether your device is within the selected venue safety area before enabling assistance actions. Chewbuu does not continuously track your location.",
+      "Optional safety audio/video recording requires explicit participant consent and camera/microphone permission on each device. It is intended for safety and incident documentation, not routine monitoring.",
       "Safety information submitted to Chewbuu may be reviewed by our support team or service providers when needed to respond to a request, prevent harm, or comply with law.",
     ],
   },

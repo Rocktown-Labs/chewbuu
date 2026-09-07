@@ -11,7 +11,9 @@
   },
   "scripts": {
     "build": "tsc --noEmit",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "dev": "bun ./scripts/dev-postgres.mjs",
+    "dev:portless": "bun ./scripts/dev-postgres.mjs"
   },
   "dependencies": {
     "@chewbuu/env": "workspace:*",

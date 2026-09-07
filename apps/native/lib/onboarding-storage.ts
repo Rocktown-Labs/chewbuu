@@ -40,6 +40,17 @@ export interface OnboardingData {
     watchFavorites: string[];
     talkTopics: string[];
   };
+  values: {
+    politics: string;
+    religion: string;
+    kids: string;
+    familyPlans: string;
+  };
+  friends: {
+    trustedName: string;
+    trustedContact: string;
+    friendInvite: string;
+  };
   lastSavedAt: string;
 }
 
@@ -85,6 +96,17 @@ export const DEFAULT_ONBOARDING_DATA: OnboardingData = {
     watchFavorites: [],
     talkTopics: [],
   },
+  values: {
+    politics: "",
+    religion: "",
+    kids: "",
+    familyPlans: "",
+  },
+  friends: {
+    trustedName: "",
+    trustedContact: "",
+    friendInvite: "",
+  },
   lastSavedAt: new Date().toISOString(),
 };
 
@@ -115,6 +137,7 @@ export async function loadOnboardingDraft(): Promise<OnboardingData> {
       ...DEFAULT_ONBOARDING_DATA,
       ...parsed,
       basics: { ...DEFAULT_ONBOARDING_DATA.basics, ...parsed.basics },
+      friends: { ...DEFAULT_ONBOARDING_DATA.friends, ...parsed.friends },
       interests: { ...DEFAULT_ONBOARDING_DATA.interests, ...parsed.interests },
       media: { ...DEFAULT_ONBOARDING_DATA.media, ...parsed.media },
       permissions: {
@@ -125,6 +148,7 @@ export async function loadOnboardingDraft(): Promise<OnboardingData> {
         ...DEFAULT_ONBOARDING_DATA.preferences,
         ...parsed.preferences,
       },
+      values: { ...DEFAULT_ONBOARDING_DATA.values, ...parsed.values },
     };
   } catch (error) {
     console.warn("Failed to load onboarding draft:", error);
@@ -174,7 +198,6 @@ export function toProfilePayload(data: OnboardingData) {
       ...data.interests.playActivities,
     ],
     favoritePlaces: {},
-    friendInvites: [],
     interestedIn: data.preferences.interestedIn,
     interests: [
       ...data.interests.eatSpots,
@@ -190,7 +213,19 @@ export function toProfilePayload(data: OnboardingData) {
     safetyOptIn: data.safetyOptIn,
     sex: data.basics.gender,
     sexuality: data.basics.sexuality,
-    trustedContacts: [],
+    trustedContacts:
+      data.friends.trustedName.trim() && data.friends.trustedContact.trim()
+        ? [
+            {
+              name: data.friends.trustedName.trim(),
+              contact: data.friends.trustedContact.trim(),
+            },
+          ]
+        : [],
+    friendInvites: data.friends.friendInvite.trim()
+      ? [{ contact: data.friends.friendInvite.trim() }]
+      : [],
+    values: data.values,
     username: data.basics.handle,
   };
 }
@@ -207,7 +242,9 @@ export function calculateCompletionPercentage(data: OnboardingData): number {
     data.interests.eatSpots.length > 0 ||
     data.interests.drinkSpots.length > 0
   ) {
-    points += 20;
+    points += 15;
   }
+  if (data.values.politics.trim().length > 0) points += 3;
+  if (data.friends.trustedName.trim().length > 0) points += 2;
   return Math.min(points, 100);
 }

@@ -72,6 +72,18 @@ const aupRules = [
       "Chewbuu may preserve account, message, and payment information and disclose it in response to valid legal process or an emergency request involving imminent harm.",
     ],
   },
+  {
+    title: "8. Takedown Notices and Appeals",
+    critical: false,
+    rules: [
+      "To report a profile, profile media, message, date media, or date recap that may violate this Policy, use the in-app Report control where available. Email safety@chewbuu.com or use the Contact page and select Trust & Safety / Member Report if the control is unavailable.",
+      "A useful takedown notice identifies the reported profile or content, explains the suspected violation, and includes supporting details or evidence. Immediate danger should be reported to local emergency services first.",
+      "The Trust & Safety or authorized administrative team reviews submitted reports against this Policy, the Terms, available account and verification information, and the evidence provided. Urgent safety matters are prioritized, but Chewbuu does not promise a fixed response-time SLA or 24/7 review.",
+      "Depending on the findings, Chewbuu may remove content, restrict features, suspend or terminate an account, preserve relevant information, or make a legally required report to authorities.",
+      "A user affected by a removal, restriction, suspension, or termination may use the in-app appeal form when signed in or the public Contact page Account Action Appeal form when they cannot sign in. Email support@chewbuu.com remains a fallback. The request should identify the account action, explain why it may be incorrect, and include relevant new information or evidence.",
+      "Appeals are reviewed by the Trust & Safety or authorized administrative team as soon as practicable, with no guaranteed timeline. If an appeal is denied, the removal or account action remains in effect and reinstatement is not guaranteed.",
+    ],
+  },
 ];
 
 function AcceptableUseRoute() {
@@ -202,19 +214,25 @@ function AcceptableUseRoute() {
                 How to Report a Violation
               </h2>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                If you encounter any profile, message, or activity that violates
-                this Acceptable Use Policy, contact our Trust & Safety team
-                directly at{" "}
+                If you encounter a profile, profile media, message, date media,
+                date recap, or other activity that violates this Acceptable Use
+                Policy, use the in-app Report control where available. You can
+                also contact our Trust & Safety team directly at{" "}
                 <a
                   className="font-bold text-foreground hover:underline"
                   href="mailto:safety@chewbuu.com"
                 >
                   safety@chewbuu.com
                 </a>
-                . We review reports as soon as practicable, but do not promise a
-                fixed response time. If there is immediate danger or risk of
-                physical harm, please call local emergency services (911 in the
-                United States) first.
+                . If the in-app control is unavailable, use the Contact page or
+                email safety@chewbuu.com. We review reports as soon as
+                practicable, but do not promise a fixed response time or 24/7
+                review. If there is immediate danger or risk of physical harm,
+                please call local emergency services (911 in the United States)
+                first. If your account or content was removed, restricted,
+                suspended, or terminated, use the signed-in or public Contact
+                page Account Action Appeal flow; email support@chewbuu.com is
+                also available as a fallback.
               </p>
             </div>
           </div>

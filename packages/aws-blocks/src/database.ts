@@ -26,6 +26,73 @@ type JsonColumn<T> = ColumnType<T, T | string | undefined, T | string>;
  */
 export const jsonb = (value: unknown): string => JSON.stringify(value);
 
+export interface ModerationReportTable {
+  ai_completed_at: Timestamp | null;
+  ai_confidence: number | null;
+  ai_labels: JsonColumn<string[]> | null;
+  ai_model: string | null;
+  ai_severity: string | null;
+  ai_status: string;
+  ai_summary: string | null;
+  assigned_to_user_id: string | null;
+  category: string;
+  created_at: Timestamp;
+  details: string | null;
+  evidence_snapshot: JsonColumn<Record<string, unknown>> | null;
+  id: string;
+  priority: string;
+  reported_kind: string | null;
+  reported_text: string | null;
+  reporter_user_id: string;
+  resolution: string | null;
+  resolved_at: Timestamp | null;
+  room_id: string | null;
+  slack_notified_at: Timestamp | null;
+  slack_status: string;
+  status: string;
+  subject_user_id: string;
+  target_id: string;
+  target_type: string;
+  updated_at: Timestamp;
+}
+
+export interface ModerationAppealTable {
+  account_email: string | null;
+  account_name: string | null;
+  appellant_user_id: string | null;
+  assigned_to_user_id: string | null;
+  created_at: Timestamp;
+  decision: string | null;
+  details: string;
+  id: string;
+  report_id: string | null;
+  resolved_at: Timestamp | null;
+  status: string;
+  updated_at: Timestamp;
+}
+
+export interface ModerationActionTable {
+  action: string;
+  actor_user_id: string | null;
+  appeal_id: string | null;
+  created_at: Timestamp;
+  evidence_snapshot: JsonColumn<Record<string, unknown>> | null;
+  id: string;
+  reason: string | null;
+  report_id: string | null;
+  target_id: string | null;
+  target_type: string | null;
+  target_user_id: string | null;
+}
+
+export interface ModerationRateLimitTable {
+  id: string;
+  reporter_user_id: string;
+  report_count: number;
+  updated_at: Timestamp;
+  window_started_at: Timestamp;
+}
+
 export interface ChatRoomTable {
   active_date_id: string | null;
   created_at: Timestamp;
@@ -62,6 +129,32 @@ export interface ChatReadStateTable {
   last_read_at: Timestamp;
   room_id: string;
   user_id: string;
+}
+
+export interface DateSafetyEventTable {
+  action: string;
+  confirmed: boolean;
+  created_at: Timestamp;
+  date_request_id: string;
+  distance_miles: number | null;
+  id: string;
+  initiated_by_user_id: string;
+  status: string;
+  updated_at: Timestamp;
+  venue_name: string;
+  venue_place_id: string;
+}
+
+export interface DateSafetyRecordingTable {
+  content_type: string;
+  created_at: Timestamp;
+  date_request_id: string;
+  ended_at: Timestamp | null;
+  id: string;
+  recorded_by_user_id: string;
+  safety_event_id: string;
+  started_at: Timestamp;
+  url: string;
 }
 
 export interface UserTable {
@@ -237,6 +330,7 @@ export interface ProfileMediaTable {
 }
 
 export interface TrustedContactTable {
+  created_at: Timestamp;
   email: string | null;
   id: string;
   name: string;
@@ -324,6 +418,8 @@ export interface DateRequestPartyMemberTable {
 export interface DateRequestPlaceTable {
   address: string | null;
   id: string;
+  latitude: number | null;
+  longitude: number | null;
   name: string;
   place_id: string;
   rating: string | null;
@@ -985,11 +1081,17 @@ export interface VenueSpecialTable {
 
 export interface BlocksDatabase {
   circle: CircleTable;
+  moderation_action: ModerationActionTable;
+  moderation_appeal: ModerationAppealTable;
+  moderation_rate_limit: ModerationRateLimitTable;
+  moderation_report: ModerationReportTable;
   circle_member: CircleMemberTable;
   chat_message: ChatMessageTable;
   chat_participant: ChatParticipantTable;
   chat_read_state: ChatReadStateTable;
   chat_room: ChatRoomTable;
+  date_safety_event: DateSafetyEventTable;
+  date_safety_recording: DateSafetyRecordingTable;
   date_match: DateMatchTable;
   date_media: DateMediaTable;
   date_request: DateRequestTable;

@@ -42,7 +42,11 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     server: {
+      // Bind LAN so physical devices (Expo Go) reach the dev frontend/auth.
+      // strictPort keeps :3001 a contract instead of silently drifting.
+      host: "0.0.0.0",
       port: devPort,
+      strictPort: true,
       proxy: {
         "/aws-blocks": {
           changeOrigin: true,

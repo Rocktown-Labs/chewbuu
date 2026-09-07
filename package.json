@@ -48,6 +48,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@aws-blocks/bb-data": "^0.2.2",
     "@chewbuu/config": "workspace:*",
     "@types/node": "^22.13.14",
     "lefthook": "latest",

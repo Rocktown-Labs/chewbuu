@@ -25,6 +25,8 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import { ReportButton } from "@/components/moderation/report-dialog";
+import { DateSafetyHelp } from "@/components/safety/date-safety-help";
 import { chatApi, toChatMessage, toChatThread } from "@/lib/chat-api";
 import type { ApiChatMessage, ApiChatRoom } from "@/lib/chat-api";
 import { insertRealtimeMessageToDb, syncRoomsToDb } from "@/lib/db";
@@ -613,20 +615,36 @@ export function DashboardChats({
                   }
                   title={selected.title}
                   trailing={
-                    selected.activeDate && onOpenDate ? (
-                      <Button
-                        className="hidden rounded-full text-[11px] sm:inline-flex"
-                        onClick={() => {
-                          const dateId = selected.activeDate?.dateId;
-                          if (dateId) onOpenDate(dateId);
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="outline"
-                      >
-                        Date page
-                      </Button>
-                    ) : null
+                    <>
+                      {selected.participants.length === 1 ? (
+                        <ReportButton
+                          className="rounded-full"
+                          label="Report profile"
+                          targetId={selected.participants[0].id}
+                          targetType="profile"
+                        />
+                      ) : null}
+                      {selected.activeDate?.status === "live" ? (
+                        <DateSafetyHelp
+                          compact
+                          dateRequestId={selected.activeDate.dateId}
+                        />
+                      ) : null}
+                      {selected.activeDate && onOpenDate ? (
+                        <Button
+                          className="hidden rounded-full text-[11px] sm:inline-flex"
+                          onClick={() => {
+                            const dateId = selected.activeDate?.dateId;
+                            if (dateId) onOpenDate(dateId);
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          Date page
+                        </Button>
+                      ) : null}
+                    </>
                   }
                 />
                 {selected.activeDate ? (

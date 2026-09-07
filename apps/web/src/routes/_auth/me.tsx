@@ -98,6 +98,7 @@ import { AnalyticsDrawer } from "@/components/analytics/analytics-drawer";
 import { PasskeysCard } from "@/components/auth/passkey";
 import { SubscriptionCancellationCard } from "@/components/billing/subscription-cancellation-card";
 import { NavigationBlocker } from "@/components/navigation-blocker";
+import { DateSafetyHelp } from "@/components/safety/date-safety-help";
 import {
   HorizontalStepper,
   type StepItem,
@@ -4947,8 +4948,8 @@ function ProfileEditPanel({
               4. Safety & Emergency Contact
             </CardTitle>
             <CardDescription className="text-xs">
-              Trusted contacts receive live date safety check-ins and emergency
-              alerts.
+              Trusted contacts can receive an email check-in when you request
+              safety help during an active date.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -6432,21 +6433,11 @@ function DateHistoryDetail({
                   Safety & Location Share
                 </p>
                 <p className="text-[10px] text-muted-foreground">
-                  Share live location with emergency contacts
+                  Get help at the selected venue without continuous location
+                  tracking
                 </p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  toast.success(
-                    "Emergency contact notified of live date location."
-                  )
-                }
-                className="rounded-full text-xs border-amber-500/30 text-amber-600 hover:bg-amber-500/10 h-8"
-              >
-                Safety Hotline
-              </Button>
+              <DateSafetyHelp compact dateRequestId={currentDate.id} />
             </div>
 
             {/* End Date CTA */}

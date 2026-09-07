@@ -47,6 +47,7 @@ import { authClient } from "@/lib/auth-client";
 import {
   connectApi,
   datingApi,
+  moderationApi,
   stripeAdminApi,
   pricingApi,
   spotCaptureAdminApi,
@@ -153,6 +154,24 @@ const RouteComponent = () => {
   const [usernameRequests, setUsernameRequests] = useState<
     (UsernameChangeRequest & { email: string; name: string })[]
   >([]);
+  const [moderationReports, setModerationReports] = useState<
+    Awaited<ReturnType<typeof moderationApi.listReports>>["reports"]
+  >([]);
+  const [moderationAppeals, setModerationAppeals] = useState<
+    Awaited<ReturnType<typeof moderationApi.listAppeals>>["appeals"]
+  >([]);
+  const [moderationActions, setModerationActions] = useState<
+    Awaited<ReturnType<typeof moderationApi.listActions>>["actions"]
+  >([]);
+  const [moderationLoading, setModerationLoading] = useState(false);
+  const [moderationActionId, setModerationActionId] = useState<string | null>(
+    null
+  );
+  const [moderationConfirmation, setModerationConfirmation] = useState<
+    | { action: "ban_user" | "suspend_user"; kind: "report"; id: string }
+    | { decision: "reverse" | "uphold"; kind: "appeal"; id: string }
+    | null
+  >(null);
 
   const loadPlans = async () => {
     try {
@@ -226,6 +245,95 @@ const RouteComponent = () => {
     }
   };
 
+  const loadModeration = async () => {
+    setModerationLoading(true);
+    try {
+      const [reports, appeals, actions] = await Promise.all([
+        moderationApi.listReports(),
+        moderationApi.listAppeals(),
+        moderationApi.listActions(),
+      ]);
+      setModerationReports(reports.reports);
+      setModerationAppeals(appeals.appeals);
+      setModerationActions(actions.actions);
+    } catch {
+      setModerationReports([]);
+      setModerationAppeals([]);
+      setModerationActions([]);
+    } finally {
+      setModerationLoading(false);
+    }
+  };
+
+  const reviewReport = async (
+    reportId: string,
+    action:
+      | "ban_user"
+      | "dismiss"
+      | "remove_content"
+      | "review"
+      | "suspend_user"
+  ) => {
+    setModerationActionId(reportId);
+    try {
+      await moderationApi.reviewReport({
+        action,
+        reportId,
+        reason:
+          action === "dismiss"
+            ? "Reviewed and dismissed"
+            : action === "review"
+              ? "Assigned for human review"
+              : `Human reviewer selected ${action}`,
+        status: action === "review" ? "under_review" : "actioned",
+      });
+      toast.success("Moderation case updated.");
+      await loadModeration();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not update case."
+      );
+    } finally {
+      setModerationActionId(null);
+    }
+  };
+
+  const requestReportReview = (
+    reportId: string,
+    action: "ban_user" | "suspend_user"
+  ) => {
+    setModerationConfirmation({ action, id: reportId, kind: "report" });
+  };
+
+  const reviewAppeal = async (
+    appealId: string,
+    decision: "reverse" | "uphold"
+  ) => {
+    setModerationActionId(appealId);
+    try {
+      await moderationApi.reviewAppeal({
+        appealId,
+        decision,
+        reason: `Human reviewer ${decision}d the appeal`,
+      });
+      toast.success("Appeal updated.");
+      await loadModeration();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not update appeal."
+      );
+    } finally {
+      setModerationActionId(null);
+    }
+  };
+
+  const requestAppealReview = (
+    appealId: string,
+    decision: "reverse" | "uphold"
+  ) => {
+    setModerationConfirmation({ decision, id: appealId, kind: "appeal" });
+  };
+
   const loadUsers = async () => {
     setLoadingUsers(true);
     try {
@@ -262,6 +370,7 @@ const RouteComponent = () => {
     void loadStripeHealth();
     void loadSpotReward();
     void loadPendingSpotContributions();
+    void loadModeration();
   }, [isAdmin]);
 
   const handleSetRole = async (userId: string, currentRole?: string | null) => {
@@ -459,7 +568,7 @@ const RouteComponent = () => {
           onValueChange={setActiveTab}
           value={activeTab}
         >
-          <TabsList className="grid h-12 w-full max-w-md grid-cols-3 rounded-full bg-muted/60 p-1">
+          <TabsList className="grid h-12 w-full max-w-2xl grid-cols-4 rounded-full bg-muted/60 p-1">
             <TabsTrigger
               className="rounded-full font-medium text-sm data-active:bg-background data-active:shadow-xs"
               value="users"
@@ -480,6 +589,13 @@ const RouteComponent = () => {
             >
               <Activity className="mr-1.5 size-4" />
               Observability
+            </TabsTrigger>
+            <TabsTrigger
+              className="rounded-full font-medium text-sm data-active:bg-background data-active:shadow-xs"
+              value="moderation"
+            >
+              <ShieldAlert className="mr-1.5 size-4" />
+              Moderation
             </TabsTrigger>
           </TabsList>
 
@@ -1253,7 +1369,271 @@ const RouteComponent = () => {
             </Card>
           </TabsContent>
 
-          {/* TAB 3: OBSERVABILITY & OPERATIONS */}
+          {/* TAB 3: MODERATION */}
+          <TabsContent className="mt-6 space-y-6" value="moderation">
+            <Card className="rounded-3xl border-border/80 bg-card/70 shadow-sm">
+              <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Badge
+                    className="mb-2 w-fit rounded-full"
+                    variant="secondary"
+                  >
+                    Human review queue
+                  </Badge>
+                  <CardTitle className="text-xl">Reports & appeals</CardTitle>
+                  <CardDescription>
+                    AI summaries and Slack notifications are review aids only.
+                    Account and content actions require a human confirmation.
+                  </CardDescription>
+                </div>
+                <Button
+                  className="rounded-full"
+                  onClick={() => void loadModeration()}
+                  type="button"
+                  variant="outline"
+                >
+                  <RefreshCw className="size-4" /> Refresh
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {moderationLoading ? (
+                  <p className="rounded-2xl bg-muted/40 p-4 text-sm text-muted-foreground">
+                    Loading moderation queue…
+                  </p>
+                ) : moderationReports.length === 0 ? (
+                  <p className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
+                    No reports are waiting in the queue.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {moderationReports.map((report) => (
+                      <article
+                        className="rounded-2xl border border-border bg-background/50 p-4"
+                        key={report.id}
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge
+                                variant={
+                                  report.priority === "urgent"
+                                    ? "destructive"
+                                    : "outline"
+                                }
+                              >
+                                {report.priority}
+                              </Badge>
+                              <Badge variant="secondary">{report.status}</Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {report.category} · {report.targetType}
+                              </span>
+                            </div>
+                            <p className="mt-2 font-semibold text-sm">
+                              {report.subjectName ?? report.subjectUserId}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Reported by{" "}
+                              {report.reporterName ?? report.reporterUserId} ·{" "}
+                              {new Date(report.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            {report.id}
+                          </span>
+                        </div>
+                        {report.details ? (
+                          <p className="mt-3 whitespace-pre-wrap rounded-xl bg-muted/40 p-3 text-sm">
+                            {report.details}
+                          </p>
+                        ) : null}
+                        {report.reportedText ? (
+                          <blockquote className="mt-3 border-l-2 border-primary/40 pl-3 text-sm text-muted-foreground">
+                            {report.reportedText}
+                          </blockquote>
+                        ) : null}
+                        <div className="mt-3 rounded-xl border border-dashed p-3 text-xs text-muted-foreground">
+                          <span className="font-semibold">AI review aid:</span>{" "}
+                          {report.aiSummary ??
+                            "Not available; review the evidence manually."}
+                          {report.aiLabels?.length
+                            ? ` · ${report.aiLabels.join(", ")}`
+                            : ""}
+                        </div>
+                        {moderationActions.some(
+                          (action) => action.reportId === report.id
+                        ) ? (
+                          <div className="mt-3 rounded-xl border border-border/70 bg-muted/20 p-3 text-xs">
+                            <p className="font-semibold">Action history</p>
+                            <ul className="mt-2 space-y-1 text-muted-foreground">
+                              {moderationActions
+                                .filter(
+                                  (action) => action.reportId === report.id
+                                )
+                                .map((action) => (
+                                  <li key={action.id}>
+                                    {action.action} ·{" "}
+                                    {new Date(
+                                      action.createdAt
+                                    ).toLocaleString()}
+                                    {action.reason ? ` · ${action.reason}` : ""}
+                                  </li>
+                                ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {report.status === "new" ? (
+                            <Button
+                              className="rounded-full"
+                              disabled={moderationActionId === report.id}
+                              onClick={() =>
+                                void reviewReport(report.id, "review")
+                              }
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              Assign to me
+                            </Button>
+                          ) : null}
+                          <Button
+                            className="rounded-full"
+                            disabled={moderationActionId === report.id}
+                            onClick={() =>
+                              void reviewReport(report.id, "dismiss")
+                            }
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                          >
+                            Dismiss
+                          </Button>
+                          {report.targetType !== "profile" ? (
+                            <Button
+                              className="rounded-full"
+                              disabled={moderationActionId === report.id}
+                              onClick={() =>
+                                void reviewReport(report.id, "remove_content")
+                              }
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              Remove content
+                            </Button>
+                          ) : null}
+                          <Button
+                            className="rounded-full"
+                            disabled={moderationActionId === report.id}
+                            onClick={() =>
+                              requestReportReview(report.id, "suspend_user")
+                            }
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            Suspend 7 days
+                          </Button>
+                          <Button
+                            className="rounded-full"
+                            disabled={moderationActionId === report.id}
+                            onClick={() =>
+                              requestReportReview(report.id, "ban_user")
+                            }
+                            size="sm"
+                            type="button"
+                            variant="destructive"
+                          >
+                            Ban account
+                          </Button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-border/80 bg-card/70 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-xl">Appeals</CardTitle>
+                <CardDescription>
+                  Public and signed-in appeals remain available even when an
+                  account cannot sign in.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {moderationAppeals.length === 0 ? (
+                  <p className="rounded-2xl border border-dashed p-4 text-sm text-muted-foreground">
+                    No appeals are waiting.
+                  </p>
+                ) : (
+                  moderationAppeals.map((appeal) => (
+                    <article className="rounded-2xl border p-4" key={appeal.id}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary">{appeal.status}</Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {appeal.accountEmail ?? "No email supplied"} ·{" "}
+                          {new Date(appeal.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="mt-3 whitespace-pre-wrap text-sm">
+                        {appeal.details}
+                      </p>
+                      {moderationActions.some(
+                        (action) => action.appealId === appeal.id
+                      ) ? (
+                        <div className="mt-3 rounded-xl border border-border/70 bg-muted/20 p-3 text-xs">
+                          <p className="font-semibold">Action history</p>
+                          <ul className="mt-2 space-y-1 text-muted-foreground">
+                            {moderationActions
+                              .filter((action) => action.appealId === appeal.id)
+                              .map((action) => (
+                                <li key={action.id}>
+                                  {action.action} ·{" "}
+                                  {new Date(action.createdAt).toLocaleString()}
+                                  {action.reason ? ` · ${action.reason}` : ""}
+                                </li>
+                              ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {appeal.status === "pending" ||
+                      appeal.status === "under_review" ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            className="rounded-full"
+                            disabled={moderationActionId === appeal.id}
+                            onClick={() =>
+                              requestAppealReview(appeal.id, "reverse")
+                            }
+                            size="sm"
+                            type="button"
+                          >
+                            Reverse action
+                          </Button>
+                          <Button
+                            className="rounded-full"
+                            disabled={moderationActionId === appeal.id}
+                            onClick={() =>
+                              requestAppealReview(appeal.id, "uphold")
+                            }
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            Uphold action
+                          </Button>
+                        </div>
+                      ) : null}
+                    </article>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB 4: OBSERVABILITY & OPERATIONS */}
           <TabsContent className="mt-6 space-y-6" value="observability">
             <Card className="rounded-3xl border-border/80 bg-card/70 shadow-sm">
               <CardHeader>
@@ -1365,6 +1745,57 @@ const RouteComponent = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* MODERATION CONFIRMATION */}
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open) setModerationConfirmation(null);
+        }}
+        open={Boolean(moderationConfirmation)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm moderation action</DialogTitle>
+            <DialogDescription>
+              This action will be recorded in the immutable moderation history.
+              AI suggestions never execute account or content actions.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {moderationConfirmation?.kind === "appeal"
+              ? `Confirm ${moderationConfirmation.decision === "reverse" ? "reversing" : "upholding"} this appeal.`
+              : `Confirm ${moderationConfirmation?.action === "ban_user" ? "banning this account" : "suspending this account for 7 days"}.`}
+          </p>
+          <DialogFooter>
+            <Button
+              onClick={() => setModerationConfirmation(null)}
+              type="button"
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                const confirmation = moderationConfirmation;
+                setModerationConfirmation(null);
+                if (!confirmation) return;
+                await (confirmation.kind === "report"
+                  ? reviewReport(confirmation.id, confirmation.action)
+                  : reviewAppeal(confirmation.id, confirmation.decision));
+              }}
+              type="button"
+              variant={
+                moderationConfirmation?.kind === "report" &&
+                moderationConfirmation.action === "ban_user"
+                  ? "destructive"
+                  : "default"
+              }
+            >
+              Confirm action
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* BAN USER MODAL */}
       <Dialog

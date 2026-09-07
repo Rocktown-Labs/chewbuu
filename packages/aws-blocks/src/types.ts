@@ -2,6 +2,146 @@ import type { RealtimeChannelClient } from "@aws-blocks/bb-realtime/mock-middlew
 
 export type ChatMessageKind = "photo" | "system" | "text" | "video" | "voice";
 
+export type DateSafetyAction =
+  | "call_authorities"
+  | "contact_emergency_contact"
+  | "contact_venue"
+  | "start_recording";
+
+export type ModerationReportCategory =
+  | "harassment_or_bullying"
+  | "hate_or_discrimination"
+  | "impersonation_or_fraud"
+  | "minor_safety"
+  | "non_consensual_intimate_content"
+  | "privacy_violation"
+  | "scam_or_spam"
+  | "self_harm"
+  | "sexual_content"
+  | "threats_or_violence"
+  | "other";
+
+export type ModerationReportTargetType =
+  | "profile"
+  | "profile_media"
+  | "chat_message"
+  | "date_media"
+  | "date_recap";
+
+export type ModerationReportStatus =
+  | "new"
+  | "under_review"
+  | "actioned"
+  | "dismissed"
+  | "duplicate";
+
+export type ModerationAppealStatus =
+  | "pending"
+  | "under_review"
+  | "upheld"
+  | "reversed";
+
+export type ModerationPriority = "urgent" | "standard";
+
+export type ModerationAction =
+  | "review"
+  | "dismiss"
+  | "remove_content"
+  | "warn_user"
+  | "suspend_user"
+  | "ban_user"
+  | "restore_content"
+  | "uphold_appeal"
+  | "reverse_appeal";
+
+export interface CreateModerationReportInput {
+  category: ModerationReportCategory;
+  details?: string;
+  targetId: string;
+  targetType: ModerationReportTargetType;
+}
+
+export interface ModerationReport {
+  aiConfidence?: number;
+  aiLabels?: string[];
+  aiModel?: string;
+  aiSeverity?: string;
+  aiStatus: "completed" | "failed" | "pending" | "skipped";
+  aiSummary?: string;
+  assignedToUserId?: string;
+  category: ModerationReportCategory;
+  createdAt: string;
+  details?: string;
+  evidenceSnapshot?: Record<string, unknown>;
+  id: string;
+  priority: ModerationPriority;
+  reportedKind?: string;
+  reportedText?: string;
+  reporterEmail?: string;
+  reporterName?: string;
+  reporterUserId: string;
+  resolution?: string;
+  resolvedAt?: string;
+  roomId?: string;
+  slackStatus: "completed" | "failed" | "pending" | "skipped";
+  status: ModerationReportStatus;
+  subjectEmail?: string;
+  subjectName?: string;
+  subjectUserId: string;
+  targetId: string;
+  targetType: ModerationReportTargetType;
+  updatedAt: string;
+}
+
+export interface ModerationActionRecord {
+  action: ModerationAction;
+  actorUserId?: string;
+  appealId?: string;
+  createdAt: string;
+  evidenceSnapshot?: Record<string, unknown>;
+  id: string;
+  reason?: string;
+  reportId?: string;
+  targetId?: string;
+  targetType?: ModerationReportTargetType;
+  targetUserId?: string;
+}
+
+export interface ModerationAppeal {
+  accountEmail?: string;
+  accountName?: string;
+  appellantUserId?: string;
+  assignedToUserId?: string;
+  createdAt: string;
+  decision?: string;
+  details: string;
+  id: string;
+  reportId?: string;
+  resolvedAt?: string;
+  status: ModerationAppealStatus;
+  updatedAt: string;
+}
+
+export interface CreateModerationAppealInput {
+  accountEmail?: string;
+  accountName?: string;
+  details: string;
+  reportId?: string;
+}
+
+export interface ReviewModerationReportInput {
+  action: Exclude<ModerationAction, "uphold_appeal" | "reverse_appeal">;
+  reason?: string;
+  reportId: string;
+  status: Exclude<ModerationReportStatus, "new">;
+}
+
+export interface ReviewModerationAppealInput {
+  appealId: string;
+  decision: "reverse" | "uphold";
+  reason?: string;
+}
+
 export interface ApiChatMessage {
   createdAt: string;
   durationSec?: number;
@@ -11,7 +151,14 @@ export interface ApiChatMessage {
   mediaUrl?: string;
   roomId: string;
   senderId: string;
-  systemIcon?: "user" | "check" | "calendar" | "branch" | "heart" | "block";
+  systemIcon?:
+    | "user"
+    | "check"
+    | "calendar"
+    | "branch"
+    | "heart"
+    | "block"
+    | "safety";
   text?: string;
 }
 
@@ -22,7 +169,18 @@ export interface ApiChatParticipant {
   userId?: string;
 }
 
+export interface ApiActiveDate {
+  dateId: string;
+  places: { address?: string; name: string; placeId: string }[];
+  role: "receiver" | "sender";
+  scheduledAt: string;
+  searchArea: string;
+  status: "confirmed" | "live" | "matching" | "pending_confirm";
+  title: string;
+}
+
 export interface ApiChatRoom {
+  activeDate?: ApiActiveDate;
   activeDateId?: string;
   id: string;
   kind: string;
@@ -61,6 +219,8 @@ export interface SendChatMessageResponse {
 
 export interface DateRequestPlaceInput {
   address?: string;
+  latitude?: number;
+  longitude?: number;
   name: string;
   placeId: string;
   rating?: string;
@@ -671,6 +831,38 @@ export interface AwsBlocksApi {
   getPublicSpotMenu: (placeId: string) => Promise<PublicSpotMenuResponse>;
   getPlacePhoto: (photoName: string) => Promise<PlacePhotoResponse>;
   checkIn: (input: CheckInInput) => Promise<CheckInResponse>;
+  getDateSafetyStatus: (
+    input: DateSafetyLocationInput
+  ) => Promise<DateSafetyStatusResponse>;
+  requestDateSafetyAction: (
+    input: DateSafetyActionInput
+  ) => Promise<DateSafetyActionResponse>;
+  completeDateSafetyRecording: (
+    input: CompleteDateSafetyRecordingInput
+  ) => Promise<{ recordingId: string }>;
+  createModerationAppeal: (input: CreateModerationAppealInput) => Promise<{
+    appeal: { id: string; status: "pending" };
+  }>;
+  createModerationReport: (input: CreateModerationReportInput) => Promise<{
+    report: { id: string; status: "new" };
+  }>;
+  getMyModerationAppeals: () => Promise<{ appeals: ModerationAppeal[] }>;
+  listModerationActions: (input?: {
+    appealId?: string;
+    reportId?: string;
+  }) => Promise<{ actions: ModerationActionRecord[] }>;
+  listModerationAppeals: () => Promise<{ appeals: ModerationAppeal[] }>;
+  listModerationReports: (input?: {
+    status?: ModerationReportStatus;
+  }) => Promise<{ reports: ModerationReport[] }>;
+  reviewModerationAppeal: (input: ReviewModerationAppealInput) => Promise<{
+    appealId: string;
+    status: "reversed" | "upheld";
+  }>;
+  reviewModerationReport: (input: ReviewModerationReportInput) => Promise<{
+    reportId: string;
+    status: ModerationReportStatus;
+  }>;
   startDate: (dateRequestId: string) => Promise<{
     actualStartAt: string;
     dateRequestId: string;
@@ -1115,7 +1307,7 @@ export interface AiMessage {
 export interface MediaUploadInput {
   contentType: string;
   fileName: string;
-  slot: "intro_video" | "photo" | "profile_photo";
+  slot: "intro_video" | "photo" | "profile_photo" | "safety_recording";
 }
 
 export interface MediaUploadResponse {
@@ -1188,6 +1380,52 @@ export interface CheckInResponse {
   dateRequestId: string;
   message: string;
   success: boolean;
+}
+
+export interface DateSafetyLocationInput {
+  dateRequestId: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface DateSafetyActionInput extends DateSafetyLocationInput {
+  action: DateSafetyAction;
+  confirmed: true;
+}
+
+export interface DateSafetyVenue {
+  address?: string;
+  name: string;
+  phone?: string;
+  placeId: string;
+}
+
+export interface DateSafetyStatusResponse {
+  distanceMiles: number | null;
+  geofenceRadiusMiles: number;
+  eligible: boolean;
+  message: string;
+  recordingNotice: string;
+  trustedContactCount: number;
+  venue: DateSafetyVenue | null;
+}
+
+export interface DateSafetyActionResponse {
+  action: DateSafetyAction;
+  authorityPhone?: string;
+  incidentId: string;
+  message: string;
+  phoneNumbers?: string[];
+  recordingNotice?: string;
+  venuePhone?: string;
+}
+
+export interface CompleteDateSafetyRecordingInput {
+  contentType: string;
+  dateRequestId: string;
+  incidentId: string;
+  startedAt: string;
+  url: string;
 }
 
 export interface ReviewInput {
@@ -1485,6 +1723,8 @@ export interface DatingRequestResponse {
   paymentMode: string;
   places: {
     address?: string;
+    latitude?: number;
+    longitude?: number;
     name: string;
     placeId: string;
     rating?: string;

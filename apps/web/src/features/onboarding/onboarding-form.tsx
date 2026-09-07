@@ -555,8 +555,10 @@ export function OnboardingForm() {
       const result = await datingApi.getIdentityVerificationStatus();
       setIdentityStatus(result.status);
       setIdentityVerifiedName(result.verifiedName ?? "");
+      return result.status;
     } catch {
       setIdentityStatus("not_started");
+      return "not_started" as const;
     }
   }, []);
 
@@ -564,14 +566,103 @@ export function OnboardingForm() {
     void loadIdentityStatus();
   }, [loadIdentityStatus]);
 
+  // Stripe redirects back here (return_url) when verification finishes in a
+  // new tab. Refresh once, toast, and drop the query param.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("verification") !== "complete") return;
+    params.delete("verification");
+    const clean = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", clean);
+    void (async () => {
+      const status = await loadIdentityStatus();
+      if (status === "verified") {
+        toast.success("Identity verified. You can continue onboarding.");
+      } else {
+        toast.info(
+          "Verification isn't complete yet. Retry below or refresh status."
+        );
+      }
+    })();
+  }, [loadIdentityStatus]);
+
+  const [isVerifyingIdentity, setIsVerifyingIdentity] = useState(false);
+  const verificationTimer = useRef<number | null>(null);
+
+  const stopVerificationPolling = useCallback(() => {
+    if (verificationTimer.current !== null) {
+      window.clearInterval(verificationTimer.current);
+      verificationTimer.current = null;
+    }
+    setIsVerifyingIdentity(false);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (verificationTimer.current !== null) {
+        window.clearInterval(verificationTimer.current);
+        verificationTimer.current = null;
+      }
+    },
+    []
+  );
+
+  // Refresh when the user comes back from the Stripe tab.
+  useEffect(() => {
+    if (!isVerifyingIdentity) return;
+    const onFocus = () => {
+      void loadIdentityStatus();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [isVerifyingIdentity, loadIdentityStatus]);
+
   const startIdentityVerification = async () => {
+    // Open synchronously in the click handler so popup blockers allow it.
+    const popup = window.open("about:blank", "_blank", "noopener,noreferrer");
+    setIsVerifyingIdentity(true);
     try {
       const result = await datingApi.createIdentityVerificationSession();
       if (!result.url) {
         throw new Error("Stripe did not return an identity verification URL.");
       }
-      window.location.assign(result.url);
+      if (popup && !popup.closed) {
+        popup.location.href = result.url;
+      } else {
+        // Popup blocked: fall back to same-tab navigation. Stripe's
+        // return_url brings the user back to onboarding afterwards.
+        window.location.assign(result.url);
+        return;
+      }
+      toast.info(
+        "Complete verification in the new Stripe tab. This page checks status automatically."
+      );
+      if (verificationTimer.current !== null) {
+        window.clearInterval(verificationTimer.current);
+      }
+      let attempts = 0;
+      verificationTimer.current = window.setInterval(() => {
+        attempts += 1;
+        void (async () => {
+          const status = await loadIdentityStatus();
+          if (status === "verified") {
+            stopVerificationPolling();
+            toast.success("Identity verified. You can continue onboarding.");
+          } else if (attempts >= 100) {
+            stopVerificationPolling();
+            toast.info(
+              "Still not verified. If you finished in the Stripe tab, use Refresh status."
+            );
+          }
+        })();
+      }, 3000);
     } catch (error) {
+      try {
+        popup?.close();
+      } catch {
+        // Ignore popup close failures.
+      }
+      stopVerificationPolling();
       toast.error(
         error instanceof Error
           ? error.message
@@ -1086,6 +1177,7 @@ export function OnboardingForm() {
               <IdentityStep
                 identityStatus={identityStatus ?? "not_started"}
                 identityVerifiedName={identityVerifiedName}
+                isVerifying={isVerifyingIdentity}
                 onRefresh={loadIdentityStatus}
                 onStart={startIdentityVerification}
               />
@@ -1734,12 +1826,14 @@ function BasicsStep({
 function IdentityStep({
   identityStatus,
   identityVerifiedName,
+  isVerifying,
   onRefresh,
   onStart,
 }: {
   identityStatus: NonNullable<DatingProfilePayload["identityStatus"]>;
   identityVerifiedName: string;
-  onRefresh: () => Promise<void>;
+  isVerifying: boolean;
+  onRefresh: () => Promise<unknown>;
   onStart: () => Promise<void>;
 }) {
   const isVerified = identityStatus === "verified";
@@ -1774,8 +1868,10 @@ function IdentityStep({
         <div className="mt-5 flex flex-wrap gap-2">
           {!isVerified ? (
             <Button onClick={() => void onStart()} type="button">
-              <ShieldCheck className="mr-2 size-4" /> Verify with Stripe
-              Identity
+              <ShieldCheck className="mr-2 size-4" />
+              {isVerifying
+                ? "Continue in the Stripe tab…"
+                : "Verify with Stripe Identity"}
             </Button>
           ) : (
             <Button type="button">
@@ -1790,6 +1886,13 @@ function IdentityStep({
             Refresh status
           </Button>
         </div>
+        {isVerifying && !isVerified ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Stripe opened in a new tab so you don&apos;t lose your place here.
+            Return when you&apos;re done — status updates automatically, or use
+            Refresh status.
+          </p>
+        ) : null}
       </div>
 
       <p className="text-xs text-muted-foreground">

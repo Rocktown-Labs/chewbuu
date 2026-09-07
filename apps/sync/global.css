@@ -1,34 +1,107 @@
 @import "tailwindcss";
 @import "uniwind";
 @import "heroui-native/styles";
-@import "../../packages/ui/src/styles/globals.css";
 
 @source './node_modules/heroui-native/lib';
 
-.dark {
-  --background: #410d25;
-  --foreground: #fff6dd;
-  --card: #581631;
-  --card-foreground: #fff6dd;
-  --popover: #581631;
-  --popover-foreground: #fff6dd;
-  --primary: #f4c95d;
-  --primary-foreground: #410d25;
-  --secondary: #6b2342;
-  --secondary-foreground: #fff6dd;
-  --muted: #6b2342;
-  --muted-foreground: #d9bda9;
-  --accent: #f4c95d;
-  --accent-foreground: #410d25;
-  --border: rgb(244 201 93 / 18%);
-  --input: rgb(244 201 93 / 24%);
-  --ring: #f4c95d;
-  --sidebar: #35091e;
-  --sidebar-foreground: #fff6dd;
-  --sidebar-primary: #f4c95d;
-  --sidebar-primary-foreground: #410d25;
-  --sidebar-accent: #581631;
-  --sidebar-accent-foreground: #fff6dd;
-  --sidebar-border: rgb(244 201 93 / 18%);
-  --sidebar-ring: #f4c95d;
+/*
+ * Chewbuu Sync brand (burgundy + gold). NOTE: do NOT import the web
+ * stylesheet (packages/ui) here — it contains web-only CSS (@property,
+ * keyframes, color-mix/shadcn utilities) that Uniwind cannot evaluate on
+ * native and that throws (calc errors + SyntaxError) at bundle time.
+ * Brand tokens are mapped onto HeroUI vars below instead, with web-style
+ * aliases (bg-card, text-muted-foreground, bg-primary, ...) so existing
+ * screen classes resolve to real colors.
+ */
+
+@layer theme {
+  :root {
+    @variant light {
+      --background: #faf3e3;
+      --foreground: #410d25;
+
+      --surface: #fffdf6;
+      --surface-foreground: #410d25;
+      --surface-secondary: #f3e5cf;
+      --surface-secondary-foreground: #410d25;
+      --surface-tertiary: #e9cf9f;
+      --surface-tertiary-foreground: #410d25;
+
+      --overlay: #fffdf6;
+      --overlay-foreground: #410d25;
+
+      --muted: #8a6f5c;
+
+      --default: #e9cf9f;
+      --default-foreground: #410d25;
+
+      --accent: #410d25;
+      --accent-foreground: #fff6dd;
+
+      --field-background: #fffdf6;
+      --field-foreground: #410d25;
+      --field-placeholder: #8a6f5c;
+      --field-border: #d9c49a;
+
+      --border: #d9c49a;
+      --separator: #d9c49a;
+      --focus: #8a6d1f;
+    }
+
+    @variant dark {
+      --background: #410d25;
+      --foreground: #fff6dd;
+
+      --surface: #581631;
+      --surface-foreground: #fff6dd;
+      --surface-secondary: #6b2342;
+      --surface-secondary-foreground: #fff6dd;
+      --surface-tertiary: #6b2342;
+      --surface-tertiary-foreground: #fff6dd;
+
+      --overlay: #581631;
+      --overlay-foreground: #fff6dd;
+
+      --muted: #d9bda9;
+
+      --default: #6b2342;
+      --default-foreground: #fff6dd;
+
+      --accent: #f4c95d;
+      --accent-foreground: #410d25;
+
+      --field-background: #581631;
+      --field-foreground: #fff6dd;
+      --field-placeholder: #d9bda9;
+      --field-border: rgb(244 201 93 / 24%);
+
+      --border: rgb(244 201 93 / 18%);
+      --separator: rgb(244 201 93 / 18%);
+      --focus: #f4c95d;
+    }
+  }
+}
+
+@theme inline {
+  --color-card: var(--surface);
+  --color-card-foreground: var(--surface-foreground);
+  --color-popover: var(--overlay);
+  --color-popover-foreground: var(--overlay-foreground);
+
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-foreground);
+
+  --color-secondary: var(--surface-secondary);
+  --color-secondary-foreground: var(--surface-secondary-foreground);
+
+  --color-muted: var(--surface-secondary);
+  --color-muted-foreground: var(--muted);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-input: var(--field-background);
+  --color-ring: var(--focus);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--danger-foreground);
 }

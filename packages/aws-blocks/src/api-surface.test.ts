@@ -10,7 +10,13 @@ describe("AWS Blocks API surface", () => {
       "approveVenueClaim",
       "captureVenueMenu",
       "createVenueIdentityVerificationSession",
+      "createModerationAppeal",
+      "createModerationReport",
       "getVenueIdentityVerificationStatus",
+      "getMyModerationAppeals",
+      "listModerationActions",
+      "listModerationAppeals",
+      "listModerationReports",
       "listVenueMenuItems",
       "upsertVenueMenuItem",
       "upsertVenueMenuModifierGroup",
@@ -130,6 +136,8 @@ describe("AWS Blocks API surface", () => {
       "getStripeConnectStatus",
       "updateCircle",
       "updatePricingPlans",
+      "reviewModerationAppeal",
+      "reviewModerationReport",
       "reviewSpotContribution",
       "updateSpotCaptureRewardConfig",
       "updateVenueBrand",
@@ -140,7 +148,7 @@ describe("AWS Blocks API surface", () => {
       "inviteVenueMembers",
     ];
 
-    expect(methodNames).toHaveLength(133);
+    expect(methodNames).toHaveLength(141);
   });
 
   it("allows an optional direct friend target without changing normal requests", () => {
