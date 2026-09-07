@@ -2,21 +2,15 @@ import { useLiveQuery } from "@tanstack/react-db";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import {
-  CalendarDays,
-  ChevronRight,
-  RefreshCw,
-  Sparkles,
-} from "lucide-react-native";
+import { CalendarDays, ChevronRight } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 
+import { ScreenHeading } from "@/components/screen-heading";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { GlassView } from "@/components/ui/glass-view";
-import { useAppTheme } from "@/contexts/app-theme-context";
 import { authClient } from "@/lib/auth-client";
 import { getUpcomingRequests } from "@/lib/dating-utils";
 import {
@@ -38,9 +32,7 @@ const formatDate = (value: string) =>
   }).format(new Date(value));
 
 export default function HomeScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isDark } = useAppTheme();
   const { data: session, isPending: isSessionPending } =
     authClient.useSession();
   const [onboardingDraft, setOnboardingDraft] = useState<OnboardingData>(
@@ -95,27 +87,10 @@ export default function HomeScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View
-        className="flex-row items-center justify-between px-5 pb-3 pt-2"
-        style={{ paddingTop: insets.top + 4 }}
-      >
-        <View className="flex-row items-center gap-2">
-          <View className="h-8 w-8 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
-            <Sparkles size={16} color="#f59e0b" />
-          </View>
-          <Text className="text-xl font-extrabold tracking-tight text-foreground">
-            Home
-          </Text>
-        </View>
-        <Pressable
-          accessibilityLabel="Refresh dating data"
-          className="rounded-full p-2 active:bg-muted"
-          disabled={isRefreshing}
-          onPress={() => void handleRefresh()}
-        >
-          <RefreshCw color={isDark ? "#f4f4f5" : "#3f3f46"} size={18} />
-        </Pressable>
-      </View>
+      <ScreenHeading
+        subtitle="View confirmed venue bookings on your schedule, check weather, and track streaks."
+        title="Home Dashboard 👋"
+      />
 
       <FlatList
         contentContainerStyle={{
@@ -124,6 +99,12 @@ export default function HomeScreen() {
         }}
         data={upcomingRequests}
         keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl
+            onRefresh={() => void handleRefresh()}
+            refreshing={isRefreshing}
+          />
+        }
         ListEmptyComponent={
           isSessionPending ? (
             <Card className="mb-4 p-4">

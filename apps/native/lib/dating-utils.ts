@@ -34,7 +34,10 @@ export const getUpcomingRequests = <T extends DateRequestSummary>(
         new Date(request.scheduledAt).getTime() >= now &&
         !TERMINAL_DATE_STATUSES.has(request.status)
     )
-    .toSorted((first, second) =>
+    // NOTE: Array.prototype.toSorted is unavailable on Hermes; slice+sort is
+    // the equivalent that also avoids mutating the input.
+    .slice()
+    .sort((first, second) =>
       first.scheduledAt.localeCompare(second.scheduledAt)
     );
 

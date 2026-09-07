@@ -3,7 +3,12 @@ import "@aws-blocks/bb-realtime/mock-middleware";
 
 import type { AwsBlocksApi } from "./types";
 
+export { registerMiddleware } from "@aws-blocks/blocks/client";
+export type { BlocksMiddleware } from "@aws-blocks/core/client";
+export { createNativeBlocksAuthMiddleware } from "./native-auth";
+
 export type {
+  ApiActiveDate,
   ApiChatMessage,
   ApiChatParticipant,
   ApiChatRoom,
@@ -13,6 +18,13 @@ export type {
   AwsBlocksApi,
   CheckInInput,
   CheckInResponse,
+  CompleteDateSafetyRecordingInput,
+  DateSafetyAction,
+  DateSafetyActionInput,
+  DateSafetyActionResponse,
+  DateSafetyLocationInput,
+  DateSafetyStatusResponse,
+  DateSafetyVenue,
   CircleResponse,
   ChatMessageKind,
   BrandStyle,

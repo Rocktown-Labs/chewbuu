@@ -72,6 +72,18 @@ const aupRules = [
       "Chewbuu may preserve account, message, and payment information and disclose it in response to valid legal process or an emergency request involving imminent harm.",
     ],
   },
+  {
+    title: "8. Takedown Notices and Appeals",
+    critical: false,
+    rules: [
+      "To report a profile, message, image, video, or other activity that may violate this Policy, email safety@chewbuu.com or use the Contact page and select Trust & Safety / Member Report. Chewbuu does not currently provide a dedicated in-app report button.",
+      "A useful takedown notice identifies the reported profile or content, explains the suspected violation, and includes supporting details or evidence. Immediate danger should be reported to local emergency services first.",
+      "The Trust & Safety or authorized administrative team reviews submitted reports against this Policy, the Terms, available account and verification information, and the evidence provided. Urgent safety matters are prioritized, but Chewbuu does not promise a fixed response-time SLA or 24/7 review.",
+      "Depending on the findings, Chewbuu may remove content, restrict features, suspend or terminate an account, preserve relevant information, or make a legally required report to authorities.",
+      "A user affected by a removal, restriction, suspension, or termination may appeal by emailing support@chewbuu.com or using the Contact page and selecting Account Action Appeal. The request should identify the account action, explain why it may be incorrect, and include relevant new information or evidence.",
+      "Appeals are reviewed by the Trust & Safety or authorized administrative team as soon as practicable, with no guaranteed timeline. If an appeal is denied, the removal or account action remains in effect and reinstatement is not guaranteed.",
+    ],
+  },
 ];
 
 function AcceptableUseRoute() {
@@ -214,7 +226,10 @@ function AcceptableUseRoute() {
                 . We review reports as soon as practicable, but do not promise a
                 fixed response time. If there is immediate danger or risk of
                 physical harm, please call local emergency services (911 in the
-                United States) first.
+                United States) first. If your account or content was removed,
+                restricted, suspended, or terminated, email support@chewbuu.com
+                or use the Contact page and select Account Action Appeal to
+                request a review.
               </p>
             </div>
           </div>

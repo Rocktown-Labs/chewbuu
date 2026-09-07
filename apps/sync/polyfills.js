@@ -1,3 +1,7 @@
+// Must run synchronously before any other module evaluates: Hermes has no
+// secure RNG, and libraries (e.g. UUID generation) may require it at import
+// time. Without this, route modules can throw during evaluation.
+import "react-native-get-random-values";
 import structuredClone from "@ungap/structured-clone";
 import { Platform } from "react-native";
 

@@ -1,3 +1,7 @@
+// Must run synchronously before any other module evaluates: Hermes has no
+// secure RNG, and @tanstack/db generates UUIDs at collection setup (import
+// time). Without this every route module throws during evaluation.
+import "react-native-get-random-values";
 import structuredClone from "@ungap/structured-clone";
 import { Platform } from "react-native";
 

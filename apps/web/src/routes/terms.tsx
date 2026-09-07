@@ -16,7 +16,7 @@ const termsOverview = [
   "No fake profiles, harassment, scams, threats, non-consensual content, illegal activity, or attempts to bypass safety and verification systems.",
   "Chewbuu connects adults for in-person dining and social dates at partner venues, but cannot guarantee chemistry, personal behavior, or venue table availability.",
   "Subscriptions auto-renew monthly or annually until canceled. Consumer subscriptions can be canceled in Account Settings; venue managers can cancel Sync in the Sync workspace. Payments are processed in USD, and the final statement descriptor is shown by the payment processor.",
-  "Depending on availability, safety tools may use location, trusted contacts, venue alerts, and emergency escalation. Chewbuu cooperates with valid lawful law-enforcement requests.",
+  "During an active date, the venue-scoped Help menu can use a location check, trusted-contact email, venue assistance, participant-consented recording, and an emergency dialer handoff. Chewbuu cooperates with valid lawful law-enforcement requests.",
 ];
 
 const termsSections = [
@@ -78,7 +78,7 @@ const termsSections = [
   {
     title: "7. Active Safety Features and Data Consent",
     body: [
-      "Chewbuu may offer date check-ins, trusted emergency contacts, location radius verification at partner venues, discreet assistance alerts, and incident reporting.",
+      "During an active date, the Help menu checks the selected venue radius before enabling a trusted-contact email check-in, connected-venue assistance request, participant-consented recording, or emergency dialer handoff. Chewbuu does not continuously track location and does not automatically contact authorities.",
       "Safety tools are supplementary and do not replace personal vigilance, venue management, or official emergency services (911). If you are in immediate danger, always contact local emergency responders first.",
       "By activating active-date safety features, you consent to the collection and processing of relevant location and safety signals as outlined in our Privacy Policy (/privacy).",
     ],

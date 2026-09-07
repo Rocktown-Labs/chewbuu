@@ -1,4 +1,3 @@
-import { api as blocksApi } from "@chewbuu/aws-blocks";
 import type {
   ApiChatMessage,
   ApiChatRoom,
@@ -10,14 +9,19 @@ import type {
   IdentityVerificationSession,
   PlaceSuggestion,
   PlaceSuggestionInput,
+  PublicSpotSearchInput,
   PublishRecapInput,
   RecapResponse,
   ReviewInput,
+  VenueSpecial,
 } from "@chewbuu/aws-blocks";
+
+import { blocksApi } from "@/lib/blocks-client";
 
 export type NativeDateRequest = DatingSummaryResponse["requests"][number];
 export type NativeProfile = DatingProfileResponse;
 export type NativeSpot = PlaceSuggestion;
+export type NativeSpecial = VenueSpecial;
 export type NativeRecap = RecapResponse;
 export type NativeMedia = DateMediaResponse;
 export type NativeRoom = ApiChatRoom;
@@ -62,6 +66,15 @@ export const datingApi = {
     kind: "menu_photo" | "spot_photo";
   }) => blocksApi.submitSpotContribution(input),
   searchPlaces: (input: PlaceSuggestionInput) => blocksApi.suggestPlaces(input),
+  searchPublicSpots: (input: PublicSpotSearchInput) =>
+    blocksApi.searchPublicSpots(input),
+  listPublicSpecials: (input?: {
+    area?: string;
+    category?: string;
+    latitude?: number;
+    longitude?: number;
+    radiusMiles?: number;
+  }) => blocksApi.listPublicVenueSpecials(input),
   sendMessage: (
     roomId: string,
     input: {

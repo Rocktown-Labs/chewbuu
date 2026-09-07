@@ -44,6 +44,8 @@ const sendRenderedEmail = async ({
 }: SendRenderedEmailInput) => {
   const resend = getResendClient();
   if (!resend) {
+    // No email provider configured (typical for local dev): don't fail auth,
+    // the caller logs the action link instead.
     return;
   }
 
@@ -68,6 +70,12 @@ export const sendVerificationEmail = async ({
   url,
   user,
 }: AuthEmailInput) => {
+  if (!env.RESEND_API_KEY && process.env.NODE_ENV !== "production") {
+    console.log(
+      `[auth] RESEND_API_KEY unset — verification link for ${user.email}: ${url}`
+    );
+  }
+
   const email = await renderVerificationEmail({
     assetBaseUrl: env.CORS_ORIGIN,
     name: user.name,
@@ -86,6 +94,12 @@ export const sendPasswordResetEmail = async ({
   url,
   user,
 }: AuthEmailInput) => {
+  if (!env.RESEND_API_KEY && process.env.NODE_ENV !== "production") {
+    console.log(
+      `[auth] RESEND_API_KEY unset — password reset link for ${user.email}: ${url}`
+    );
+  }
+
   const email = await renderPasswordResetEmail({
     assetBaseUrl: env.CORS_ORIGIN,
     name: user.name,

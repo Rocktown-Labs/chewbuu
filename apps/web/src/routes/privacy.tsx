@@ -9,7 +9,7 @@ const privacyOverview = [
   "We use it to run Chewbuu, verify people, suggest places, match users, manage dates, process subscriptions, prevent abuse, and support active-date safety.",
   "We do not plan to sell private dating data, exact active-date location, messages, sensitive profile details, or media to data brokers.",
   "We may share limited booking or safety details with service providers, venue partners, trusted contacts, emergency responders, or law enforcement when needed.",
-  "Dating data is sensitive, location can reveal habits, and any future safety recording tool would require consent and a separate product disclosure.",
+  "Dating data is sensitive, location can reveal habits, and optional active-date safety recordings require participant consent, device permissions, and a separate incident record.",
 ];
 
 const privacySections = [
@@ -53,8 +53,8 @@ const privacySections = [
   {
     title: "Safety Recording And Active Date Tools",
     body: [
-      "Chewbuu may offer active-date tools as they become available. The controls shown in the product, together with the permissions you grant, determine what data is collected.",
-      "If a future audio recording or similar emergency recording tool is enabled, users must consent before using it. Such a tool would be intended for safety and incident documentation, not routine monitoring.",
+      "During an active date, the Help menu checks whether your device is within the selected venue safety area before enabling assistance actions. Chewbuu does not continuously track your location.",
+      "Optional safety audio/video recording requires explicit participant consent and camera/microphone permission on each device. It is intended for safety and incident documentation, not routine monitoring.",
       "Safety information submitted to Chewbuu may be reviewed by our support team or service providers when needed to respond to a request, prevent harm, or comply with law.",
     ],
   },

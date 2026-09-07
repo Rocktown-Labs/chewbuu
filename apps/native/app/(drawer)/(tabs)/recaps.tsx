@@ -2,18 +2,19 @@ import { useLiveQuery } from "@tanstack/react-db";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
-import { Camera, ImagePlus, RefreshCw, Sparkles } from "lucide-react-native";
+import { Camera, ImagePlus, Sparkles } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
   Pressable,
+  RefreshControl,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ScreenHeading } from "@/components/screen-heading";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { authClient } from "@/lib/auth-client";
@@ -39,7 +40,6 @@ const formatDate = (value: string) =>
   }).format(new Date(value));
 
 export default function RecapsScreen() {
-  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ requestId?: string }>();
   const [selectedRequestId, setSelectedRequestId] = useState<string>(
     params.requestId ?? ""
@@ -183,26 +183,11 @@ export default function RecapsScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View
-        className="flex-row items-center justify-between px-5 pb-3 pt-2"
-        style={{ paddingTop: insets.top + 4 }}
-      >
-        <View className="flex-row items-center gap-2">
-          <View className="h-8 w-8 items-center justify-center rounded-full border border-amber-400/40 bg-amber-500/20">
-            <Sparkles color="#f59e0b" size={16} />
-          </View>
-          <Text className="text-xl font-extrabold tracking-tight text-foreground">
-            Recaps
-          </Text>
-        </View>
-        <Pressable
-          accessibilityLabel="Refresh recaps"
-          className="rounded-full p-2 active:bg-muted"
-          onPress={() => void refreshDatingData()}
-        >
-          <RefreshCw color="#f59e0b" size={18} />
-        </Pressable>
-      </View>
+      <ScreenHeading
+        eyebrow="Date Memories"
+        subtitle="Keep the places, photos, and stories from dates that actually happened."
+        title="Recaps"
+      />
 
       <FlatList
         contentContainerStyle={{
@@ -212,6 +197,12 @@ export default function RecapsScreen() {
         }}
         data={recaps ?? []}
         keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl
+            onRefresh={() => void refreshDatingData()}
+            refreshing={false}
+          />
+        }
         ListEmptyComponent={
           isSessionPending ? (
             <Card className="p-4">
