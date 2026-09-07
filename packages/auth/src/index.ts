@@ -184,13 +184,25 @@ export const createAuth = () => {
   const stripeWebhookSecret =
     env.STRIPE_BILLING_WEBHOOK_SECRET ?? env.STRIPE_WEBHOOK_SECRET;
   const stripeEnabled = Boolean(env.STRIPE_SECRET_KEY && stripeWebhookSecret);
+  // Production serves HTTPS (possibly cross-subdomain), so cookies need
+  // SameSite=None + Secure. Local development runs over plain HTTP on
+  // localhost AND LAN IPs (phone testing) — browsers reject Secure cookies
+  // there, silently dropping the session right after sign-up/sign-in and
+  // bouncing the user back to the login form. Lax + non-secure locally.
+  const isProduction = process.env.NODE_ENV === "production";
   return betterAuth({
     advanced: {
-      defaultCookieAttributes: {
-        httpOnly: true,
-        sameSite: "none",
-        secure: true,
-      },
+      defaultCookieAttributes: isProduction
+        ? {
+            httpOnly: true,
+            sameSite: "none",
+            secure: true,
+          }
+        : {
+            httpOnly: true,
+            sameSite: "lax",
+            secure: false,
+          },
       ipAddress: {
         ipAddressHeaders: ["x-forwarded-for"],
       },
