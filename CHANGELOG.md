@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added persistent moderation reports and appeals for profiles, profile media, chat messages, date media, and date recaps; human-admin review actions with immutable evidence history; duplicate/rate-limit protection; optional non-enforcing Gemini classification and private Slack review notifications; and signed-in/public appeal fallback handling. Closes #138.
 - Added a dedicated 'Specials' filter tab to the Spots exploration view with active daily specials, search filtering, and quick date-planning actions.
 - Added headcount-based Chewbuu Sync tiers (Sync 50 at $69/mo, Sync 100 at $139/mo, Sync Enterprise at $249/mo) with interactive billing toggles, dynamic staff limits, the Chewbuu Spotlight promotional advertising suite ($49/wk venue spotlight, $29/event spotlight, $19/3-day special boost), and a transparent 5% F&B transaction fee breakdown.
 - Added comprehensive public compliance page implementations for card network and Stripe underwriting review: updated Terms & Conditions with explicit prohibitions against human trafficking, sexual exploitation, and abuse; added dedicated Acceptable Use Policy (/acceptable-use), Refund & Cancellation Policy (/refund-policy), Protocols for Law Enforcement (/law-enforcement), Contact Directory (/contact), and public Pricing (/pricing). Renamed the VIP consumer membership tier from 'Sugar' to 'Host'.

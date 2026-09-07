@@ -25,6 +25,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import { ReportButton } from "@/components/moderation/report-dialog";
 import { DateSafetyHelp } from "@/components/safety/date-safety-help";
 import { chatApi, toChatMessage, toChatThread } from "@/lib/chat-api";
 import type { ApiChatMessage, ApiChatRoom } from "@/lib/chat-api";
@@ -615,6 +616,14 @@ export function DashboardChats({
                   title={selected.title}
                   trailing={
                     <>
+                      {selected.participants.length === 1 ? (
+                        <ReportButton
+                          className="rounded-full"
+                          label="Report profile"
+                          targetId={selected.participants[0].id}
+                          targetType="profile"
+                        />
+                      ) : null}
                       {selected.activeDate?.status === "live" ? (
                         <DateSafetyHelp
                           compact

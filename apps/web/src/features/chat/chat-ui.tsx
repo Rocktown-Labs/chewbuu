@@ -59,6 +59,8 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
+import { ReportButton } from "@/components/moderation/report-dialog";
+
 import type {
   ActiveDateContext,
   ChatMessage,
@@ -413,7 +415,17 @@ export function ChatMessageRow({
             }
           />
         ) : null}
-        <MessageFooter>{formatChatTime(message.createdAt)}</MessageFooter>
+        <MessageFooter>
+          <span>{formatChatTime(message.createdAt)}</span>
+          {!isMe ? (
+            <ReportButton
+              className="h-6 px-1.5 text-[10px]"
+              label="Report message"
+              targetId={message.id}
+              targetType="chat_message"
+            />
+          ) : null}
+        </MessageFooter>
       </MessageContent>
     </Message>
   );

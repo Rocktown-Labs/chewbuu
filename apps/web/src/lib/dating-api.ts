@@ -26,6 +26,10 @@ import type {
   VenueStaffRole as BlocksVenueStaffRole,
   VenueStaffStatus as BlocksVenueStaffStatus,
   VenueSyncChannel as BlocksVenueSyncChannel,
+  CreateModerationAppealInput,
+  CreateModerationReportInput,
+  ReviewModerationAppealInput,
+  ReviewModerationReportInput,
 } from "@chewbuu/aws-blocks";
 import { env } from "@chewbuu/env/web";
 
@@ -1304,6 +1308,23 @@ export const spotCaptureAdminApi = {
     blocksApi.updateSpotCaptureRewardConfig({
       rewardCents,
     }) as Promise<SpotCaptureRewardConfig>,
+};
+
+export const moderationApi = {
+  createAppeal: (input: CreateModerationAppealInput) =>
+    blocksApi.createModerationAppeal(input),
+  createReport: (input: CreateModerationReportInput) =>
+    blocksApi.createModerationReport(input),
+  getMyAppeals: () => blocksApi.getMyModerationAppeals(),
+  listActions: (input?: { appealId?: string; reportId?: string }) =>
+    blocksApi.listModerationActions(input),
+  listAppeals: () => blocksApi.listModerationAppeals(),
+  listReports: (status?: ReviewModerationReportInput["status"]) =>
+    blocksApi.listModerationReports(status ? { status } : undefined),
+  reviewAppeal: (input: ReviewModerationAppealInput) =>
+    blocksApi.reviewModerationAppeal(input),
+  reviewReport: (input: ReviewModerationReportInput) =>
+    blocksApi.reviewModerationReport(input),
 };
 
 export const recapsApi = {

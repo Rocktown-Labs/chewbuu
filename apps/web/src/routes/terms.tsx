@@ -46,6 +46,7 @@ const termsSections = [
       "Users must comply at all times with our Acceptable Use Policy (/acceptable-use), which governs permissible conduct on the platform.",
       "You may not upload or distribute content that is non-consensual, misleading, sexually explicit, hateful, defamatory, or infringing upon third-party rights.",
       "Chewbuu uses the verification checks and safety review processes described in the service and may restrict accounts or content that violate these Terms.",
+      "Users can report supported profiles, media, messages, and date recaps through available in-app Report controls. Human reviewers decide content and account actions; AI review aids do not make those decisions. Appeals are available through the signed-in or public Contact flow.",
     ],
   },
   {

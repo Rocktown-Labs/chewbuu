@@ -8,6 +8,139 @@ export type DateSafetyAction =
   | "contact_venue"
   | "start_recording";
 
+export type ModerationReportCategory =
+  | "harassment_or_bullying"
+  | "hate_or_discrimination"
+  | "impersonation_or_fraud"
+  | "minor_safety"
+  | "non_consensual_intimate_content"
+  | "privacy_violation"
+  | "scam_or_spam"
+  | "self_harm"
+  | "sexual_content"
+  | "threats_or_violence"
+  | "other";
+
+export type ModerationReportTargetType =
+  | "profile"
+  | "profile_media"
+  | "chat_message"
+  | "date_media"
+  | "date_recap";
+
+export type ModerationReportStatus =
+  | "new"
+  | "under_review"
+  | "actioned"
+  | "dismissed"
+  | "duplicate";
+
+export type ModerationAppealStatus =
+  | "pending"
+  | "under_review"
+  | "upheld"
+  | "reversed";
+
+export type ModerationPriority = "urgent" | "standard";
+
+export type ModerationAction =
+  | "review"
+  | "dismiss"
+  | "remove_content"
+  | "warn_user"
+  | "suspend_user"
+  | "ban_user"
+  | "restore_content"
+  | "uphold_appeal"
+  | "reverse_appeal";
+
+export interface CreateModerationReportInput {
+  category: ModerationReportCategory;
+  details?: string;
+  targetId: string;
+  targetType: ModerationReportTargetType;
+}
+
+export interface ModerationReport {
+  aiConfidence?: number;
+  aiLabels?: string[];
+  aiModel?: string;
+  aiSeverity?: string;
+  aiStatus: "completed" | "failed" | "pending" | "skipped";
+  aiSummary?: string;
+  assignedToUserId?: string;
+  category: ModerationReportCategory;
+  createdAt: string;
+  details?: string;
+  id: string;
+  priority: ModerationPriority;
+  reportedKind?: string;
+  reportedText?: string;
+  reporterEmail?: string;
+  reporterName?: string;
+  reporterUserId: string;
+  resolution?: string;
+  resolvedAt?: string;
+  roomId?: string;
+  slackStatus: "completed" | "failed" | "pending" | "skipped";
+  status: ModerationReportStatus;
+  subjectEmail?: string;
+  subjectName?: string;
+  subjectUserId: string;
+  targetId: string;
+  targetType: ModerationReportTargetType;
+  updatedAt: string;
+}
+
+export interface ModerationActionRecord {
+  action: ModerationAction;
+  actorUserId?: string;
+  appealId?: string;
+  createdAt: string;
+  evidenceSnapshot?: Record<string, unknown>;
+  id: string;
+  reason?: string;
+  reportId?: string;
+  targetId?: string;
+  targetType?: ModerationReportTargetType;
+  targetUserId?: string;
+}
+
+export interface ModerationAppeal {
+  accountEmail?: string;
+  accountName?: string;
+  appellantUserId?: string;
+  assignedToUserId?: string;
+  createdAt: string;
+  decision?: string;
+  details: string;
+  id: string;
+  reportId?: string;
+  resolvedAt?: string;
+  status: ModerationAppealStatus;
+  updatedAt: string;
+}
+
+export interface CreateModerationAppealInput {
+  accountEmail?: string;
+  accountName?: string;
+  details: string;
+  reportId?: string;
+}
+
+export interface ReviewModerationReportInput {
+  action: Exclude<ModerationAction, "uphold_appeal" | "reverse_appeal">;
+  reason?: string;
+  reportId: string;
+  status: Exclude<ModerationReportStatus, "new">;
+}
+
+export interface ReviewModerationAppealInput {
+  appealId: string;
+  decision: "reverse" | "uphold";
+  reason?: string;
+}
+
 export interface ApiChatMessage {
   createdAt: string;
   durationSec?: number;
@@ -706,6 +839,29 @@ export interface AwsBlocksApi {
   completeDateSafetyRecording: (
     input: CompleteDateSafetyRecordingInput
   ) => Promise<{ recordingId: string }>;
+  createModerationAppeal: (input: CreateModerationAppealInput) => Promise<{
+    appeal: { id: string; status: "pending" };
+  }>;
+  createModerationReport: (input: CreateModerationReportInput) => Promise<{
+    report: { id: string; status: "new" };
+  }>;
+  getMyModerationAppeals: () => Promise<{ appeals: ModerationAppeal[] }>;
+  listModerationActions: (input?: {
+    appealId?: string;
+    reportId?: string;
+  }) => Promise<{ actions: ModerationActionRecord[] }>;
+  listModerationAppeals: () => Promise<{ appeals: ModerationAppeal[] }>;
+  listModerationReports: (input?: {
+    status?: ModerationReportStatus;
+  }) => Promise<{ reports: ModerationReport[] }>;
+  reviewModerationAppeal: (input: ReviewModerationAppealInput) => Promise<{
+    appealId: string;
+    status: "reversed" | "upheld";
+  }>;
+  reviewModerationReport: (input: ReviewModerationReportInput) => Promise<{
+    reportId: string;
+    status: ModerationReportStatus;
+  }>;
   startDate: (dateRequestId: string) => Promise<{
     actualStartAt: string;
     dateRequestId: string;

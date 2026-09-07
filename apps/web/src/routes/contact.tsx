@@ -13,8 +13,11 @@ import {
   ShieldCheck,
   Store,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+
+import { authClient } from "@/lib/auth-client";
+import { moderationApi } from "@/lib/dating-api";
 
 const departments = [
   {
@@ -68,18 +71,60 @@ const departments = [
 ];
 
 function ContactRoute() {
+  const { data: session } = authClient.useSession();
   const [topic, setTopic] = useState("general");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
+  const [reportId, setReportId] = useState("");
+  const [myAppeals, setMyAppeals] = useState<
+    Awaited<ReturnType<typeof moderationApi.getMyAppeals>>["appeals"]
+  >([]);
   const [submitted, setSubmitted] = useState(false);
   const [submittedTo, setSubmittedTo] = useState("support@chewbuu.com");
 
-  const handleSubmit = (e: FormEvent) => {
+  useEffect(() => {
+    if (!session) {
+      setMyAppeals([]);
+      return;
+    }
+    const loadAppeals = async () => {
+      try {
+        const result = await moderationApi.getMyAppeals();
+        setMyAppeals(result.appeals);
+      } catch {
+        setMyAppeals([]);
+      }
+    };
+    void loadAppeals();
+  }, [session]);
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!email || !message) {
       toast.error("Please provide your email and message.");
       return;
+    }
+
+    if (topic === "appeal") {
+      try {
+        await moderationApi.createAppeal({
+          accountEmail: email,
+          accountName: name || undefined,
+          details: message,
+          reportId: reportId.trim() || undefined,
+        });
+        setSubmittedTo("Chewbuu moderation queue");
+        setSubmitted(true);
+        toast.success("Your appeal was submitted for human review.");
+        return;
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? `${error.message} Email fallback is still available below.`
+            : "Could not submit the appeal in-app. Email fallback is still available."
+        );
+      }
     }
 
     // Compose mailto fallback as client-side trigger
@@ -174,6 +219,19 @@ function ContactRoute() {
               content details.
             </p>
 
+            {myAppeals.length > 0 ? (
+              <div className="mb-5 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm">
+                <p className="font-semibold">Your appeal status</p>
+                <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  {myAppeals.slice(0, 3).map((appeal) => (
+                    <li key={appeal.id}>
+                      {appeal.status} · submitted{" "}
+                      {new Date(appeal.createdAt).toLocaleDateString()}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
@@ -234,6 +292,23 @@ function ContactRoute() {
                 </select>
               </div>
 
+              {topic === "appeal" ? (
+                <div className="space-y-1.5">
+                  <label
+                    className="text-xs font-semibold"
+                    htmlFor="contact-report-id"
+                  >
+                    Report ID (optional)
+                  </label>
+                  <Input
+                    id="contact-report-id"
+                    onChange={(event) => setReportId(event.target.value)}
+                    placeholder="Paste the moderation report ID if you have it"
+                    value={reportId}
+                  />
+                </div>
+              ) : null}
+
               <div className="space-y-1.5">
                 <label
                   className="text-xs font-semibold"
@@ -257,8 +332,9 @@ function ContactRoute() {
 
               {submitted && (
                 <p className="text-xs font-semibold text-emerald-600">
-                  Thank you! If your email client didn't open automatically, you
-                  can always write to {submittedTo} directly.
+                  {submittedTo === "Chewbuu moderation queue"
+                    ? "Your appeal is recorded for human review."
+                    : `Thank you! If your email client didn't open automatically, you can always write to ${submittedTo} directly.`}
                 </p>
               )}
             </form>

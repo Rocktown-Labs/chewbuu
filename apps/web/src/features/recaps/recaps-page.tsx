@@ -8,6 +8,7 @@ import {
   type FormEvent,
 } from "react";
 
+import { ReportButton } from "@/components/moderation/report-dialog";
 import {
   dateMediaApi,
   datingApi,
@@ -334,10 +335,17 @@ function RecapGallery({
               "A Chewbuu date"}
           </h2>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {memories.length} captured{" "}
-          {memories.length === 1 ? "memory" : "memories"}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-muted-foreground">
+            {memories.length} captured{" "}
+            {memories.length === 1 ? "memory" : "memories"}
+          </p>
+          <ReportButton
+            label="Report recap"
+            targetId={recap.id}
+            targetType="date_recap"
+          />
+        </div>
       </div>
       {recap.caption ? (
         <p className="py-4 text-sm text-muted-foreground">{recap.caption}</p>
@@ -348,25 +356,31 @@ function RecapGallery({
         </p>
       ) : (
         <div className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-3">
-          {memories.map((memory) =>
-            memory.kind.includes("video") ? (
-              <video
-                className="aspect-square w-full rounded-2xl bg-black object-cover"
-                controls
-                key={memory.id}
-                src={memory.url}
-              >
-                <track kind="captions" label="English" srcLang="en" />
-              </video>
-            ) : (
-              <img
-                alt=""
-                className="aspect-square w-full rounded-2xl object-cover"
-                key={memory.id}
-                src={memory.url}
+          {memories.map((memory) => (
+            <div className="relative" key={memory.id}>
+              {memory.kind.includes("video") ? (
+                <video
+                  className="aspect-square w-full rounded-2xl bg-black object-cover"
+                  controls
+                  src={memory.url}
+                >
+                  <track kind="captions" label="English" srcLang="en" />
+                </video>
+              ) : (
+                <img
+                  alt=""
+                  className="aspect-square w-full rounded-2xl object-cover"
+                  src={memory.url}
+                />
+              )}
+              <ReportButton
+                className="absolute right-2 bottom-2 rounded-full bg-background/90"
+                label="Report media"
+                targetId={memory.id}
+                targetType="date_media"
               />
-            )
-          )}
+            </div>
+          ))}
         </div>
       )}
     </section>

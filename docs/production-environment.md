@@ -30,7 +30,9 @@ These workflow inputs were not present in the GitHub `production` secret list wh
 | `GOOGLE_CLIENT_ID` | Google sign-in will use placeholder credentials and fail in production |
 | `GOOGLE_CLIENT_SECRET` | Google sign-in will use placeholder credentials and fail in production |
 | `FIRECRAWL_API_KEY` | Venue menu previews and menu capture are unavailable |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | AI responses are unavailable |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | General AI responses and optional moderation review aids are unavailable; moderation still requires human review |
+| `SLACK_MODERATION_WEBHOOK_URL` | Private Slack moderation notifications are skipped; reports remain in the admin queue |
+| `MODERATION_AI_MODEL` | Optional moderation model override; defaults to `gemini-2.5-flash` |
 | `GOOGLE_PLACES_API_KEY` | Place search and place-photo proxy are unavailable |
 | `R2_ACCESS_KEY_ID` | No current AWS Blocks source usage found; legacy/pass-through configuration |
 | `R2_ACCOUNT_ID` | No current AWS Blocks source usage found; legacy/pass-through configuration |
@@ -85,3 +87,9 @@ The deployment cannot operate without:
 2. Keep database URLs on the correct ports: pooled `6432` for runtime and direct `5432` for migrations.
 3. Re-run the AWS Blocks workflow after changing provider credentials.
 4. Verify the feature endpoint and CloudWatch logs without printing secret values.
+
+## Moderation readiness and monitoring
+
+Apply `packages/aws-blocks/migrations/20260906160000_moderation_reporting.sql` before enabling the deployed report controls. Human reviewers use `/admin?tab=moderation`; the database remains the source of truth when optional integrations are unavailable.
+
+Moderation analysis retries failed Gemini and Slack operations with bounded backoff (250 ms, 1 s, and 3 s). Review `moderation_report.ai_status`, `moderation_report.slack_status`, and `updated_at` for `failed` records and re-run or manually review those cases. A failed AI or Slack operation never blocks report creation and never performs enforcement automatically.

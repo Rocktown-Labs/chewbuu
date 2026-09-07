@@ -61,6 +61,7 @@ import {
   distanceBetweenMiles,
   hasLocation,
 } from "./matching";
+import { runModerationAnalysis } from "./moderation-ai";
 import {
   createVenueSpotlightCheckout,
   expireSpotlights,
@@ -128,6 +129,12 @@ import type {
   SendChatMessageInput,
   UploadDateMediaInput,
   MediaUploadInput,
+  ModerationAction,
+  ModerationReportTargetType,
+  CreateModerationAppealInput,
+  CreateModerationReportInput,
+  ReviewModerationAppealInput,
+  ReviewModerationReportInput,
   VenueMediaKind,
   VenueMediaUploadInput,
   NotificationChannelClient,
@@ -986,8 +993,8 @@ const requireSession = async (headers: Headers): Promise<SessionUser> => {
   };
 };
 
-const toIso = (value: Date | string | null | undefined) =>
-  value ? new Date(value).toISOString() : null;
+const toIso = (value: unknown) =>
+  value ? new Date(value as string | number | Date).toISOString() : null;
 
 const toNotification = (notification: {
   body: string;
@@ -1456,6 +1463,19 @@ export const mediaProcessingJob = new AsyncJob(scope, "media-processing", {
   }),
 });
 
+export const moderationAnalysisJob = new AsyncJob(
+  scope,
+  "moderation-analysis",
+  {
+    handler: async (payload: { reportId: string }) => {
+      await observeScheduledJob("moderationAnalysis", () =>
+        runModerationAnalysis(payload.reportId)
+      );
+    },
+    schema: z.object({ reportId: z.string().min(1) }),
+  }
+);
+
 const escapeHtml = (value: string) =>
   value
     .replaceAll("&", "&amp;")
@@ -1464,6 +1484,439 @@ const escapeHtml = (value: string) =>
 
 const isConfiguredAdmin = (sessionUser: SessionUser) =>
   isConfiguredAdminEmail(sessionUser.email);
+
+const getOptionalSessionUser = async (headers: Headers) => {
+  try {
+    return await requireSession(headers);
+  } catch {
+    return null;
+  }
+};
+
+const moderationReportSchema = z.object({
+  category: z.enum([
+    "harassment_or_bullying",
+    "hate_or_discrimination",
+    "impersonation_or_fraud",
+    "minor_safety",
+    "non_consensual_intimate_content",
+    "privacy_violation",
+    "scam_or_spam",
+    "self_harm",
+    "sexual_content",
+    "threats_or_violence",
+    "other",
+  ]),
+  details: z.string().trim().max(2000).optional(),
+  targetId: z.string().trim().min(1).max(255),
+  targetType: z.enum([
+    "profile",
+    "profile_media",
+    "chat_message",
+    "date_media",
+    "date_recap",
+  ]),
+});
+
+const moderationAppealSchema = z.object({
+  accountEmail: z.email().optional(),
+  accountName: z.string().trim().max(120).optional(),
+  details: z.string().trim().min(10).max(4000),
+  reportId: z.string().trim().min(1).max(255).optional(),
+});
+
+const reviewModerationReportSchema = z.object({
+  action: z.enum([
+    "review",
+    "dismiss",
+    "remove_content",
+    "warn_user",
+    "suspend_user",
+    "ban_user",
+    "restore_content",
+  ]),
+  reason: z.string().trim().max(2000).optional(),
+  reportId: z.string().trim().min(1),
+  status: z.enum(["under_review", "actioned", "dismissed", "duplicate"]),
+});
+
+const reviewModerationAppealSchema = z.object({
+  appealId: z.string().trim().min(1),
+  decision: z.enum(["reverse", "uphold"]),
+  reason: z.string().trim().max(2000).optional(),
+});
+
+type ModerationTarget = {
+  canonicalTargetId?: string;
+  reportedKind?: string;
+  reportedText?: string;
+  roomId?: string;
+  subjectUserId: string;
+};
+
+const assertReportRateLimit = async (
+  db: BlocksDbExecutor,
+  reporterUserId: string,
+  now: Date
+) => {
+  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const existing = await db
+    .selectFrom("moderation_rate_limit")
+    .selectAll()
+    .where("reporter_user_id", "=", reporterUserId)
+    .executeTakeFirst();
+
+  if (existing && new Date(existing.window_started_at) > dayAgo) {
+    if (existing.report_count >= 20) {
+      throw new Error("You have reached the report limit. Try again later.");
+    }
+    await db
+      .updateTable("moderation_rate_limit")
+      .set({ report_count: existing.report_count + 1, updated_at: now })
+      .where("id", "=", existing.id)
+      .execute();
+    return;
+  }
+
+  if (existing) {
+    await db
+      .updateTable("moderation_rate_limit")
+      .set({ report_count: 1, updated_at: now, window_started_at: now })
+      .where("id", "=", existing.id)
+      .execute();
+    return;
+  }
+
+  await db
+    .insertInto("moderation_rate_limit")
+    .values({
+      id: crypto.randomUUID(),
+      report_count: 1,
+      reporter_user_id: reporterUserId,
+      updated_at: now,
+      window_started_at: now,
+    })
+    .execute();
+};
+
+const resolveModerationTarget = async (
+  db: BlocksDbExecutor,
+  reporterUserId: string,
+  input: z.infer<typeof moderationReportSchema>
+): Promise<ModerationTarget> => {
+  if (input.targetType === "profile") {
+    const user = await db
+      .selectFrom("user")
+      .select(["id"])
+      .where("id", "=", input.targetId)
+      .executeTakeFirst();
+    if (!user || user.id === reporterUserId) {
+      throw new Error("That profile cannot be reported.");
+    }
+    return { subjectUserId: user.id };
+  }
+
+  if (input.targetType === "profile_media") {
+    const media =
+      (await db
+        .selectFrom("profile_media")
+        .select(["id", "kind", "user_id"])
+        .where("id", "=", input.targetId)
+        .executeTakeFirst()) ??
+      (await db
+        .selectFrom("profile_media")
+        .select(["id", "kind", "user_id"])
+        .where("user_id", "=", input.targetId)
+        .where("kind", "=", "profile_photo")
+        .orderBy("sort_order", "asc")
+        .executeTakeFirst());
+    if (!media || media.user_id === reporterUserId) {
+      throw new Error("That profile media cannot be reported.");
+    }
+    return {
+      canonicalTargetId: media.id,
+      reportedKind: media.kind,
+      subjectUserId: media.user_id,
+    };
+  }
+
+  if (input.targetType === "chat_message") {
+    const message = await db
+      .selectFrom("chat_message")
+      .innerJoin(
+        "chat_participant",
+        "chat_participant.room_id",
+        "chat_message.room_id"
+      )
+      .select([
+        "chat_message.kind as kind",
+        "chat_message.room_id as roomId",
+        "chat_message.sender_id as senderId",
+        "chat_message.text as text",
+      ])
+      .where("chat_message.id", "=", input.targetId)
+      .where("chat_participant.user_id", "=", reporterUserId)
+      .executeTakeFirst();
+    if (!message || message.senderId === reporterUserId) {
+      throw new Error("That message cannot be reported.");
+    }
+    return {
+      reportedKind: message.kind,
+      reportedText: message.text ?? undefined,
+      roomId: message.roomId,
+      subjectUserId: message.senderId,
+    };
+  }
+
+  if (input.targetType === "date_media") {
+    const media = await db
+      .selectFrom("date_media")
+      .select(["date_request_id", "kind", "uploaded_by_user_id"])
+      .where("id", "=", input.targetId)
+      .executeTakeFirst();
+    if (!media || media.uploaded_by_user_id === reporterUserId) {
+      throw new Error("That date media cannot be reported.");
+    }
+    const request = await db
+      .selectFrom("date_request")
+      .select(["user_id"])
+      .where("id", "=", media.date_request_id)
+      .executeTakeFirst();
+    const partyMember = await db
+      .selectFrom("date_request_party_member")
+      .select("id")
+      .where("request_id", "=", media.date_request_id)
+      .where("invited_user_id", "=", reporterUserId)
+      .executeTakeFirst();
+    if (!request || (request.user_id !== reporterUserId && !partyMember)) {
+      throw new Error("You cannot report media from this date.");
+    }
+    return {
+      reportedKind: media.kind,
+      subjectUserId: media.uploaded_by_user_id,
+    };
+  }
+
+  const recap = await db
+    .selectFrom("recap")
+    .select(["author_user_id", "caption"])
+    .where("id", "=", input.targetId)
+    .executeTakeFirst();
+  if (!recap || recap.author_user_id === reporterUserId) {
+    throw new Error("That recap cannot be reported.");
+  }
+  return {
+    reportedKind: "date_recap",
+    reportedText: recap.caption ?? undefined,
+    subjectUserId: recap.author_user_id,
+  };
+};
+
+type ModerationReportRow = Omit<
+  BlocksDatabase["moderation_report"],
+  | "ai_completed_at"
+  | "ai_labels"
+  | "created_at"
+  | "resolved_at"
+  | "slack_notified_at"
+  | "updated_at"
+> & {
+  ai_completed_at: Date | string | null;
+  created_at: Date | string;
+  resolved_at: Date | string | null;
+  slack_notified_at: Date | string | null;
+  updated_at: Date | string;
+  ai_labels: string[] | string | null;
+};
+
+const parseModerationLabels = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === "string");
+  }
+  if (typeof value !== "string") return [];
+  try {
+    return parseModerationLabels(JSON.parse(value));
+  } catch {
+    return [];
+  }
+};
+
+const toModerationReport = (
+  report: ModerationReportRow,
+  users: Map<string, { email: string; name: string }>
+) => {
+  const reporter = users.get(report.reporter_user_id);
+  const subject = users.get(report.subject_user_id);
+  return {
+    aiConfidence: report.ai_confidence ?? undefined,
+    aiLabels: parseModerationLabels(report.ai_labels),
+    aiModel: report.ai_model ?? undefined,
+    aiSeverity: report.ai_severity ?? undefined,
+    aiStatus: report.ai_status,
+    aiSummary: report.ai_summary ?? undefined,
+    assignedToUserId: report.assigned_to_user_id ?? undefined,
+    category: report.category,
+    createdAt: toIso(report.created_at) ?? new Date().toISOString(),
+    details: report.details ?? undefined,
+    id: report.id,
+    priority: report.priority,
+    reportedKind: report.reported_kind ?? undefined,
+    reportedText: report.reported_text ?? undefined,
+    reporterEmail: reporter?.email,
+    reporterName: reporter?.name,
+    reporterUserId: report.reporter_user_id,
+    resolution: report.resolution ?? undefined,
+    resolvedAt: toIso(report.resolved_at) ?? undefined,
+    roomId: report.room_id ?? undefined,
+    slackStatus: report.slack_status,
+    status: report.status,
+    subjectEmail: subject?.email,
+    subjectName: subject?.name,
+    subjectUserId: report.subject_user_id,
+    targetId: report.target_id,
+    targetType: report.target_type,
+    updatedAt: toIso(report.updated_at) ?? new Date().toISOString(),
+  };
+};
+
+const moderationUserMap = async (
+  db: BlocksDbExecutor,
+  reports: { reporter_user_id: string; subject_user_id: string }[]
+) => {
+  const userIds = [
+    ...new Set(
+      reports.flatMap((report) => [
+        report.reporter_user_id,
+        report.subject_user_id,
+      ])
+    ),
+  ];
+  const users = userIds.length
+    ? await db
+        .selectFrom("user")
+        .select(["email", "id", "name"])
+        .where("id", "in", userIds)
+        .execute()
+    : [];
+  return new Map(users.map((user) => [user.id, user]));
+};
+
+const moderationContentSnapshot = async (
+  db: BlocksDbExecutor,
+  report: ModerationReportRow
+): Promise<Record<string, unknown>> => {
+  if (report.target_type === "chat_message") {
+    const message = await db
+      .selectFrom("chat_message")
+      .selectAll()
+      .where("id", "=", report.target_id)
+      .executeTakeFirst();
+    return message ? { ...message } : { reportedText: report.reported_text };
+  }
+  if (report.target_type === "profile_media") {
+    const media = await db
+      .selectFrom("profile_media")
+      .selectAll()
+      .where("id", "=", report.target_id)
+      .executeTakeFirst();
+    return media ? { ...media } : { reportedKind: report.reported_kind };
+  }
+  if (report.target_type === "date_media") {
+    const media = await db
+      .selectFrom("date_media")
+      .selectAll()
+      .where("id", "=", report.target_id)
+      .executeTakeFirst();
+    return media ? { ...media } : { reportedKind: report.reported_kind };
+  }
+  if (report.target_type === "date_recap") {
+    const recap = await db
+      .selectFrom("recap")
+      .selectAll()
+      .where("id", "=", report.target_id)
+      .executeTakeFirst();
+    return recap ? { ...recap } : { reportedText: report.reported_text };
+  }
+  return { reportedText: report.reported_text };
+};
+
+const removeModeratedContent = async (
+  db: BlocksDbExecutor,
+  report: ModerationReportRow
+) => {
+  if (report.target_type === "profile_media") {
+    await db
+      .deleteFrom("profile_media")
+      .where("id", "=", report.target_id)
+      .execute();
+    return;
+  }
+  if (report.target_type === "chat_message") {
+    await db
+      .updateTable("chat_message")
+      .set({
+        kind: "text",
+        media_thumb_url: null,
+        media_url: null,
+        text: "This content was removed by Chewbuu for violating our rules.",
+      })
+      .where("id", "=", report.target_id)
+      .execute();
+    return;
+  }
+  if (report.target_type === "date_media") {
+    await db
+      .deleteFrom("date_media")
+      .where("id", "=", report.target_id)
+      .execute();
+    return;
+  }
+  if (report.target_type === "date_recap") {
+    await db.deleteFrom("recap").where("id", "=", report.target_id).execute();
+    return;
+  }
+  throw new Error(
+    "Profile reports require an account action, not content removal."
+  );
+};
+
+const publishModerationNotification = async (
+  userId: string,
+  title: string,
+  body: string,
+  entityId: string
+) => {
+  await createNotification({
+    body,
+    dedupeKey: `moderation:${entityId}:${title}`,
+    entityId,
+    entityType: "moderation",
+    kind: "moderation",
+    title,
+    userId,
+  });
+};
+
+const publishModerationEmail = async (
+  to: string | null | undefined,
+  subject: string,
+  body: string
+) => {
+  if (!to) return;
+  try {
+    await venueEmailJob.submit({
+      body,
+      html: `<h2>${escapeHtml(subject)}</h2><p>${escapeHtml(body)}</p>`,
+      subject,
+      to,
+    });
+  } catch (error) {
+    logger.warn("moderation email could not be submitted", {
+      error: error instanceof Error ? error.message : String(error),
+      to,
+    });
+  }
+};
 
 const publishVenueEvent = async (event: {
   detail: string;
@@ -7972,6 +8425,489 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
   async getRecaps() {
     await requireSession(context.request.headers);
     return getRecaps();
+  },
+
+  async createModerationReport(input: CreateModerationReportInput) {
+    return observeOperation("createModerationReport", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const body = moderationReportSchema.parse(input);
+      const db = await getDb();
+      const now = new Date();
+      const report = await db.transaction().execute(async (tx) => {
+        await assertReportRateLimit(tx, sessionUser.id, now);
+        const target = await resolveModerationTarget(tx, sessionUser.id, body);
+        const duplicate = await tx
+          .selectFrom("moderation_report")
+          .select("id")
+          .where("reporter_user_id", "=", sessionUser.id)
+          .where("target_type", "=", body.targetType)
+          .where("target_id", "=", target.canonicalTargetId ?? body.targetId)
+          .where("category", "=", body.category)
+          .executeTakeFirst();
+        if (duplicate) {
+          throw new Error(
+            "You have already reported this content for that reason."
+          );
+        }
+        const id = crypto.randomUUID();
+        const urgent = new Set([
+          "minor_safety",
+          "non_consensual_intimate_content",
+          "self_harm",
+          "threats_or_violence",
+        ]).has(body.category);
+        await tx
+          .insertInto("moderation_report")
+          .values({
+            ai_completed_at: null,
+            ai_confidence: null,
+            ai_labels: null,
+            ai_model: null,
+            ai_severity: null,
+            ai_status: "pending",
+            ai_summary: null,
+            assigned_to_user_id: null,
+            category: body.category,
+            created_at: now,
+            details: body.details || null,
+            id,
+            priority: urgent ? "urgent" : "standard",
+            reported_kind: target.reportedKind ?? null,
+            reported_text: target.reportedText?.slice(0, 6000) ?? null,
+            reporter_user_id: sessionUser.id,
+            resolution: null,
+            resolved_at: null,
+            room_id: target.roomId ?? null,
+            slack_notified_at: null,
+            slack_status: "pending",
+            status: "new",
+            subject_user_id: target.subjectUserId,
+            target_id: target.canonicalTargetId ?? body.targetId,
+            target_type: body.targetType,
+            updated_at: now,
+          })
+          .execute();
+        return { id, status: "new" as const };
+      });
+      try {
+        await moderationAnalysisJob.submit({ reportId: report.id });
+      } catch (error) {
+        logger.warn("moderation analysis job could not be submitted", {
+          error: error instanceof Error ? error.message : String(error),
+          reportId: report.id,
+        });
+      }
+      return { report };
+    });
+  },
+
+  async createModerationAppeal(input: CreateModerationAppealInput) {
+    return observeOperation("createModerationAppeal", async () => {
+      const body = moderationAppealSchema.parse(input);
+      const sessionUser = await getOptionalSessionUser(context.request.headers);
+      const email = (sessionUser?.email ?? body.accountEmail)
+        ?.trim()
+        .toLowerCase();
+      if (!email)
+        throw new Error("An account email is required for an appeal.");
+      const db = await getDb();
+      if (sessionUser && body.reportId) {
+        const linkedReport = await db
+          .selectFrom("moderation_report")
+          .select("subject_user_id")
+          .where("id", "=", body.reportId)
+          .executeTakeFirst();
+        if (linkedReport && linkedReport.subject_user_id !== sessionUser.id) {
+          throw new Error("You can only appeal an action on your account.");
+        }
+      }
+      const recent = await db
+        .selectFrom("moderation_appeal")
+        .select("id")
+        .where("account_email", "=", email)
+        .where("created_at", ">", new Date(Date.now() - 86_400_000))
+        .limit(6)
+        .execute();
+      if (recent.length >= 5) {
+        throw new Error("Too many appeal attempts. Try again later.");
+      }
+      const id = crypto.randomUUID();
+      const now = new Date();
+      await db
+        .insertInto("moderation_appeal")
+        .values({
+          account_email: email,
+          account_name: sessionUser?.name ?? body.accountName ?? null,
+          appellant_user_id: sessionUser?.id ?? null,
+          assigned_to_user_id: null,
+          created_at: now,
+          decision: null,
+          details: body.details,
+          id,
+          report_id: body.reportId ?? null,
+          resolved_at: null,
+          status: "pending",
+          updated_at: now,
+        })
+        .execute();
+      if (sessionUser) {
+        await publishModerationNotification(
+          sessionUser.id,
+          "Appeal received",
+          "Your account-action appeal was submitted for human review.",
+          id
+        );
+      }
+      if (sessionUser) {
+        await publishModerationEmail(
+          email,
+          "Chewbuu appeal received",
+          "We received your account-action appeal. A human reviewer will review it and update your appeal status when a decision is recorded."
+        );
+      }
+      return { appeal: { id, status: "pending" as const } };
+    });
+  },
+
+  async getMyModerationAppeals() {
+    return observeOperation("getMyModerationAppeals", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      const db = await getDb();
+      const appeals = await db
+        .selectFrom("moderation_appeal")
+        .selectAll()
+        .where("appellant_user_id", "=", sessionUser.id)
+        .orderBy("created_at", "desc")
+        .limit(50)
+        .execute();
+      return {
+        appeals: appeals.map((appeal) => ({
+          accountEmail: appeal.account_email ?? undefined,
+          accountName: appeal.account_name ?? undefined,
+          appellantUserId: appeal.appellant_user_id ?? undefined,
+          assignedToUserId: appeal.assigned_to_user_id ?? undefined,
+          createdAt: toIso(appeal.created_at) ?? new Date().toISOString(),
+          decision: appeal.decision ?? undefined,
+          details: appeal.details,
+          id: appeal.id,
+          reportId: appeal.report_id ?? undefined,
+          resolvedAt: toIso(appeal.resolved_at) ?? undefined,
+          status: appeal.status,
+          updatedAt: toIso(appeal.updated_at) ?? new Date().toISOString(),
+        })),
+      };
+    });
+  },
+
+  async listModerationReports(input?: {
+    status?: "new" | "under_review" | "actioned" | "dismissed" | "duplicate";
+  }) {
+    return observeOperation("listModerationReports", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      requireAdmin(sessionUser);
+      const query = z
+        .object({
+          status: z
+            .enum(["new", "under_review", "actioned", "dismissed", "duplicate"])
+            .optional(),
+        })
+        .parse(input ?? {});
+      const db = await getDb();
+      let builder = db
+        .selectFrom("moderation_report")
+        .selectAll()
+        .orderBy("created_at", "desc")
+        .limit(100);
+      if (query.status) builder = builder.where("status", "=", query.status);
+      const reports = await builder.execute();
+      const users = await moderationUserMap(db, reports);
+      return {
+        reports: reports.map((report) => toModerationReport(report, users)),
+      };
+    });
+  },
+
+  async reviewModerationReport(input: ReviewModerationReportInput) {
+    return observeOperation("reviewModerationReport", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      requireAdmin(sessionUser);
+      const body = reviewModerationReportSchema.parse(input);
+      const db = await getDb();
+      const report = await db
+        .selectFrom("moderation_report")
+        .selectAll()
+        .where("id", "=", body.reportId)
+        .executeTakeFirst();
+      if (!report) throw new Error("Moderation report not found.");
+
+      if (body.action === "ban_user" || body.action === "suspend_user") {
+        const auth = await getBetterAuth();
+        await auth.api.banUser({
+          body: {
+            ...(body.action === "suspend_user"
+              ? { banExpiresIn: 7 * 24 * 60 * 60 }
+              : {}),
+            banReason: body.reason ?? "Chewbuu community policy violation",
+            userId: report.subject_user_id,
+          },
+          headers: context.request.headers,
+        });
+      }
+
+      const snapshot = await moderationContentSnapshot(db, report);
+      const now = new Date();
+      await db.transaction().execute(async (tx) => {
+        if (body.action === "remove_content") {
+          await removeModeratedContent(tx, report);
+        }
+        await tx
+          .insertInto("moderation_action")
+          .values({
+            action: body.action,
+            actor_user_id: sessionUser.id,
+            appeal_id: null,
+            created_at: now,
+            evidence_snapshot: jsonb(snapshot),
+            id: crypto.randomUUID(),
+            reason: body.reason ?? null,
+            report_id: report.id,
+            target_id: report.target_id,
+            target_type: report.target_type,
+            target_user_id: report.subject_user_id,
+          })
+          .execute();
+        await tx
+          .updateTable("moderation_report")
+          .set({
+            assigned_to_user_id: sessionUser.id,
+            resolution: body.reason ?? body.action,
+            resolved_at: body.status === "under_review" ? null : now,
+            status: body.status,
+            updated_at: now,
+          })
+          .where("id", "=", report.id)
+          .execute();
+      });
+
+      if (
+        body.action === "warn_user" ||
+        body.action === "remove_content" ||
+        body.action === "suspend_user" ||
+        body.action === "ban_user"
+      ) {
+        const subjectUser = await db
+          .selectFrom("user")
+          .select("email")
+          .where("id", "=", report.subject_user_id)
+          .executeTakeFirst();
+        const notificationBody =
+          body.action === "remove_content"
+            ? "A moderator removed reported content associated with your account. Please review the Acceptable Use Policy."
+            : body.action === "suspend_user"
+              ? "A moderator suspended your account for 7 days. Please review the Acceptable Use Policy."
+              : body.action === "ban_user"
+                ? "A moderator terminated your account access. If you believe this was incorrect, submit an appeal through the Contact page."
+                : "A moderator reviewed a report involving your account. Please review the Acceptable Use Policy and keep interactions respectful.";
+        await publishModerationNotification(
+          report.subject_user_id,
+          "A Chewbuu moderation action was recorded",
+          notificationBody,
+          report.id
+        );
+        await publishModerationEmail(
+          subjectUser?.email,
+          "Chewbuu moderation update",
+          notificationBody
+        );
+      }
+      return { reportId: report.id, status: body.status };
+    });
+  },
+
+  async listModerationActions(input?: {
+    appealId?: string;
+    reportId?: string;
+  }) {
+    return observeOperation("listModerationActions", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      requireAdmin(sessionUser);
+      const query = z
+        .object({
+          appealId: z.string().min(1).optional(),
+          reportId: z.string().min(1).optional(),
+        })
+        .parse(input ?? {});
+      const db = await getDb();
+      let builder = db
+        .selectFrom("moderation_action")
+        .selectAll()
+        .orderBy("created_at", "desc")
+        .limit(200);
+      if (query.reportId)
+        builder = builder.where("report_id", "=", query.reportId);
+      if (query.appealId)
+        builder = builder.where("appeal_id", "=", query.appealId);
+      const actions = await builder.execute();
+      return {
+        actions: actions.map((action) => {
+          let evidenceSnapshot: Record<string, unknown> | undefined;
+          if (typeof action.evidence_snapshot === "string") {
+            try {
+              const parsed: unknown = JSON.parse(action.evidence_snapshot);
+              if (
+                parsed &&
+                typeof parsed === "object" &&
+                !Array.isArray(parsed)
+              ) {
+                evidenceSnapshot = parsed as Record<string, unknown>;
+              }
+            } catch {
+              evidenceSnapshot = undefined;
+            }
+          } else if (
+            action.evidence_snapshot &&
+            typeof action.evidence_snapshot === "object" &&
+            !Array.isArray(action.evidence_snapshot)
+          ) {
+            evidenceSnapshot = action.evidence_snapshot as Record<
+              string,
+              unknown
+            >;
+          }
+          return {
+            action: action.action as ModerationAction,
+            actorUserId: action.actor_user_id ?? undefined,
+            appealId: action.appeal_id ?? undefined,
+            createdAt: toIso(action.created_at) ?? new Date().toISOString(),
+            evidenceSnapshot,
+            id: action.id,
+            reason: action.reason ?? undefined,
+            reportId: action.report_id ?? undefined,
+            targetId: action.target_id ?? undefined,
+            targetType: action.target_type as
+              | ModerationReportTargetType
+              | undefined,
+            targetUserId: action.target_user_id ?? undefined,
+          };
+        }),
+      };
+    });
+  },
+
+  async listModerationAppeals() {
+    return observeOperation("listModerationAppeals", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      requireAdmin(sessionUser);
+      const db = await getDb();
+      const appeals = await db
+        .selectFrom("moderation_appeal")
+        .selectAll()
+        .orderBy("created_at", "desc")
+        .limit(100)
+        .execute();
+      return {
+        appeals: appeals.map((appeal) => ({
+          accountEmail: appeal.account_email ?? undefined,
+          accountName: appeal.account_name ?? undefined,
+          appellantUserId: appeal.appellant_user_id ?? undefined,
+          assignedToUserId: appeal.assigned_to_user_id ?? undefined,
+          createdAt: toIso(appeal.created_at) ?? new Date().toISOString(),
+          decision: appeal.decision ?? undefined,
+          details: appeal.details,
+          id: appeal.id,
+          reportId: appeal.report_id ?? undefined,
+          resolvedAt: toIso(appeal.resolved_at) ?? undefined,
+          status: appeal.status,
+          updatedAt: toIso(appeal.updated_at) ?? new Date().toISOString(),
+        })),
+      };
+    });
+  },
+
+  async reviewModerationAppeal(input: ReviewModerationAppealInput) {
+    return observeOperation("reviewModerationAppeal", async () => {
+      const sessionUser = await requireSession(context.request.headers);
+      requireAdmin(sessionUser);
+      const body = reviewModerationAppealSchema.parse(input);
+      const db = await getDb();
+      const appeal = await db
+        .selectFrom("moderation_appeal")
+        .selectAll()
+        .where("id", "=", body.appealId)
+        .executeTakeFirst();
+      if (!appeal) throw new Error("Moderation appeal not found.");
+      const report = appeal.report_id
+        ? await db
+            .selectFrom("moderation_report")
+            .selectAll()
+            .where("id", "=", appeal.report_id)
+            .executeTakeFirst()
+        : undefined;
+      const accountUserId = appeal.appellant_user_id ?? report?.subject_user_id;
+      if (body.decision === "reverse" && accountUserId) {
+        const auth = await getBetterAuth();
+        await auth.api.unbanUser({
+          body: { userId: accountUserId },
+          headers: context.request.headers,
+        });
+      }
+      const now = new Date();
+      await db.transaction().execute(async (tx) => {
+        await tx
+          .insertInto("moderation_action")
+          .values({
+            action:
+              body.decision === "reverse" ? "reverse_appeal" : "uphold_appeal",
+            actor_user_id: sessionUser.id,
+            appeal_id: appeal.id,
+            created_at: now,
+            evidence_snapshot: jsonb({ decision: body.decision }),
+            id: crypto.randomUUID(),
+            reason: body.reason ?? null,
+            report_id: appeal.report_id,
+            target_id: null,
+            target_type: null,
+            target_user_id: accountUserId ?? null,
+          })
+          .execute();
+        await tx
+          .updateTable("moderation_appeal")
+          .set({
+            assigned_to_user_id: sessionUser.id,
+            decision: body.reason ?? body.decision,
+            resolved_at: now,
+            status: body.decision === "reverse" ? "reversed" : "upheld",
+            updated_at: now,
+          })
+          .where("id", "=", appeal.id)
+          .execute();
+      });
+      const appealNotificationTitle =
+        body.decision === "reverse"
+          ? "Your Chewbuu appeal was accepted"
+          : "Your Chewbuu appeal was reviewed";
+      const appealNotificationBody =
+        body.decision === "reverse"
+          ? "A moderator reversed the account action under appeal."
+          : "A moderator upheld the account action under appeal.";
+      if (accountUserId) {
+        await publishModerationNotification(
+          accountUserId,
+          appealNotificationTitle,
+          appealNotificationBody,
+          appeal.id
+        );
+      }
+      await publishModerationEmail(
+        appeal.account_email,
+        appealNotificationTitle,
+        appealNotificationBody
+      );
+      return {
+        appealId: appeal.id,
+        status: body.decision === "reverse" ? "reversed" : "upheld",
+      };
+    });
   },
 
   async savePushSubscription(input: {

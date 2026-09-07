@@ -59,6 +59,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
+import { ReportButton } from "@/components/moderation/report-dialog";
 import { NavigationBlocker } from "@/components/navigation-blocker";
 import { datingApi, venueApi } from "@/lib/dating-api";
 import type {
@@ -1720,6 +1721,22 @@ function MatchDialog({
         <DialogHeader>
           <DialogTitle>{match?.displayName}</DialogTitle>
           <DialogDescription>{match?.compatibility}% match</DialogDescription>
+          {match ? (
+            <div className="flex flex-wrap gap-2">
+              <ReportButton
+                className="w-fit"
+                label="Report profile"
+                targetId={match.userId}
+                targetType="profile"
+              />
+              <ReportButton
+                className="w-fit"
+                label="Report profile photo"
+                targetId={match.userId}
+                targetType="profile_media"
+              />
+            </div>
+          ) : null}
         </DialogHeader>
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-3">
