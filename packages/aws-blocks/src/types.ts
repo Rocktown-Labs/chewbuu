@@ -72,6 +72,7 @@ export interface ModerationReport {
   category: ModerationReportCategory;
   createdAt: string;
   details?: string;
+  evidenceSnapshot?: Record<string, unknown>;
   id: string;
   priority: ModerationPriority;
   reportedKind?: string;

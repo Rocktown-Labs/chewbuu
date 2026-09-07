@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS "moderation_report" (
   "room_id" text,
   "category" text NOT NULL,
   "details" text,
+  "evidence_snapshot" jsonb,
   "reported_text" text,
   "reported_kind" text,
   "status" text NOT NULL DEFAULT 'new',

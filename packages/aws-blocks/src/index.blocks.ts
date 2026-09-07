@@ -1717,6 +1717,7 @@ type ModerationReportRow = Omit<
   | "ai_completed_at"
   | "ai_labels"
   | "created_at"
+  | "evidence_snapshot"
   | "resolved_at"
   | "slack_notified_at"
   | "updated_at"
@@ -1727,6 +1728,23 @@ type ModerationReportRow = Omit<
   slack_notified_at: Date | string | null;
   updated_at: Date | string;
   ai_labels: string[] | string | null;
+  evidence_snapshot: Record<string, unknown> | string | null;
+};
+
+const parseModerationObject = (
+  value: unknown
+): Record<string, unknown> | undefined => {
+  if (typeof value === "string") {
+    try {
+      return parseModerationObject(JSON.parse(value));
+    } catch {
+      return undefined;
+    }
+  }
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return undefined;
 };
 
 const parseModerationLabels = (value: unknown): string[] => {
@@ -1758,6 +1776,7 @@ const toModerationReport = (
     category: report.category,
     createdAt: toIso(report.created_at) ?? new Date().toISOString(),
     details: report.details ?? undefined,
+    evidenceSnapshot: parseModerationObject(report.evidence_snapshot),
     id: report.id,
     priority: report.priority,
     reportedKind: report.reported_kind ?? undefined,
@@ -1803,8 +1822,35 @@ const moderationUserMap = async (
 
 const moderationContentSnapshot = async (
   db: BlocksDbExecutor,
-  report: ModerationReportRow
+  report: Pick<
+    ModerationReportRow,
+    "reported_kind" | "reported_text" | "target_id" | "target_type"
+  >
 ): Promise<Record<string, unknown>> => {
+  if (report.target_type === "profile") {
+    const [profile, user] = await Promise.all([
+      db
+        .selectFrom("profile")
+        .select([
+          "area",
+          "bio",
+          "intro_video_url",
+          "profile_photo_url",
+          "user_id",
+        ])
+        .where("user_id", "=", report.target_id)
+        .executeTakeFirst(),
+      db
+        .selectFrom("user")
+        .select(["id", "name", "username"])
+        .where("id", "=", report.target_id)
+        .executeTakeFirst(),
+    ]);
+    return {
+      profile: profile ? { ...profile } : undefined,
+      user: user ? { ...user } : undefined,
+    };
+  }
   if (report.target_type === "chat_message") {
     const message = await db
       .selectFrom("chat_message")
@@ -8450,6 +8496,12 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
           );
         }
         const id = crypto.randomUUID();
+        const evidenceSnapshot = await moderationContentSnapshot(tx, {
+          reported_kind: target.reportedKind ?? null,
+          reported_text: target.reportedText?.slice(0, 6000) ?? null,
+          target_id: target.canonicalTargetId ?? body.targetId,
+          target_type: body.targetType,
+        });
         const urgent = new Set([
           "minor_safety",
           "non_consensual_intimate_content",
@@ -8470,6 +8522,7 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
             category: body.category,
             created_at: now,
             details: body.details || null,
+            evidence_snapshot: jsonb(evidenceSnapshot),
             id,
             priority: urgent ? "urgent" : "standard",
             reported_kind: target.reportedKind ?? null,
@@ -8654,7 +8707,9 @@ export const api = new ApiNamespace(scope, "api", (context) => ({
         });
       }
 
-      const snapshot = await moderationContentSnapshot(db, report);
+      const snapshot =
+        parseModerationObject(report.evidence_snapshot) ??
+        (await moderationContentSnapshot(db, report));
       const now = new Date();
       await db.transaction().execute(async (tx) => {
         if (body.action === "remove_content") {

@@ -38,6 +38,7 @@ export interface ModerationReportTable {
   category: string;
   created_at: Timestamp;
   details: string | null;
+  evidence_snapshot: JsonColumn<Record<string, unknown>> | null;
   id: string;
   priority: string;
   reported_kind: string | null;
