@@ -51,6 +51,8 @@ bun run dev
 
 The web, dating Expo, Sync Expo, and email preview apps use named Portless URLs when started through `bun run portless:dev`. The fixed AWS Blocks front door remains available at `http://localhost:3000`.
 
+`bun run dev` starts everything through Turborepo (one pane per task): the Postgres container (`@chewbuu/db`), the Blocks front door on `:3000` (`@chewbuu/aws-blocks`), and the web, dating Expo, Sync Expo, and email-preview apps. The Blocks task reuses the turbo-managed database and web frontend instead of spawning duplicates.
+
 Start individual services when needed:
 
 ```bash
@@ -63,7 +65,7 @@ bun run portless:dev
 
 The native app requires an Expo-compatible simulator or device. `bun run dev:blocks` starts or reuses the local `chewbuu-postgres` PostgreSQL container through Podman, enables its disposable local TLS certificate, waits for it to become ready, and then starts the Blocks front door. The Blocks local server uses local mocks and persists their data under `.bb-data/`. If local auth values are absent, this command supplies development-only defaults; production commands still require explicit secrets.
 
-`bun run portless:dev` starts the controllable web, Expo, and email-preview workspace apps through Portless, using named URLs from each package's `package.json` Portless settings and automatically assigned internal ports. Run `bun run dev:blocks` in a separate terminal when the apps need the local Blocks API. The regular package `dev` scripts remain unchanged for fixed-port startup, while Portless uses each package's `dev:portless` wrapper.
+`bun run portless:dev` starts the controllable web, Expo, and email-preview workspace apps through Portless, using named URLs from each package's `package.json` Portless settings and automatically assigned internal ports. The regular package `dev` scripts remain unchanged for fixed-port startup (dating Expo on `:8081`, Sync Expo on `:8082`), while Portless uses each package's `dev:portless` wrapper.
 
 Portless uses HTTPS on port 443 by default and may ask to trust its local certificate authority on first use. Start its proxy before the workspace task. For a non-privileged HTTP pilot, run:
 
@@ -197,10 +199,10 @@ Run these from the repository root:
 
 | Command | Purpose |
 | --- | --- |
-| `bun run dev` | Start development tasks through Turborepo |
+| `bun run dev` | Start everything through Turborepo (Postgres, Blocks API, web, Expo apps, email preview) |
 | `bun run dev:web` | Start the fixed-port web development task |
 | `bun run dev:native` | Start the fixed-port dating Expo development task |
-| `bun run dev:blocks` | Start local Postgres and the AWS Blocks server |
+| `bun run dev:blocks` | Start local Postgres and the AWS Blocks server standalone (separate terminal) |
 | `bun run portless:proxy` | Start the Portless local proxy |
 | `bun run portless:dev` | Start named web/Expo/email apps through Portless |
 | `bun run build` | Build workspace packages and applications |

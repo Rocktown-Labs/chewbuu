@@ -1,5 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
+import net from "node:net";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { startDevServer } from "@aws-blocks/blocks/scripts";
 
@@ -32,15 +35,65 @@ process.env.CORS_ORIGIN ??= "http://localhost:3000";
 process.env.DATABASE_URL ??= localDatabaseUrl;
 process.env.BLOCKS_MIGRATION_DB_URL ??= localDatabaseUrl;
 
-const databaseProcess = spawn(
-  process.platform === "win32" ? "bun.exe" : "bun",
-  [databaseScript],
-  {
-    cwd: workspaceRoot,
-    env: process.env,
-    stdio: ["inherit", "pipe", "inherit"],
+// Usage:
+//   bun run dev:blocks (repo root) — standalone: manages postgres + frontend.
+//   turbo dev (aws-blocks#dev)     — composed: pass --no-postgres --no-frontend
+//     so postgres comes from @chewbuu/db#dev and the UI from web#dev instead of
+//     spawning duplicates that fight over ports and container names.
+const cliFlags = new Set(process.argv.slice(2));
+const managePostgres = !cliFlags.has("--no-postgres");
+const manageFrontend = !cliFlags.has("--no-frontend");
+
+const parseTcpEndpoint = (url: string | undefined, fallbackPort: number) => {
+  try {
+    if (!url) throw new Error("empty database URL");
+    const parsed = new URL(url);
+    const port = parsed.port ? Math.trunc(Number(parsed.port)) : fallbackPort;
+    return {
+      host: parsed.hostname || "localhost",
+      port: Number.isFinite(port) ? port : fallbackPort,
+    };
+  } catch {
+    return { host: "localhost", port: fallbackPort };
   }
-);
+};
+
+const isTcpOpen = async (
+  host: string,
+  port: number,
+  timeoutMs = 1500
+): Promise<boolean> => {
+  const socket = new net.Socket();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    socket.connect(port, host);
+    await once(socket, "connect", { signal: controller.signal });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+    socket.destroy();
+  }
+};
+
+const waitForTcp = async (
+  host: string,
+  port: number,
+  attempts: number,
+  delayMs: number
+): Promise<boolean> => {
+  let remaining = attempts;
+  while (remaining > 0) {
+    if (await isTcpOpen(host, port)) return true;
+    await sleep(delayMs);
+    remaining -= 1;
+  }
+  return false;
+};
+
+const dbEndpoint = parseTcpEndpoint(process.env.DATABASE_URL, 5432);
 
 const waitForDatabase = (child: ChildProcess): Promise<null> => {
   const { promise, reject, resolve } = Promise.withResolvers<null>();
@@ -69,12 +122,26 @@ const waitForDatabase = (child: ChildProcess): Promise<null> => {
   };
 
   const onError = (error: Error) => finish(error);
-  const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
-    finish(
-      new Error(
-        `The local database process exited before becoming ready (${code ?? signal ?? "unknown"}).`
-      )
-    );
+  // If our managed postgres exits before reporting readiness, it may have
+  // lost a race with an externally managed container (same container name).
+  // When the port answers anyway, someone else owns a healthy database, so
+  // continue instead of crashing.
+  const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+    void (async () => {
+      if (await isTcpOpen(dbEndpoint.host, dbEndpoint.port)) {
+        console.log(
+          "[blocks] postgres reachable externally; continuing without managed container."
+        );
+        finish();
+        return;
+      }
+      finish(
+        new Error(
+          `The local database process exited before becoming ready (${code ?? signal ?? "unknown"}).`
+        )
+      );
+    })();
+  };
 
   child.stdout?.on("data", onOutput);
   child.once("error", onError);
@@ -84,37 +151,80 @@ const waitForDatabase = (child: ChildProcess): Promise<null> => {
 };
 
 let shuttingDown = false;
-const stopDatabase = () => {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  databaseProcess.kill("SIGTERM");
+let stopDatabase = () => {};
+
+const startManagedPostgres = () => {
+  const databaseProcess = spawn(
+    process.platform === "win32" ? "bun.exe" : "bun",
+    [databaseScript],
+    {
+      cwd: workspaceRoot,
+      env: process.env,
+      stdio: ["inherit", "pipe", "inherit"],
+    }
+  );
+
+  stopDatabase = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    databaseProcess.kill("SIGTERM");
+  };
+
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.once(signal, stopDatabase);
+  }
+  process.once("exit", stopDatabase);
+
+  databaseProcess.once("exit", (code, signal) => {
+    if (shuttingDown || code === 0) return;
+    console.error(
+      `The local database process exited unexpectedly (${code ?? signal ?? "unknown"}).`
+    );
+    process.exit(code ?? 1);
+  });
+
+  return waitForDatabase(databaseProcess);
 };
 
-for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-  process.once(signal, stopDatabase);
-}
-process.once("exit", stopDatabase);
-
-databaseProcess.once("exit", (code, signal) => {
-  if (shuttingDown || code === 0) return;
-  console.error(
-    `The local database process exited unexpectedly (${code ?? signal ?? "unknown"}).`
+if (managePostgres) {
+  try {
+    await startManagedPostgres();
+  } catch (error) {
+    stopDatabase();
+    throw error;
+  }
+} else {
+  console.log(
+    `[blocks] postgres managed externally; waiting for ${dbEndpoint.host}:${dbEndpoint.port}...`
   );
-  process.exit(code ?? 1);
-});
-
-try {
-  await waitForDatabase(databaseProcess);
-} catch (error) {
-  stopDatabase();
-  throw error;
+  const ready = await waitForTcp(dbEndpoint.host, dbEndpoint.port, 120, 1000);
+  if (!ready) {
+    throw new Error(
+      `Postgres not reachable at ${dbEndpoint.host}:${dbEndpoint.port} after 120s. ` +
+        "Start it via the db task (bun run dev includes it) or run this script without --no-postgres."
+    );
+  }
+  console.log(
+    "[blocks] postgres reachable; continuing without spawning a container."
+  );
 }
 
 await startDevServer({
   backendPath: path.join(directory, "..", "..", "src", "index.blocks.ts"),
   // Bind LAN (not loopback) so physical devices running Expo Go can reach the
   // web frontend/auth at :3001. Expo/Metro already binds LAN by default.
-  frontendCommand: "bun run --cwd apps/web dev --host 0.0.0.0 --port 3001",
+  ...(manageFrontend
+    ? {
+        frontendCommand:
+          "bun run --cwd apps/web dev --host 0.0.0.0 --port 3001",
+      }
+    : {}),
   frontendPort: 3001,
   port: 3000,
 });
+
+if (!manageFrontend) {
+  console.log(
+    "[blocks] frontend managed externally (turbo web pane); serving API only until it arrives."
+  );
+}

@@ -50,7 +50,7 @@ bun run portless:dev
 
 Podman must be installed for the managed local database (`podman machine init` is only needed for a first-time setup). If `DATABASE_URL` is not configured, the dev server defaults to `postgres://postgres:postgres@localhost:5432/chewbuu`; an explicit local or disposable PlanetScale development URL is preserved. The managed container stores a self-signed certificate in its persistent data volume because the Blocks PostgreSQL adapter requires a TLS handshake. Local certificate verification is disabled only for loopback URLs; production verification remains strict. Never put credentials in committed `.env.example` files or source code.
 
-Keep `bun run dev:blocks` running separately for the fixed Blocks front door and database. The web development proxy forwards `/aws-blocks` requests to `http://127.0.0.1:3000`.
+`bun run dev` composes the same backend through Turborepo instead of a separate terminal: the `@chewbuu/db` task owns the Postgres container while `@chewbuu/aws-blocks` (started with `--no-frontend --no-postgres`) waits for it and serves the front door. The web development proxy forwards `/aws-blocks` requests to `http://127.0.0.1:3000`.
 
 ## Database migrations
 
