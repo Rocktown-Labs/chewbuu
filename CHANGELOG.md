@@ -60,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed the public homepage and auth pages returning HTTP 500 when the server-side session lookup failed: a failed session read now yields an anonymous session instead of throwing, so public routes still render.
 - Added self-serve cancellation for consumer and organization subscriptions, with manager-only organization billing authorization and cancellation-period access preservation.
 - Corrected annual pricing disclosures to show the monthly equivalent and exact annual total, routed legal-process contact inquiries to the dedicated inbox, and made policy links available through the global footer.
 - Replaced unsupported compliance and support guarantees with the implemented cancellation, refund-review, reporting, privacy, and law-enforcement commitments.
